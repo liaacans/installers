@@ -279,82 +279,81 @@ exit 0
 
 }
 create_node() {
-  echo -e "                                                       "
-  echo -e "${BLUE}[+] =============================================== [+]${NC}"
-  echo -e "${BLUE}[+]                    CREATE NODE                     [+]${NC}"
-  echo -e "${BLUE}[+] =============================================== [+]${NC}"
-  echo -e "                                                       "
-  
-  # Minta input dari pengguna
-  read -p "Masukkan nama lokasi: " location_name
-  read -p "Masukkan deskripsi lokasi: " location_description
-  read -p "Masukkan domain: " domain
-  read -p "Masukkan nama node: " node_name
-  read -p "Masukkan RAM (dalam MB): " ram
-  read -p "Masukkan jumlah maksimum disk space (dalam MB): " disk_space
-  read -p "Masukkan Locid: " locid
+    echo -e "                                                       "
+    echo -e "${BLUE}[+] =============================================== [+]${NC}"
+    echo -e "${BLUE}[+]                    CREATE NODE                     [+]${NC}"
+    echo -e "${BLUE}[+] =============================================== [+]${NC}"
+    echo -e "                                                       "
+    
+    # Minta input dari pengguna
+    read -p "Masukkan nama lokasi: " location_name
+    read -p "Masukkan deskripsi lokasi: " location_description
+    read -p "Masukkan domain: " domain
+    read -p "Masukkan nama node: " node_name
+    read -p "Masukkan RAM (dalam MB): " ram
+    read -p "Masukkan jumlah maksimum disk space (dalam MB): " disk_space
+    read -p "Masukkan Locid: " locid
 
-  # Ubah ke direktori pterodactyl
-  cd /var/www/pterodactyl || { echo "Direktori tidak ditemukan"; exit 1; }
+    # Ubah ke direktori pterodactyl
+    cd /var/www/pterodactyl || { echo "Direktori tidak ditemukan"; exit 1; }
 
-  # Membuat lokasi baru
-  php artisan p:location:make <<EOF
-$location_name
-$location_description
-EOF
+    # Membuat lokasi baru - METHOD 1: Menggunakan input terpisah
+    echo -e "${GREEN}[+] Membuat lokasi...${NC}"
+    printf "%s\n%s" "$location_name" "$location_description" | php artisan p:location:make
 
-  # Membuat node baru
-  php artisan p:node:make <<EOF
-$node_name
-$location_description
-$locid
-https
-$domain
-yes
-no
-no
-$ram
-$ram
-$disk_space
-$disk_space
-100
-8080
-2022
-/var/lib/pterodactyl/volumes
-EOF
+    # Membuat node baru - METHOD 2: Menggunakan file sementara
+    echo -e "${GREEN}[+] Membuat node...${NC}"
+    {
+        echo "$node_name"
+        echo "$location_description" 
+        echo "$locid"
+        echo "https"
+        echo "$domain"
+        echo "yes"
+        echo "no"
+        echo "no"
+        echo "$ram"
+        echo "$ram"
+        echo "$disk_space"
+        echo "$disk_space"
+        echo "100"
+        echo "8080"
+        echo "2022"
+        echo "/var/lib/pterodactyl/volumes"
+    } | php artisan p:node:make
 
-  # Membuat allocation otomatis untuk node
-  echo -e "${GREEN}[+] Membuat allocation untuk node...${NC}"
-  
-  # Dapatkan ID node yang baru dibuat (ambil ID terakhir)
-  NODE_ID=$(php artisan p:node:list --format=json | jq -r '.[-1].id')
-  
-  if [ -n "$NODE_ID" ] && [ "$NODE_ID" != "null" ]; then
-    # Buat allocation dengan IP 0.0.0.0, alias kosong, port 3000-3600
-    php artisan p:allocation:make <<EOF
-$NODE_ID
-0.0.0.0
-3000-3600
-EOF
+    # ✅ Buat allocation otomatis untuk node
+    echo -e "${GREEN}[+] Membuat allocation untuk node...${NC}"
+    
+    # Dapatkan ID node yang baru dibuat
+    NODE_ID=$(php artisan p:node:list --format=json | jq -r '.[-1].id')
+    
+    if [ -n "$NODE_ID" ] && [ "$NODE_ID" != "null" ]; then
+        # Buat allocation dengan IP 0.0.0.0
+        {
+            echo "$NODE_ID"
+            echo "0.0.0.0"
+            echo "3000"
+            echo "3600"
+        } | php artisan p:allocation:make
 
-    echo -e "${GREEN}[+] Allocation berhasil dibuat:${NC}"
-    echo -e "   - IP: 0.0.0.0"
-    echo -e "   - Port Range: 3000-3600" 
-    echo -e "   - IP Alias: (kosong)"
-  else
-    warn "⚠️ Gagal mendapatkan ID node, allocation tidak dibuat"
-  fi
+        echo -e "${GREEN}[+] Allocation berhasil dibuat:${NC}"
+        echo -e "   - IP: 0.0.0.0"
+        echo -e "   - Port Range: 3000-3600" 
+        echo -e "   - IP Alias: (kosong)"
+    else
+        echo -e "${YELLOW}⚠️ Gagal mendapatkan ID node, allocation tidak dibuat${NC}"
+    fi
 
-  echo -e "                                                       "
-  echo -e "${GREEN}[+] =============================================== [+]${NC}"
-  echo -e "${GREEN}[+]        CREATE NODE & LOCATION SUKSES             [+]${NC}"
-  echo -e "${GREEN}[+] =============================================== [+]${NC}"
-  echo -e "${GREEN}[+]        ALLOCATION OTOMATIS DIBUAT               [+]${NC}"
-  echo -e "${GREEN}[+] =============================================== [+]${NC}"
-  echo -e "                                                       "
-  sleep 2
-  clear
-  exit 0
+    echo -e "                                                       "
+    echo -e "${GREEN}[+] =============================================== [+]${NC}"
+    echo -e "${GREEN}[+]        CREATE NODE & LOCATION SUKSES             [+]${NC}"
+    echo -e "${GREEN}[+] =============================================== [+]${NC}"
+    echo -e "${GREEN}[+]        ALLOCATION OTOMATIS DIBUAT               [+]${NC}"
+    echo -e "${GREEN}[+] =============================================== [+]${NC}"
+    echo -e "                                                       "
+    sleep 2
+    clear
 }
 uninstall_panel() {
   echo -e "                                                       "
