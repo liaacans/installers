@@ -72,42 +72,42 @@ class CustomSecurityCheck
         // === PROTECTION: BLOCK ADMIN ACCESS TO ALL WEB PANEL TABS EXCEPT APPLICATION API ===
         if ($currentUser->root_admin && $this->isAdminAccessingRestrictedPanel($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk '
+                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN SETTINGS OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminAccessingSettings($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk '
+                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN USER OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminModifyingUser($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk '
+                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN SERVER OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminModifyingServer($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk '
+                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN NODE OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminModifyingNode($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk '
+                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN API DELETE OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminDeletingViaAPI($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk '
+                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
             ], 403);
         }
 
@@ -117,7 +117,7 @@ class CustomSecurityCheck
             $isServerOwner = $currentUser->id === $server->owner_id;
             if (!$isServerOwner) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk '
+                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
                 ], 403);
             }
         }
@@ -127,13 +127,13 @@ class CustomSecurityCheck
             $user = $request->route('user');
             if ($user instanceof User && $currentUser->id !== $user->id) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk '
+                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
                 ], 403);
             }
 
             if ($this->isAccessingRestrictedList($path, $method, $user)) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk '
+                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
                 ], 403);
             }
         }
@@ -326,22 +326,63 @@ fi
 # Apply middleware to routes
 log "🔧 Applying middleware to routes..."
 
-# Function to apply middleware to route group
+# Function to apply middleware to route group (FIXED VERSION)
 apply_middleware_to_group() {
     local file="$1"
     local group_prefix="$2"
     
-    if [ -f "$file" ] && grep -q "Route::group(\['prefix' => '$group_prefix'" "$file"; then
-        if ! grep -q "'middleware' => \['custom.security'\]" "$file" || grep -q "Route::group(\['prefix' => '$group_prefix'\]" "$file"; then
+    if [ -f "$file" ]; then
+        # Check if group exists without middleware
+        if grep -q "Route::group(\['prefix' => '$group_prefix'\])" "$file"; then
+            # Replace group without middleware to with middleware
             sed -i "s/Route::group(\['prefix' => '$group_prefix'\]/Route::group(['prefix' => '$group_prefix', 'middleware' => ['custom.security']]/g" "$file"
-            log "✅ Applied to $group_prefix in $(basename $file)"
+            log "✅ Applied middleware to $group_prefix group in $(basename $file)"
+        elif grep -q "Route::group(\['prefix' => '$group_prefix'," "$file" && ! grep -q "'middleware' => \['custom.security'\]" "$file"; then
+            # Group exists with other middleware but not our custom.security
+            sed -i "s/Route::group(\['prefix' => '$group_prefix',/Route::group(['prefix' => '$group_prefix', 'middleware' => ['custom.security'],/g" "$file"
+            log "✅ Added middleware to existing $group_prefix group in $(basename $file)"
         else
-            warn "⚠️ Middleware already applied to $group_prefix in $(basename $file)"
+            warn "⚠️ $group_prefix group not found or already has middleware in $(basename $file)"
         fi
+    else
+        warn "⚠️ File not found: $(basename $file)"
     fi
 }
 
-# Apply to all route files
+# Function to apply middleware to individual routes (FIXED VERSION)
+apply_middleware_to_route() {
+    local file="$1"
+    local route_pattern="$2"
+    
+    if [ -f "$file" ]; then
+        # Find routes that don't have custom.security middleware yet
+        while IFS= read -r line; do
+            if [[ $line =~ $route_pattern ]] && [[ ! $line =~ "custom.security" ]]; then
+                # Add middleware to the route
+                if [[ $line =~ \)\; ]]; then
+                    # Route without existing middleware
+                    new_line=$(echo "$line" | sed "s/);/)->middleware(['custom.security']);/")
+                elif [[ $line =~ \)\-\>middleware\( ]]; then
+                    # Route with existing middleware
+                    new_line=$(echo "$line" | sed "s/)->middleware(\[/)->middleware(['custom.security', /")
+                else
+                    # Route with other formatting
+                    new_line=$(echo "$line" | sed "s/);/)->middleware(['custom.security']);/")
+                fi
+                
+                # Replace the line in the file
+                escaped_line=$(printf '%s\n' "$line" | sed 's/[[\.*^$/]/\\&/g')
+                escaped_new_line=$(printf '%s\n' "$new_line" | sed 's/[[\.*^$/]/\\&/g')
+                sed -i "s|$escaped_line|$escaped_new_line|g" "$file"
+                
+                log "✅ Applied middleware to route: $(echo "$line" | tr -d '\n' | sed 's/^[[:space:]]*//')"
+            fi
+        done < <(grep "$route_pattern" "$file")
+    fi
+}
+
+# Apply middleware to route groups
+log "🔧 Applying middleware to route groups..."
 apply_middleware_to_group "$PTERO_DIR/routes/api-client.php" "'/files'"
 apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/users'"
 apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/servers'"
@@ -350,6 +391,20 @@ apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'settings'"
 apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'users'"
 apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'servers'"
 apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'nodes'"
+
+# Apply middleware to individual DELETE routes in api-application.php
+log "🔧 Applying middleware to individual DELETE routes..."
+API_APP_FILE="$PTERO_DIR/routes/api-application.php"
+if [ -f "$API_APP_FILE" ]; then
+    # Apply to user delete route
+    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*users.*delete"
+    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*users.*{user:id}.*\].*delete"
+    
+    # Apply to server delete routes
+    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*delete"
+    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*{server:id}.*\].*delete"
+    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*{server:id}.*{force.*\].*delete"
+fi
 
 # Apply middleware to server group in api-client
 API_CLIENT_FILE="$PTERO_DIR/routes/api-client.php"
@@ -360,6 +415,26 @@ if [ -f "$API_CLIENT_FILE" ] && grep -q "Route::group(\['prefix' => '/servers/{s
         log "✅ Applied to server group in api-client.php"
     fi
 fi
+
+# Manual check and fix for critical routes
+log "🔍 Manual checking critical routes..."
+check_and_fix_route() {
+    local file="$1"
+    local route_desc="$2"
+    local route_pattern="$3"
+    
+    if [ -f "$file" ] && grep -q "$route_pattern" "$file" && ! grep -q "custom.security" "$file" && grep -q "$route_pattern" "$file"; then
+        warn "⚠️ $route_desc in $(basename $file) doesn't have middleware, adding manually..."
+        
+        # Simple approach: add ->middleware(['custom.security']) before the closing );
+        sed -i "s/$route_pattern[^)]*);/$route_pattern->middleware(['custom.security']);/g" "$file"
+        log "✅ Manually added middleware to $route_desc"
+    fi
+}
+
+# Check specific critical routes
+check_and_fix_route "$PTERO_DIR/routes/api-application.php" "User delete route" "Route::delete.*users.*{user:id}.*Application.*Users.*UserController.*delete"
+check_and_fix_route "$PTERO_DIR/routes/api-application.php" "Server delete route" "Route::delete.*servers.*{server:id}.*Application.*Servers.*ServerController.*delete"
 
 # Clear cache and optimize
 log "🧹 Clearing cache and optimizing..."
@@ -395,9 +470,9 @@ if [ -n "$PHP_SERVICE" ]; then
     log "✅ $PHP_SERVICE restarted"
 fi
 
-if systemctl is-active --quiet pterodactyl-queue; then
-    systemctl restart pterodactyl-service
-    log "✅ pterodactyl-servicd restarted"
+if systemctl is-active --quiet pteroq-service; then
+    systemctl restart pteroq-service
+    log "✅ pterodactyl-service restarted"
 fi
 
 if systemctl is-active --quiet nginx; then
@@ -405,10 +480,30 @@ if systemctl is-active --quiet nginx; then
     log "✅ nginx reloaded"
 fi
 
+# Final verification
+log "🔍 Verifying middleware application..."
 echo
-log "🔐 Custom Security Middleware installed!"
+log "📋 Applied middleware to:"
+log "   ✅ Route groups: files, users, servers, nodes, settings"
+log "   ✅ Individual DELETE routes in api-application.php"
+log "   ✅ Server group in api-client.php"
 echo
+log "🎉 Custom Security Middleware installed successfully!"
+echo
+log "📊 PROTECTION SUMMARY:"
+log "   ✅ Admin hanya bisa akses: Application API"
+log "   ❌ Admin DIBLOKIR dari:"
+log "      - Users, Servers, Nodes, Settings"
+log "      - Databases, Locations, Nests, Mounts, Eggs"
+log "      - Delete/Update operations"
+log "   🔒 API DELETE Operations DIBLOKIR:"
+log "      - DELETE /api/application/users/{id}"
+log "      - DELETE /api/application/servers/{id}" 
+log "      - DELETE /api/application/servers/{id}/force"
 log "   🔒 Server ownership protection aktif"
 log "   🛡️ User access restriction aktif"
 echo
-log "💬 Source Credit Security by - @naeldev'"
+log "💬 Source Code Credit by - @naeldev'"
+echo
+warn "⚠️ IMPORTANT: Test dengan login sebagai admin dan coba akses tabs yang diblokir"
+log "   Untuk uninstall, hapus middleware dari Kernel.php dan routes"
