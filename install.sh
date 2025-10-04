@@ -135,38 +135,34 @@ exit 0
 
 }
 create_node() {
-    echo -e "                                                       "
-    echo -e "\033[0;34m[+] =============================================== [+]\033[0m"
-    echo -e "\033[0;34m[+]                    CREATE NODE                     [+]\033[0m"
-    echo -e "\033[0;34m[+] =============================================== [+]\033[0m"
-    echo -e "                                                       "
-    
-    # Minta input dari pengguna
-    read -p "Masukkan nama lokasi: " location_name
-    read -p "Masukkan deskripsi lokasi: " location_description
-    read -p "Masukkan domain: " domain
-    read -p "Masukkan nama node: " node_name
-    read -p "Masukkan RAM (dalam MB): " ram
-    read -p "Masukkan jumlah maksimum disk space (dalam MB): " disk_space
-    read -p "Masukkan Locid: " locid
+  echo -e "                                                       "
+  echo -e "${BLUE}[+] =============================================== [+]${NC}"
+  echo -e "${BLUE}[+]                    CREATE NODE                     [+]${NC}"
+  echo -e "${BLUE}[+] =============================================== [+]${NC}"
+  echo -e "                                                       "
+  #!/bin/bash
+#!/bin/bash
 
-    # Ubah ke direktori pterodactyl
-    cd /var/www/pterodactyl || { 
-        echo -e "\033[0;31m[!] ❌ Direktori /var/www/pterodactyl tidak ditemukan\033[0m"
-        return 1
-    }
+# Minta input dari pengguna
+read -p "Masukkan nama lokasi: " location_name
+read -p "Masukkan deskripsi lokasi: " location_description
+read -p "Masukkan domain: " domain
+read -p "Masukkan nama node: " node_name
+read -p "Masukkan RAM (dalam MB): " ram
+read -p "Masukkan jumlah maksimum disk space (dalam MB): " disk_space
+read -p "Masukkan Locid: " locid
 
-    # Install dependencies jika belum ada
-    echo -e "\033[0;32m[+] Memeriksa dependencies...\033[0m"
-    install_dependencies
+# Ubah ke direktori pterodactyl
+cd /var/www/pterodactyl || { echo "Direktori tidak ditemukan"; exit 1; }
 
-    # Membuat lokasi baru
-    echo -e "\033[0;32m[+] Membuat lokasi: $location_name\033[0m"
-    echo -e "$location_name\n$location_description" | php artisan p:location:make
+# Membuat lokasi baru
+php artisan p:location:make <<EOF
+$location_name
+$location_description
+EOF
 
-    # Membuat node baru
-    echo -e "\033[0;32m[+] Membuat node: $node_name\033[0m"
-    php artisan p:node:make <<NODE_INPUT
+# Membuat node baru
+php artisan p:node:make <<EOF
 $node_name
 $location_description
 $locid
@@ -183,17 +179,17 @@ $disk_space
 8080
 2022
 /var/lib/pterodactyl/volumes
-NODE_INPUT
+EOF
 
-    echo -e ""
-    echo -e "\033[0;32m[+] =============================================== [+]\033[0m"
-    echo -e "\033[0;32m[+]        CREATE NODE & LOCATION SUKSES             [+]\033[0m"
-    echo -e "\033[0;32m[+] =============================================== [+]\033[0m"
-    echo -e ""
-    read -p "Tekan Enter untuk melanjutkan..."
-    clear
+  echo -e "                                                       "
+  echo -e "${GREEN}[+] =============================================== [+]${NC}"
+  echo -e "${GREEN}[+]        CREATE NODE & LOCATION SUKSES             [+]${NC}"
+  echo -e "${GREEN}[+] =============================================== [+]${NC}"
+  echo -e "                                                       "
+  sleep 2
+  clear
+  exit 0
 }
-
 install_dependencies() {
     local installed=0
     
