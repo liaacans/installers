@@ -72,35 +72,42 @@ class CustomSecurityCheck
         // === PROTECTION: BLOCK ADMIN ACCESS TO ALL WEB PANEL TABS EXCEPT APPLICATION API ===
         if ($currentUser->root_admin && $this->isAdminAccessingRestrictedPanel($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Mau ngapain hama wkwkwk '
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN SETTINGS OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminAccessingSettings($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Mau ngapain hama wkwkwk '
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN USER OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminModifyingUser($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Mau ngapain hama wkwkwk '
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN SERVER OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminModifyingServer($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Mau ngapain hama wkwkwk '
             ], 403);
         }
 
         // === PROTECTION: BLOCK ADMIN NODE OPERATIONS ===
         if ($currentUser->root_admin && $this->isAdminModifyingNode($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Mau ngapain hama wkwkwk '
+            ], 403);
+        }
+
+        // === PROTECTION: BLOCK ADMIN API DELETE OPERATIONS ===
+        if ($currentUser->root_admin && $this->isAdminDeletingViaAPI($path, $method)) {
+            return new JsonResponse([
+                'error' => 'Mau ngapain hama wkwkwk '
             ], 403);
         }
 
@@ -110,7 +117,7 @@ class CustomSecurityCheck
             $isServerOwner = $currentUser->id === $server->owner_id;
             if (!$isServerOwner) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                    'error' => 'Mau ngapain hama wkwkwk '
                 ], 403);
             }
         }
@@ -120,13 +127,13 @@ class CustomSecurityCheck
             $user = $request->route('user');
             if ($user instanceof User && $currentUser->id !== $user->id) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                    'error' => 'Mau ngapain hama wkwkwk '
                 ], 403);
             }
 
             if ($this->isAccessingRestrictedList($path, $method, $user)) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                    'error' => 'Mau ngapain hama wkwkwk '
                 ], 403);
             }
         }
@@ -250,6 +257,29 @@ class CustomSecurityCheck
     }
 
     /**
+     * Block admin delete operations via API Application
+     */
+    private function isAdminDeletingViaAPI(string $path, string $method): bool
+    {
+        // Block DELETE user via API: DELETE /api/application/users/{id}
+        if ($method === 'DELETE' && preg_match('#application/users/\d+#', $path)) {
+            return true;
+        }
+
+        // Block DELETE server via API: DELETE /api/application/servers/{id}
+        if ($method === 'DELETE' && preg_match('#application/servers/\d+#', $path)) {
+            return true;
+        }
+
+        // Block force delete server via API: DELETE /api/application/servers/{id}/force
+        if ($method === 'DELETE' && preg_match('#application/servers/\d+/.+#', $path)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Check if accessing restricted lists (non-admin only)
      */
     private function isAccessingRestrictedList(string $path, string $method, $user): bool
@@ -354,8 +384,8 @@ elif systemctl is-active --quiet php8.1-fpm; then
     PHP_SERVICE="php8.1-fpm"
 elif systemctl is-active --quiet php8.0-fpm; then
     PHP_SERVICE="php8.0-fpm"
-elif systemctl is-active --quiet php7.4-fpm; then
-    PHP_SERVICE="php7.4-fpm"
+elif systemctl is-active --quiet php8.3-fpm; then
+    PHP_SERVICE="php8.3-fpm"
 else
     warn "⚠️ PHP-FPM service not detected, skipping restart"
 fi
@@ -365,9 +395,9 @@ if [ -n "$PHP_SERVICE" ]; then
     log "✅ $PHP_SERVICE restarted"
 fi
 
-if systemctl is-active --quiet pteroq; then
-    systemctl restart pteroq.service
-    log "✅ pterodactyl-service restarted"
+if systemctl is-active --quiet pterodactyl-queue; then
+    systemctl restart pterodactyl-service
+    log "✅ pterodactyl-servicd restarted"
 fi
 
 if systemctl is-active --quiet nginx; then
@@ -376,12 +406,9 @@ if systemctl is-active --quiet nginx; then
 fi
 
 echo
-log "🎉 Custom Security Middleware installed successfully!"
+log "🔐 Custom Security Middleware installed!"
 echo
 log "   🔒 Server ownership protection aktif"
 log "   🛡️ User access restriction aktif"
 echo
-log "💬 Source Credit by - @naeldev'"
-echo
-warn "⚠️ IMPORTANT: Silahkan test dengan login sebagai Admin"
-log "   Untuk uninstall, hapus middleware dari Kernel.php dan routes"
+log "💬 Source Credit Security by - @naeldev'"
