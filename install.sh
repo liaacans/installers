@@ -185,23 +185,6 @@ $disk_space
 /var/lib/pterodactyl/volumes
 NODE_INPUT
 
-    # Dapatkan ID node yang baru dibuat
-    echo -e "\033[0;32m[+] Mendapatkan ID node...\033[0m"
-    NODE_ID=$(php artisan p:node:list --format=json | jq -r '.[-1].id 2>/dev/null')
-    
-    if [ -n "$NODE_ID" ] && [ "$NODE_ID" != "null" ]; then
-        echo -e "\033[0;32m[+] ✅ Node berhasil dibuat dengan ID: $NODE_ID\033[0m"
-        
-        # Buat allocation via database
-        create_allocations "$NODE_ID"
-        
-    else
-        echo -e "\033[0;31m[!] ❌ Gagal mendapatkan ID node\033[0m"
-        echo -e "\033[0;33m[!] Cek daftar node manual:\033[0m"
-        php artisan p:node:list
-        return 1
-    fi
-
     echo -e ""
     echo -e "\033[0;32m[+] =============================================== [+]\033[0m"
     echo -e "\033[0;32m[+]        CREATE NODE & LOCATION SUKSES             [+]\033[0m"
