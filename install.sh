@@ -136,9 +136,9 @@ exit 0
 }
 create_node() {
     echo -e "                                                       "
-    echo -e "${BLUE}[+] =============================================== [+]${NC}"
-    echo -e "${BLUE}[+]                    CREATE NODE                     [+]${NC}"
-    echo -e "${BLUE}[+] =============================================== [+]${NC}"
+    echo -e "\033[0;34m[+] =============================================== [+]\033[0m"
+    echo -e "\033[0;34m[+]                    CREATE NODE                     [+]\033[0m"
+    echo -e "\033[0;34m[+] =============================================== [+]\033[0m"
     echo -e "                                                       "
     
     # Minta input dari pengguna
@@ -151,65 +151,181 @@ create_node() {
     read -p "Masukkan Locid: " locid
 
     # Ubah ke direktori pterodactyl
-    cd /var/www/pterodactyl || { echo "Direktori tidak ditemukan"; exit 1; }
+    cd /var/www/pterodactyl || { 
+        echo -e "\033[0;31m[!] ❌ Direktori /var/www/pterodactyl tidak ditemukan\033[0m"
+        return 1
+    }
 
-    # Membuat lokasi baru - METHOD 1: Menggunakan input terpisah
-    echo -e "${GREEN}[+] Membuat lokasi...${NC}"
-    printf "%s\n%s" "$location_name" "$location_description" | php artisan p:location:make
+    # Install dependencies jika belum ada
+    echo -e "\033[0;32m[+] Memeriksa dependencies...\033[0m"
+    install_dependencies
 
-    # Membuat node baru - METHOD 2: Menggunakan file sementara
-    echo -e "${GREEN}[+] Membuat node...${NC}"
-    {
-        echo "$node_name"
-        echo "$location_description" 
-        echo "$locid"
-        echo "https"
-        echo "$domain"
-        echo "yes"
-        echo "no"
-        echo "no"
-        echo "$ram"
-        echo "$ram"
-        echo "$disk_space"
-        echo "$disk_space"
-        echo "100"
-        echo "8080"
-        echo "2022"
-        echo "/var/lib/pterodactyl/volumes"
-    } | php artisan p:node:make
+    # Membuat lokasi baru
+    echo -e "\033[0;32m[+] Membuat lokasi: $location_name\033[0m"
+    echo -e "$location_name\n$location_description" | php artisan p:location:make
 
-    # ✅ Buat allocation otomatis untuk node
-    echo -e "${GREEN}[+] Membuat allocation untuk node...${NC}"
-    
+    # Membuat node baru
+    echo -e "\033[0;32m[+] Membuat node: $node_name\033[0m"
+    php artisan p:node:make <<NODE_INPUT
+$node_name
+$location_description
+$locid
+https
+$domain
+yes
+no
+no
+$ram
+$ram
+$disk_space
+$disk_space
+100
+8080
+2022
+/var/lib/pterodactyl/volumes
+NODE_INPUT
+
     # Dapatkan ID node yang baru dibuat
-    NODE_ID=$(php artisan p:node:list --format=json | jq -r '.[-1].id')
+    echo -e "\033[0;32m[+] Mendapatkan ID node...\033[0m"
+    NODE_ID=$(php artisan p:node:list --format=json | jq -r '.[-1].id 2>/dev/null')
     
     if [ -n "$NODE_ID" ] && [ "$NODE_ID" != "null" ]; then
-        # Buat allocation dengan IP 0.0.0.0
-        {
-            echo "$NODE_ID"
-            echo "0.0.0.0"
-            echo "3000"
-            echo "3600"
-        } | php artisan p:allocation:make
-
-        echo -e "${GREEN}[+] Allocation berhasil dibuat:${NC}"
-        echo -e "   - IP: 0.0.0.0"
-        echo -e "   - Port Range: 3000-3600" 
-        echo -e "   - IP Alias: (kosong)"
+        echo -e "\033[0;32m[+] ✅ Node berhasil dibuat dengan ID: $NODE_ID\033[0m"
+        
+        # Buat allocation via database
+        create_allocations "$NODE_ID"
+        
     else
-        echo -e "${YELLOW}⚠️ Gagal mendapatkan ID node, allocation tidak dibuat${NC}"
+        echo -e "\033[0;31m[!] ❌ Gagal mendapatkan ID node\033[0m"
+        echo -e "\033[0;33m[!] Cek daftar node manual:\033[0m"
+        php artisan p:node:list
+        return 1
     fi
 
-    echo -e "                                                       "
-    echo -e "${GREEN}[+] =============================================== [+]${NC}"
-    echo -e "${GREEN}[+]        CREATE NODE & LOCATION SUKSES             [+]${NC}"
-    echo -e "${GREEN}[+] =============================================== [+]${NC}"
-    echo -e "${GREEN}[+]        ALLOCATION OTOMATIS DIBUAT               [+]${NC}"
-    echo -e "${GREEN}[+] =============================================== [+]${NC}"
-    echo -e "                                                       "
-    sleep 2
+    echo -e ""
+    echo -e "\033[0;32m[+] =============================================== [+]\033[0m"
+    echo -e "\033[0;32m[+]        CREATE NODE & LOCATION SUKSES             [+]\033[0m"
+    echo -e "\033[0;32m[+] =============================================== [+]\033[0m"
+    echo -e ""
+    read -p "Tekan Enter untuk melanjutkan..."
     clear
+}
+
+install_dependencies() {
+    local installed=0
+    
+    # Check and install jq
+    if ! command -v jq &> /dev/null; then
+        echo -e "\033[0;33m[!] Installing jq...\033[0m"
+        apt update && apt install -y jq
+        if [ $? -eq 0 ]; then
+            echo -e "\033[0;32m[+] ✅ jq installed successfully\033[0m"
+            installed=1
+        else
+            echo -e "\033[0;31m[!] ❌ Failed to install jq\033[0m"
+            return 1
+        fi
+    else
+        echo -e "\033[0;32m[+] ✅ jq already installed\033[0m"
+    fi
+    
+    # Check and install mysql-client
+    if ! command -v mysql &> /dev/null; then
+        echo -e "\033[0;33m[!] Installing mysql-client...\033[0m"
+        apt update && apt install -y mysql-client
+        if [ $? -eq 0 ]; then
+            echo -e "\033[0;32m[+] ✅ mysql-client installed successfully\033[0m"
+            installed=1
+        else
+            echo -e "\033[0;31m[!] ❌ Failed to install mysql-client\033[0m"
+            return 1
+        fi
+    else
+        echo -e "\033[0;32m[+] ✅ mysql-client already installed\033[0m"
+    fi
+    
+    if [ $installed -eq 1 ]; then
+        echo -e "\033[0;32m[+] All dependencies are ready\033[0m"
+    fi
+}
+
+create_allocations() {
+    local NODE_ID=$1
+    local START_PORT=3000
+    local END_PORT=3010
+    
+    echo -e "\033[0;32m[+] Membuat allocation via database...\033[0m"
+    
+    # Dapatkan database credentials dari environment
+    if [ ! -f ".env" ]; then
+        echo -e "\033[0;31m[!] ❌ File .env tidak ditemukan\033[0m"
+        return 1
+    fi
+    
+    DB_NAME=$(grep DB_DATABASE .env | cut -d '=' -f2)
+    DB_USER=$(grep DB_USERNAME .env | cut -d '=' -f2)
+    DB_PASS=$(grep DB_PASSWORD .env | cut -d '=' -f2)
+    
+    # Validasi database credentials
+    if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
+        echo -e "\033[0;31m[!] ❌ Gagal mendapatkan kredensial database dari .env\033[0m"
+        return 1
+    fi
+    
+    # Test database connection
+    if ! mysql -u "$DB_USER" -p"$DB_PASS" -e "USE $DB_NAME" 2>/dev/null; then
+        echo -e "\033[0;31m[!] ❌ Tidak dapat terhubung ke database\033[0m"
+        echo -e "\033[0;33m[!] Pastikan:\033[0m"
+        echo -e "\033[0;36m    - Database service sedang berjalan\033[0m"
+        echo -e "\033[0;36m    - Kredensial di .env benar\033[0m"
+        echo -e "\033[0;36m    - User database memiliki hak akses yang cukup\033[0m"
+        return 1
+    fi
+    
+    # Buat allocation untuk port range
+    local success_count=0
+    local total_ports=$((END_PORT - START_PORT + 1))
+    
+    for port in $(seq $START_PORT $END_PORT); do
+        if mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e \
+            "INSERT INTO allocations (node_id, ip, port, assigned, server_id) VALUES ($NODE_ID, '0.0.0.0', $port, 0, NULL);" 2>/dev/null; then
+            success_count=$((success_count + 1))
+        else
+            echo -e "\033[0;33m[!] Gagal membuat allocation untuk port $port\033[0m"
+        fi
+    done
+    
+    # Verifikasi allocation
+    local alloc_count=$(mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e \
+        "SELECT COUNT(*) FROM allocations WHERE node_id = $NODE_ID;" 2>/dev/null)
+    
+    if [ $success_count -gt 0 ]; then
+        echo -e "\033[0;32m[+] ✅ Allocation berhasil dibuat:\033[0m"
+        echo -e "\033[0;36m    - Port Range: ${START_PORT}-${END_PORT}\033[0m"
+        echo -e "\033[0;36m    - Berhasil: ${success_count}/${total_ports} ports\033[0m"
+        echo -e "\033[0;36m    - Total allocation node: ${alloc_count}\033[0m"
+        echo -e "\033[0;32m[+] IP: 0.0.0.0\033[0m"
+    else
+        echo -e "\033[0;31m[!] ❌ Gagal membuat semua allocation\033[0m"
+        echo -e "\033[0;33m[!] Buat allocation manual via panel web\033[0m"
+    fi
+    
+    # Tampilkan allocations yang berhasil dibuat
+    if [ $success_count -gt 0 ]; then
+        echo -e ""
+        echo -e "\033[0;32m[+] Daftar allocation yang berhasil:\033[0m"
+        mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e \
+            "SELECT id, ip, port, assigned FROM allocations WHERE node_id = $NODE_ID ORDER BY port;" 2>/dev/null
+    fi
+}
+
+# Fungsi bantuan untuk menampilkan informasi node
+show_node_info() {
+    local NODE_ID=$1
+    
+    echo -e ""
+    echo -e "\033[0;32m[+] Informasi Node:\033[0m"
+    php artisan p:node:list --format=json | jq -r ".[] | select(.id == $NODE_ID) | \"   🖥️  Nama: \(.name)\n   🔢 ID: \(.id)\n   📍 Location: \(.location_id)\n   🌐 FQDN: \(.fqdn)\n   💾 Memory: \(.memory) MB\n   💿 Disk: \(.disk) MB\""
 }
 uninstall_panel() {
   echo -e "                                                       "
