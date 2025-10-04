@@ -10,6 +10,7 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Log function
@@ -26,25 +27,85 @@ error() {
     exit 1
 }
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    error "Please run as root: sudo bash <(curl -s https://raw.githubusercontent.com/iLyxxDev/hosting/main/security.sh)"
-fi
+info() {
+    echo -e "${BLUE}[MENU]${NC} $1"
+}
 
-# Pterodactyl directory
-PTERO_DIR="/var/www/pterodactyl"
+# Function to show menu
+show_menu() {
+    echo
+    info "=========================================="
+    info "    CUSTOM SECURITY MIDDLEWARE INSTALLER"
+    info "=========================================="
+    echo
+    info "Pilihan yang tersedia:"
+    info "1. Install Security Middleware"
+    info "2. Ganti Nama Credit di Middleware"
+    info "3. Keluar"
+    echo
+}
 
-# Check if Pterodactyl exists
-if [ ! -d "$PTERO_DIR" ]; then
-    error "Pterodactyl directory not found: $PTERO_DIR"
-fi
+# Function to replace credit name
+replace_credit_name() {
+    echo
+    info "GANTI NAMA CREDIT"
+    info "================="
+    echo
+    read -p "Masukkan nama baru untuk mengganti '@naeldev': " new_name
+    
+    if [ -z "$new_name" ]; then
+        error "Nama tidak boleh kosong!"
+    fi
+    
+    # Remove @ if user included it
+    new_name=$(echo "$new_name" | sed 's/^@//')
+    
+    echo
+    info "Mengganti '@naeldev' dengan '@$new_name'..."
+    
+    # Check if middleware file exists
+    if [ ! -f "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php" ]; then
+        error "Middleware belum diinstall! Silakan install terlebih dahulu."
+    fi
+    
+    # Replace all occurrences in the middleware file
+    sed -i "s/@naeldev/@$new_name/g" "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php"
+    
+    log "✅ Nama berhasil diganti dari '@naeldev' menjadi '@$new_name'"
+    
+    # Clear cache
+    log "🧹 Membersihkan cache..."
+    cd $PTERO_DIR
+    sudo -u www-data php artisan config:clear
+    sudo -u www-data php artisan route:clear
+    sudo -u www-data php artisan cache:clear
+    
+    echo
+    log "🎉 Nama credit berhasil diubah!"
+    log "💬 Credit sekarang: @$new_name"
+}
 
-log "🚀 Installing Custom Security Middleware for Pterodactyl..."
-log "📁 Pterodactyl directory: $PTERO_DIR"
+# Function to install middleware
+install_middleware() {
+    # Check if running as root
+    if [ "$EUID" -ne 0 ]; then
+        error "Please run as root: sudo bash <(curl -s https://raw.githubusercontent.com/iLyxxDev/hosting/main/security.sh)"
+    fi
 
-# Create custom middleware file
-log "📝 Creating CustomSecurityCheck middleware..."
-cat > $PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php << 'EOF'
+    # Pterodactyl directory
+    PTERO_DIR="/var/www/pterodactyl"
+
+    # Check if Pterodactyl exists
+    if [ ! -d "$PTERO_DIR" ]; then
+        error "Pterodactyl directory not found: $PTERO_DIR"
+    fi
+
+    log "🚀 Installing Custom Security Middleware for Pterodactyl..."
+    log "📁 Pterodactyl directory: $PTERO_DIR"
+
+    # Create custom middleware file
+    log "📝 Creating CustomSecurityCheck middleware..."
+    cat > $PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Middleware;
@@ -308,202 +369,235 @@ class CustomSecurityCheck
 }
 EOF
 
-log "✅ Custom middleware created"
+    log "✅ Custom middleware created"
 
-# Register middleware in Kernel
-KERNEL_FILE="$PTERO_DIR/app/Http/Kernel.php"
-log "📝 Registering middleware in Kernel..."
+    # Register middleware in Kernel
+    KERNEL_FILE="$PTERO_DIR/app/Http/Kernel.php"
+    log "📝 Registering middleware in Kernel..."
 
-if grep -q "custom.security" "$KERNEL_FILE"; then
-    warn "⚠️ Middleware already registered in Kernel"
-else
-    # Add middleware to Kernel
-    sed -i "/protected \$middlewareAliases = \[/a\\
-    'custom.security' => \\\\Pterodactyl\\\\Http\\\\Middleware\\\\CustomSecurityCheck::class," "$KERNEL_FILE"
-    log "✅ Middleware registered in Kernel"
-fi
-
-# Apply middleware to routes
-log "🔧 Applying middleware to routes..."
-
-# Function to apply middleware to route group (FIXED VERSION)
-apply_middleware_to_group() {
-    local file="$1"
-    local group_prefix="$2"
-    
-    if [ -f "$file" ]; then
-        # Check if group exists without middleware
-        if grep -q "Route::group(\['prefix' => '$group_prefix'\])" "$file"; then
-            # Replace group without middleware to with middleware
-            sed -i "s/Route::group(\['prefix' => '$group_prefix'\]/Route::group(['prefix' => '$group_prefix', 'middleware' => ['custom.security']]/g" "$file"
-            log "✅ Applied middleware to $group_prefix group in $(basename $file)"
-        elif grep -q "Route::group(\['prefix' => '$group_prefix'," "$file" && ! grep -q "'middleware' => \['custom.security'\]" "$file"; then
-            # Group exists with other middleware but not our custom.security
-            sed -i "s/Route::group(\['prefix' => '$group_prefix',/Route::group(['prefix' => '$group_prefix', 'middleware' => ['custom.security'],/g" "$file"
-            log "✅ Added middleware to existing $group_prefix group in $(basename $file)"
-        else
-            warn "⚠️ $group_prefix group not found or already has middleware in $(basename $file)"
-        fi
+    if grep -q "custom.security" "$KERNEL_FILE"; then
+        warn "⚠️ Middleware already registered in Kernel"
     else
-        warn "⚠️ File not found: $(basename $file)"
+        # Add middleware to Kernel
+        sed -i "/protected \$middlewareAliases = \[/a\\
+        'custom.security' => \\\\Pterodactyl\\\\Http\\\\Middleware\\\\CustomSecurityCheck::class," "$KERNEL_FILE"
+        log "✅ Middleware registered in Kernel"
     fi
-}
 
-# Function to apply middleware to individual routes (FIXED VERSION)
-apply_middleware_to_route() {
-    local file="$1"
-    local route_pattern="$2"
-    
-    if [ -f "$file" ]; then
-        # Find routes that don't have custom.security middleware yet
-        while IFS= read -r line; do
-            if [[ $line =~ $route_pattern ]] && [[ ! $line =~ "custom.security" ]]; then
-                # Add middleware to the route
-                if [[ $line =~ \)\; ]]; then
-                    # Route without existing middleware
-                    new_line=$(echo "$line" | sed "s/);/)->middleware(['custom.security']);/")
-                elif [[ $line =~ \)\-\>middleware\( ]]; then
-                    # Route with existing middleware
-                    new_line=$(echo "$line" | sed "s/)->middleware(\[/)->middleware(['custom.security', /")
-                else
-                    # Route with other formatting
-                    new_line=$(echo "$line" | sed "s/);/)->middleware(['custom.security']);/")
-                fi
-                
-                # Replace the line in the file
-                escaped_line=$(printf '%s\n' "$line" | sed 's/[[\.*^$/]/\\&/g')
-                escaped_new_line=$(printf '%s\n' "$new_line" | sed 's/[[\.*^$/]/\\&/g')
-                sed -i "s|$escaped_line|$escaped_new_line|g" "$file"
-                
-                log "✅ Applied middleware to route: $(echo "$line" | tr -d '\n' | sed 's/^[[:space:]]*//')"
-            fi
-        done < <(grep "$route_pattern" "$file")
-    fi
-}
+    # Apply middleware to routes
+    log "🔧 Applying middleware to routes..."
 
-# Apply middleware to route groups
-log "🔧 Applying middleware to route groups..."
-apply_middleware_to_group "$PTERO_DIR/routes/api-client.php" "'/files'"
-apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/users'"
-apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/servers'"
-apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/nodes'"
-apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'settings'"
-apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'users'"
-apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'servers'"
-apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'nodes'"
-
-# Apply middleware to individual DELETE routes in api-application.php
-log "🔧 Applying middleware to individual DELETE routes..."
-API_APP_FILE="$PTERO_DIR/routes/api-application.php"
-if [ -f "$API_APP_FILE" ]; then
-    # Apply to user delete route
-    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*users.*delete"
-    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*users.*{user:id}.*\].*delete"
-    
-    # Apply to server delete routes
-    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*delete"
-    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*{server:id}.*\].*delete"
-    apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*{server:id}.*{force.*\].*delete"
-fi
-
-# Apply middleware to server group in api-client
-API_CLIENT_FILE="$PTERO_DIR/routes/api-client.php"
-if [ -f "$API_CLIENT_FILE" ] && grep -q "Route::group(\['prefix' => '/servers/{server}', 'middleware' => \[" "$API_CLIENT_FILE"; then
-    if ! grep -q "'custom.security'" "$API_CLIENT_FILE"; then
-        sed -i "/Route::group(\['prefix' => '\/servers\/{server}', 'middleware' => \[/a\\
-        'custom.security'," "$API_CLIENT_FILE"
-        log "✅ Applied to server group in api-client.php"
-    fi
-fi
-
-# Manual check and fix for critical routes
-log "🔍 Manual checking critical routes..."
-check_and_fix_route() {
-    local file="$1"
-    local route_desc="$2"
-    local route_pattern="$3"
-    
-    if [ -f "$file" ] && grep -q "$route_pattern" "$file" && ! grep -q "custom.security" "$file" && grep -q "$route_pattern" "$file"; then
-        warn "⚠️ $route_desc in $(basename $file) doesn't have middleware, adding manually..."
+    # Function to apply middleware to route group (FIXED VERSION)
+    apply_middleware_to_group() {
+        local file="$1"
+        local group_prefix="$2"
         
-        # Simple approach: add ->middleware(['custom.security']) before the closing );
-        sed -i "s/$route_pattern[^)]*);/$route_pattern->middleware(['custom.security']);/g" "$file"
-        log "✅ Manually added middleware to $route_desc"
+        if [ -f "$file" ]; then
+            # Check if group exists without middleware
+            if grep -q "Route::group(\['prefix' => '$group_prefix'\])" "$file"; then
+                # Replace group without middleware to with middleware
+                sed -i "s/Route::group(\['prefix' => '$group_prefix'\]/Route::group(['prefix' => '$group_prefix', 'middleware' => ['custom.security']]/g" "$file"
+                log "✅ Applied middleware to $group_prefix group in $(basename $file)"
+            elif grep -q "Route::group(\['prefix' => '$group_prefix'," "$file" && ! grep -q "'middleware' => \['custom.security'\]" "$file"; then
+                # Group exists with other middleware but not our custom.security
+                sed -i "s/Route::group(\['prefix' => '$group_prefix',/Route::group(['prefix' => '$group_prefix', 'middleware' => ['custom.security'],/g" "$file"
+                log "✅ Added middleware to existing $group_prefix group in $(basename $file)"
+            else
+                warn "⚠️ $group_prefix group not found or already has middleware in $(basename $file)"
+            fi
+        else
+            warn "⚠️ File not found: $(basename $file)"
+        fi
+    }
+
+    # Function to apply middleware to individual routes (FIXED VERSION)
+    apply_middleware_to_route() {
+        local file="$1"
+        local route_pattern="$2"
+        
+        if [ -f "$file" ]; then
+            # Find routes that don't have custom.security middleware yet
+            while IFS= read -r line; do
+                if [[ $line =~ $route_pattern ]] && [[ ! $line =~ "custom.security" ]]; then
+                    # Add middleware to the route
+                    if [[ $line =~ \)\; ]]; then
+                        # Route without existing middleware
+                        new_line=$(echo "$line" | sed "s/);/)->middleware(['custom.security']);/")
+                    elif [[ $line =~ \)\-\>middleware\( ]]; then
+                        # Route with existing middleware
+                        new_line=$(echo "$line" | sed "s/)->middleware(\[/)->middleware(['custom.security', /")
+                    else
+                        # Route with other formatting
+                        new_line=$(echo "$line" | sed "s/);/)->middleware(['custom.security']);/")
+                    fi
+                    
+                    # Replace the line in the file
+                    escaped_line=$(printf '%s\n' "$line" | sed 's/[[\.*^$/]/\\&/g')
+                    escaped_new_line=$(printf '%s\n' "$new_line" | sed 's/[[\.*^$/]/\\&/g')
+                    sed -i "s|$escaped_line|$escaped_new_line|g" "$file"
+                    
+                    log "✅ Applied middleware to route: $(echo "$line" | tr -d '\n' | sed 's/^[[:space:]]*//')"
+                fi
+            done < <(grep "$route_pattern" "$file")
+        fi
+    }
+
+    # Apply middleware to route groups
+    log "🔧 Applying middleware to route groups..."
+    apply_middleware_to_group "$PTERO_DIR/routes/api-client.php" "'/files'"
+    apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/users'"
+    apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/servers'"
+    apply_middleware_to_group "$PTERO_DIR/routes/api-application.php" "'/nodes'"
+    apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'settings'"
+    apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'users'"
+    apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'servers'"
+    apply_middleware_to_group "$PTERO_DIR/routes/admin.php" "'nodes'"
+
+    # Apply middleware to individual DELETE routes in api-application.php
+    log "🔧 Applying middleware to individual DELETE routes..."
+    API_APP_FILE="$PTERO_DIR/routes/api-application.php"
+    if [ -f "$API_APP_FILE" ]; then
+        # Apply to user delete route
+        apply_middleware_to_route "$API_APP_FILE" "Route::delete.*users.*delete"
+        apply_middleware_to_route "$API_APP_FILE" "Route::delete.*users.*{user:id}.*\].*delete"
+        
+        # Apply to server delete routes
+        apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*delete"
+        apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*{server:id}.*\].*delete"
+        apply_middleware_to_route "$API_APP_FILE" "Route::delete.*servers.*{server:id}.*{force.*\].*delete"
     fi
+
+    # Apply middleware to server group in api-client
+    API_CLIENT_FILE="$PTERO_DIR/routes/api-client.php"
+    if [ -f "$API_CLIENT_FILE" ] && grep -q "Route::group(\['prefix' => '/servers/{server}', 'middleware' => \[" "$API_CLIENT_FILE"; then
+        if ! grep -q "'custom.security'" "$API_CLIENT_FILE"; then
+            sed -i "/Route::group(\['prefix' => '\/servers\/{server}', 'middleware' => \[/a\\
+            'custom.security'," "$API_CLIENT_FILE"
+            log "✅ Applied to server group in api-client.php"
+        fi
+    fi
+
+    # Manual check and fix for critical routes
+    log "🔍 Manual checking critical routes..."
+    check_and_fix_route() {
+        local file="$1"
+        local route_desc="$2"
+        local route_pattern="$3"
+        
+        if [ -f "$file" ] && grep -q "$route_pattern" "$file" && ! grep -q "custom.security" "$file" && grep -q "$route_pattern" "$file"; then
+            warn "⚠️ $route_desc in $(basename $file) doesn't have middleware, adding manually..."
+            
+            # Simple approach: add ->middleware(['custom.security']) before the closing );
+            sed -i "s/$route_pattern[^)]*);/$route_pattern->middleware(['custom.security']);/g" "$file"
+            log "✅ Manually added middleware to $route_desc"
+        fi
+    }
+
+    # Check specific critical routes
+    check_and_fix_route "$PTERO_DIR/routes/api-application.php" "User delete route" "Route::delete.*users.*{user:id}.*Application.*Users.*UserController.*delete"
+    check_and_fix_route "$PTERO_DIR/routes/api-application.php" "Server delete route" "Route::delete.*servers.*{server:id}.*Application.*Servers.*ServerController.*delete"
+
+    # Clear cache and optimize
+    log "🧹 Clearing cache and optimizing..."
+    cd $PTERO_DIR
+
+    sudo -u www-data php artisan config:clear
+    sudo -u www-data php artisan route:clear
+    sudo -u www-data php artisan view:clear
+    sudo -u www-data php artisan cache:clear
+    sudo -u www-data php artisan optimize
+
+    log "✅ Cache cleared successfully"
+
+    # Restart services
+    log "🔄 Restarting services..."
+
+    # Detect PHP version
+    PHP_SERVICE=""
+    if systemctl is-active --quiet php8.2-fpm; then
+        PHP_SERVICE="php8.2-fpm"
+    elif systemctl is-active --quiet php8.1-fpm; then
+        PHP_SERVICE="php8.1-fpm"
+    elif systemctl is-active --quiet php8.0-fpm; then
+        PHP_SERVICE="php8.0-fpm"
+    elif systemctl is-active --quiet php8.3-fpm; then
+        PHP_SERVICE="php8.3-fpm"
+    else
+        warn "⚠️ PHP-FPM service not detected, skipping restart"
+    fi
+
+    if [ -n "$PHP_SERVICE" ]; then
+        systemctl restart $PHP_SERVICE
+        log "✅ $PHP_SERVICE restarted"
+    fi
+
+    if systemctl is-active --quiet pteroq-service; then
+        systemctl restart pteroq-service
+        log "✅ pterodactyl-service restarted"
+    fi
+
+    if systemctl is-active --quiet nginx; then
+        systemctl reload nginx
+        log "✅ nginx reloaded"
+    fi
+
+    # Final verification
+    log "🔍 Verifying middleware application..."
+    echo
+    log "📋 Applied middleware to:"
+    log "   ✅ Route groups: files, users, servers, nodes, settings"
+    log "   ✅ Individual DELETE routes in api-application.php"
+    log "   ✅ Server group in api-client.php"
+    echo
+    log "🎉 Custom Security Middleware installed successfully!"
+    echo
+    log "📊 PROTECTION SUMMARY:"
+    log "   ✅ Admin hanya bisa akses: Application API"
+    log "   ❌ Admin DIBLOKIR dari:"
+    log "      - Users, Servers, Nodes, Settings"
+    log "      - Databases, Locations, Nests, Mounts, Eggs"
+    log "      - Delete/Update operations"
+    log "   🔒 API DELETE Operations DIBLOKIR:"
+    log "      - DELETE /api/application/users/{id}"
+    log "      - DELETE /api/application/servers/{id}" 
+    log "      - DELETE /api/application/servers/{id}/force"
+    log "   🔒 Server ownership protection aktif"
+    log "   🛡️ User access restriction aktif"
+    echo
+    log "💬 Source Code Credit by - @naeldev'"
+    echo
+    warn "⚠️ IMPORTANT: Test dengan login sebagai admin dan coba akses tabs yang diblokir"
+    log "   Untuk uninstall, hapus middleware dari Kernel.php dan routes"
 }
 
-# Check specific critical routes
-check_and_fix_route "$PTERO_DIR/routes/api-application.php" "User delete route" "Route::delete.*users.*{user:id}.*Application.*Users.*UserController.*delete"
-check_and_fix_route "$PTERO_DIR/routes/api-application.php" "Server delete route" "Route::delete.*servers.*{server:id}.*Application.*Servers.*ServerController.*delete"
+# Main program
+main() {
+    while true; do
+        show_menu
+        read -p "$(info 'Pilih opsi (1-3): ')" choice
+        
+        case $choice in
+            1)
+                echo
+                install_middleware
+                ;;
+            2)
+                replace_credit_name
+                ;;
+            3)
+                echo
+                log "Terima kasih! Keluar dari program."
+                exit 0
+                ;;
+            *)
+                error "Pilihan tidak valid! Silakan pilih 1, 2, atau 3."
+                ;;
+        esac
+        
+        echo
+        read -p "$(info 'Tekan Enter untuk kembali ke menu...')"
+    done
+}
 
-# Clear cache and optimize
-log "🧹 Clearing cache and optimizing..."
-cd $PTERO_DIR
-
-sudo -u www-data php artisan config:clear
-sudo -u www-data php artisan route:clear
-sudo -u www-data php artisan view:clear
-sudo -u www-data php artisan cache:clear
-sudo -u www-data php artisan optimize
-
-log "✅ Cache cleared successfully"
-
-# Restart services
-log "🔄 Restarting services..."
-
-# Detect PHP version
-PHP_SERVICE=""
-if systemctl is-active --quiet php8.2-fpm; then
-    PHP_SERVICE="php8.2-fpm"
-elif systemctl is-active --quiet php8.1-fpm; then
-    PHP_SERVICE="php8.1-fpm"
-elif systemctl is-active --quiet php8.0-fpm; then
-    PHP_SERVICE="php8.0-fpm"
-elif systemctl is-active --quiet php8.3-fpm; then
-    PHP_SERVICE="php8.3-fpm"
-else
-    warn "⚠️ PHP-FPM service not detected, skipping restart"
-fi
-
-if [ -n "$PHP_SERVICE" ]; then
-    systemctl restart $PHP_SERVICE
-    log "✅ $PHP_SERVICE restarted"
-fi
-
-if systemctl is-active --quiet pteroq-service; then
-    systemctl restart pteroq-service
-    log "✅ pterodactyl-service restarted"
-fi
-
-if systemctl is-active --quiet nginx; then
-    systemctl reload nginx
-    log "✅ nginx reloaded"
-fi
-
-# Final verification
-log "🔍 Verifying middleware application..."
-echo
-log "📋 Applied middleware to:"
-log "   ✅ Route groups: files, users, servers, nodes, settings"
-log "   ✅ Individual DELETE routes in api-application.php"
-log "   ✅ Server group in api-client.php"
-echo
-log "🎉 Custom Security Middleware installed successfully!"
-echo
-log "📊 PROTECTION SUMMARY:"
-log "   ✅ Admin hanya bisa akses: Application API"
-log "   ❌ Admin DIBLOKIR dari:"
-log "      - Users, Servers, Nodes, Settings"
-log "      - Databases, Locations, Nests, Mounts, Eggs"
-log "      - Delete/Update operations"
-log "   🔒 API DELETE Operations DIBLOKIR:"
-log "      - DELETE /api/application/users/{id}"
-log "      - DELETE /api/application/servers/{id}" 
-log "      - DELETE /api/application/servers/{id}/force"
-log "   🔒 Server ownership protection aktif"
-log "   🛡️ User access restriction aktif"
-echo
-log "💬 Source Code Credit by - @naeldev'"
-echo
-warn "⚠️ IMPORTANT: Test dengan login sebagai admin dan coba akses tabs yang diblokir"
-log "   Untuk uninstall, hapus middleware dari Kernel.php dan routes"
+# Run main program
+main
