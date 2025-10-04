@@ -12,8 +12,8 @@ display_welcome() {
   echo -e ""
   echo -e "${BLUE}[+] =============================================== [+]${NC}"
   echo -e "${BLUE}[+]                                                 [+]${NC}"
-  echo -e "${BLUE}[+]                AUTO INSTALLER THEMA             [+]${NC}"
-  echo -e "${BLUE}[+]                  © @naeldev                [+]${NC}"
+  echo -e "${BLUE}[+]                AUTO INSTALLER PANEL             [+]${NC}"
+  echo -e "${BLUE}[+]                     © @naeldev                  [+]${NC}"
   echo -e "${BLUE}[+]                                                 [+]${NC}"
   echo -e "${RED}[+] =============================================== [+]${NC}"
   echo -e ""
@@ -108,7 +108,7 @@ install_theme() {
       *)
         echo -e "${RED}Pilihan tidak valid, silahkan coba lagi.${NC}"
         ;;
-    esac
+    esac⁷
   done
   
 if [ -e /root/pterodactyl ]; then
@@ -284,29 +284,27 @@ create_node() {
   echo -e "${BLUE}[+]                    CREATE NODE                     [+]${NC}"
   echo -e "${BLUE}[+] =============================================== [+]${NC}"
   echo -e "                                                       "
-  #!/bin/bash
-#!/bin/bash
+  
+  # Minta input dari pengguna
+  read -p "Masukkan nama lokasi: " location_name
+  read -p "Masukkan deskripsi lokasi: " location_description
+  read -p "Masukkan domain: " domain
+  read -p "Masukkan nama node: " node_name
+  read -p "Masukkan RAM (dalam MB): " ram
+  read -p "Masukkan jumlah maksimum disk space (dalam MB): " disk_space
+  read -p "Masukkan Locid: " locid
 
-# Minta input dari pengguna
-read -p "Masukkan nama lokasi: " location_name
-read -p "Masukkan deskripsi lokasi: " location_description
-read -p "Masukkan domain: " domain
-read -p "Masukkan nama node: " node_name
-read -p "Masukkan RAM (dalam MB): " ram
-read -p "Masukkan jumlah maksimum disk space (dalam MB): " disk_space
-read -p "Masukkan Locid: " locid
+  # Ubah ke direktori pterodactyl
+  cd /var/www/pterodactyl || { echo "Direktori tidak ditemukan"; exit 1; }
 
-# Ubah ke direktori pterodactyl
-cd /var/www/pterodactyl || { echo "Direktori tidak ditemukan"; exit 1; }
-
-# Membuat lokasi baru
-php artisan p:location:make <<EOF
+  # Membuat lokasi baru
+  php artisan p:location:make <<EOF
 $location_name
 $location_description
 EOF
 
-# Membuat node baru
-php artisan p:node:make <<EOF
+  # Membuat node baru
+  php artisan p:node:make <<EOF
 $node_name
 $location_description
 $locid
@@ -325,9 +323,33 @@ $disk_space
 /var/lib/pterodactyl/volumes
 EOF
 
+  # Membuat allocation otomatis untuk node
+  echo -e "${GREEN}[+] Membuat allocation untuk node...${NC}"
+  
+  # Dapatkan ID node yang baru dibuat (ambil ID terakhir)
+  NODE_ID=$(php artisan p:node:list --format=json | jq -r '.[-1].id')
+  
+  if [ -n "$NODE_ID" ] && [ "$NODE_ID" != "null" ]; then
+    # Buat allocation dengan IP 0.0.0.0, alias kosong, port 3000-3600
+    php artisan p:allocation:make <<EOF
+$NODE_ID
+0.0.0.0
+3000-3600
+EOF
+
+    echo -e "${GREEN}[+] Allocation berhasil dibuat:${NC}"
+    echo -e "   - IP: 0.0.0.0"
+    echo -e "   - Port Range: 3000-3600" 
+    echo -e "   - IP Alias: (kosong)"
+  else
+    warn "⚠️ Gagal mendapatkan ID node, allocation tidak dibuat"
+  fi
+
   echo -e "                                                       "
   echo -e "${GREEN}[+] =============================================== [+]${NC}"
   echo -e "${GREEN}[+]        CREATE NODE & LOCATION SUKSES             [+]${NC}"
+  echo -e "${GREEN}[+] =============================================== [+]${NC}"
+  echo -e "${GREEN}[+]        ALLOCATION OTOMATIS DIBUAT               [+]${NC}"
   echo -e "${GREEN}[+] =============================================== [+]${NC}"
   echo -e "                                                       "
   sleep 2
