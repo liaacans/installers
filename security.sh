@@ -28,11 +28,12 @@ info() {
 show_menu() {
     echo
     info "=========================================="
+    info "               SIMPLE OPTION            "
     info "    CUSTOM SECURITY MIDDLEWARE INSTALLER"
-    info "                @naeldev                "
+    info "                 @naeldev               "
     info "=========================================="
     echo
-    info "Pilihan yang tersedia:"
+    info "Security yang tersedia:"
     info "1. Install Security Middleware"
     info "2. Ganti Nama Credit di Middleware"
     info "3. Custom Teks Error Message"
@@ -156,6 +157,30 @@ apply_manual_routes() {
                 fi
             else
                 warn "⚠️ Route not found: $(echo "$route" | cut -d'[' -f1)"
+            fi
+        done
+
+        log "📝 Adding middleware to additional server routes..."
+        
+        additional_routes=(
+            "Route::get('/view/{server:id}/details', [Admin\\Servers\\ServerViewController::class, 'details'])->name('admin.servers.view.details')"
+            "Route::get('/view/{server:id}/delete', [Admin\\Servers\\ServerViewController::class, 'delete'])->name('admin.servers.view.delete')"
+            "Route::post('/view/{server:id}/delete', [Admin\\ServersController::class, 'delete'])"
+            "Route::patch('/view/{server:id}/details', [Admin\\ServersController::class, 'setDetails'])"
+        )
+        
+        for route in "${additional_routes[@]}"; do
+            escaped_route=$(printf '%s\n' "$route" | sed 's/[[\.*^$/]/\\&/g')
+            
+            if grep -q "$route" "$ADMIN_FILE"; then
+                if ! grep -q "$route->middleware(\['custom.security'\])" "$ADMIN_FILE"; then
+                    sed -i "s/$escaped_route);/$route->middleware(['custom.security']);/g" "$ADMIN_FILE"
+                    log "✅ Applied middleware to additional route: $(echo "$route" | cut -d'[' -f1)"
+                else
+                    warn "⚠️ Middleware already applied to additional route: $(echo "$route" | cut -d'[' -f1)"
+                fi
+            else
+                warn "⚠️ Additional route not found: $(echo "$route" | cut -d'[' -f1)"
             fi
         done
     fi
@@ -460,7 +485,9 @@ EOF
     echo
     log "📋 Applied middleware to:"
     log "   ✅ Route groups: files"
-    log "   ✅ Admin routes: user update/delete, server details/delete, node settings/delete"
+    log "   ✅ Admin routes: user update/delete"
+    log "   ✅ Server routes: details, delete, setDetails"
+    log "   ✅ Node routes: settings, configuration, token, updateSettings, delete"
     echo
     log "🎉 Custom Security Middleware installed successfully!"
     echo
@@ -486,7 +513,7 @@ EOF
 main() {
     while true; do
         show_menu
-        read -p "$(info 'Silahkan pilih opsi (1-4): ')" choice
+        read -p "$(info 'Silahkan pilih opsi (1/2/3/4): ')" choice
         
         case $choice in
             1)
@@ -501,7 +528,7 @@ main() {
                 ;;
             4)
                 echo
-                log "Terima kasih! Keluar dari program."
+                log "Terima kasih! Keluar dari install."
                 exit 0
                 ;;
             *)
