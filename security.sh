@@ -71,8 +71,121 @@ EOF
     echo "1. Install Security Middleware"
     echo "2. Ganti Nama Credit di Middleware"
     echo "3. Custom Teks Error Message"
-    echo "4. Keluar"
+    echo "4. Clear Security (Uninstall)"
+    echo "5. Keluar"
     echo
+}
+
+clear_security() {
+    echo
+    info "CLEAR SECURITY MIDDLEWARE"
+    info "========================"
+    echo
+    warn "⚠️  PERINGATAN: Tindakan ini akan menghapus security middleware dan mengembalikan sistem ke kondisi normal!"
+    read -p "Apakah Anda yakin ingin menghapus security middleware? (y/N): " confirm
+    
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        log "❌ Penghapusan dibatalkan."
+        return
+    fi
+    
+    PTERO_DIR="/var/www/pterodactyl"
+    
+    if [ ! -d "$PTERO_DIR" ]; then
+        error "Pterodactyl directory not found: $PTERO_DIR"
+    fi
+    
+    log "🧹 Membersihkan security middleware..."
+    
+    # 1. Hapus file middleware
+    if [ -f "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php" ]; then
+        rm -f "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php"
+        log "✅ File middleware dihapus"
+    else
+        warn "⚠️ File middleware tidak ditemukan"
+    fi
+    
+    # 2. Hapus dari Kernel.php
+    KERNEL_FILE="$PTERO_DIR/app/Http/Kernel.php"
+    if [ -f "$KERNEL_FILE" ]; then
+        if grep -q "custom.security" "$KERNEL_FILE"; then
+            sed -i "/'custom.security' => \\\\Pterodactyl\\\\Http\\\\Middleware\\\\CustomSecurityCheck::class,/d" "$KERNEL_FILE"
+            log "✅ Middleware dihapus dari Kernel"
+        else
+            warn "⚠️ Middleware tidak terdaftar di Kernel"
+        fi
+    fi
+    
+    # 3. Hapus middleware dari routes
+    log "🔧 Membersihkan routes..."
+    
+    # api-client.php
+    API_CLIENT_FILE="$PTERO_DIR/routes/api-client.php"
+    if [ -f "$API_CLIENT_FILE" ]; then
+        if grep -q "Route::group(\['prefix' => '/files', 'middleware' => \['custom.security'\]" "$API_CLIENT_FILE"; then
+            sed -i "s/Route::group(\['prefix' => '\/files', 'middleware' => \['custom.security'\]/Route::group(['prefix' => '\/files'/g" "$API_CLIENT_FILE"
+            log "✅ Middleware dihapus dari api-client.php"
+        fi
+    fi
+    
+    # admin.php - hapus middleware dari semua route
+    ADMIN_FILE="$PTERO_DIR/routes/admin.php"
+    if [ -f "$ADMIN_FILE" ]; then
+        # Hapus ->middleware(['custom.security']) dari semua route
+        sed -i "s/->middleware(\['custom.security'\])//g" "$ADMIN_FILE"
+        log "✅ Middleware dihapus dari admin.php"
+    fi
+    
+    # 4. Clear cache
+    log "🧹 Membersihkan cache..."
+    cd $PTERO_DIR
+    sudo -u www-data php artisan config:clear
+    sudo -u www-data php artisan route:clear
+    sudo -u www-data php artisan view:clear
+    sudo -u www-data php artisan cache:clear
+    sudo -u www-data php artisan optimize
+    
+    log "✅ Cache dibersihkan"
+    
+    # 5. Restart services
+    log "🔄 Restart services..."
+    
+    PHP_SERVICE=""
+    if systemctl is-active --quiet php8.2-fpm; then
+        PHP_SERVICE="php8.2-fpm"
+    elif systemctl is-active --quiet php8.1-fpm; then
+        PHP_SERVICE="php8.1-fpm"
+    elif systemctl is-active --quiet php8.0-fpm; then
+        PHP_SERVICE="php8.0-fpm"
+    elif systemctl is-active --quiet php8.3-fpm; then
+        PHP_SERVICE="php8.3-fpm"
+    fi
+    
+    if [ -n "$PHP_SERVICE" ]; then
+        systemctl restart $PHP_SERVICE
+        log "✅ $PHP_SERVICE di-restart"
+    fi
+    
+    if systemctl is-active --quiet pteroq-service; then
+        systemctl restart pteroq-service
+        log "✅ pterodactyl-service di-restart"
+    fi
+    
+    if systemctl is-active --quiet nginx; then
+        systemctl reload nginx
+        log "✅ nginx di-reload"
+    fi
+    
+    echo
+    log "🎉 Security middleware berhasil dihapus!"
+    log "📋 Yang telah dilakukan:"
+    log "   ✅ File middleware dihapus"
+    log "   ✅ Registrasi di Kernel dihapus"
+    log "   ✅ Middleware dari routes dihapus"
+    log "   ✅ Cache dibersihkan"
+    log "   ✅ Services di-restart"
+    echo
+    warn "⚠️  Sistem sekarang dalam kondisi NORMAL tanpa proteksi security middleware"
 }
 
 replace_credit_name() {
@@ -167,7 +280,6 @@ apply_manual_routes() {
         
         log "🔍 Searching for routes in admin.php..."
         
-        # Method 1: Search for specific route patterns with flexible approach
         route_patterns=(
             "view/{user:id}.*update"
             "view/{user:id}.*delete"
@@ -182,17 +294,13 @@ apply_manual_routes() {
         for pattern in "${route_patterns[@]}"; do
             log "🔍 Searching for pattern: $pattern"
             
-            # Find lines containing the pattern
             while IFS= read -r line; do
                 if [[ ! -z "$line" && ! "$line" =~ "middleware" && "$line" =~ "Route::" ]]; then
                     log "📝 Found route: $(echo "$line" | tr -s ' ' | sed 's/^[[:space:]]*//')"
                     
-                    # Check if line ends with );
                     if [[ "$line" =~ \)\; ]]; then
-                        # Add middleware before the closing );
                         new_line=$(echo "$line" | sed "s/);/)->middleware(['custom.security']);/")
                         
-                        # Escape special characters for sed
                         escaped_line=$(printf '%s\n' "$line" | sed 's/[[\.*^$/]/\\&/g')
                         escaped_new_line=$(printf '%s\n' "$new_line" | sed 's/[[\.*^$/]/\\&/g')
                         
@@ -203,10 +311,8 @@ apply_manual_routes() {
             done < <(grep -n "$pattern" "$ADMIN_FILE" | head -5)
         done
 
-        # Method 2: Specific route protection for common patterns
         log "🔧 Applying specific route protection..."
         
-        # Protect user routes
         if grep -q "Route::patch.*view/{user:id}.*update" "$ADMIN_FILE"; then
             sed -i "s/Route::patch('\/view\/{user:id}', \[Admin\\UserController::class, 'update'\])/Route::patch('\/view\/{user:id}', [Admin\\UserController::class, 'update'])->middleware(['custom.security'])/g" "$ADMIN_FILE" 2>/dev/null || warn "User update route not found in exact format"
         fi
@@ -215,7 +321,6 @@ apply_manual_routes() {
             sed -i "s/Route::delete('\/view\/{user:id}', \[Admin\\UserController::class, 'delete'\])/Route::delete('\/view\/{user:id}', [Admin\\UserController::class, 'delete'])->middleware(['custom.security'])/g" "$ADMIN_FILE" 2>/dev/null || warn "User delete route not found in exact format"
         fi
         
-        # Protect server routes with flexible patterns
         server_routes=(
             "view/{server:id}/details"
             "view/{server:id}/delete"
@@ -224,7 +329,6 @@ apply_manual_routes() {
         for route in "${server_routes[@]}"; do
             escaped_route=$(echo "$route" | sed 's/\//\\\//g')
             
-            # Find and protect GET routes
             if grep -q "Route::get.*$route" "$ADMIN_FILE"; then
                 sed -i "s/Route::get('\/$escaped_route', \[Admin\\Servers\\ServerViewController::class, '${route##*/}'\])/Route::get('\/$escaped_route', [Admin\\Servers\\ServerViewController::class, '${route##*/}'])->middleware(['custom.security'])/g" "$ADMIN_FILE" 2>/dev/null || \
                 sed -i "s/Route::get('\/$escaped_route',/Route::get('\/$escaped_route',/g" "$ADMIN_FILE" 2>/dev/null || \
@@ -232,7 +336,6 @@ apply_manual_routes() {
             fi
         done
         
-        # Protect POST and PATCH server routes
         if grep -q "Route::post.*view/{server:id}/delete" "$ADMIN_FILE"; then
             sed -i "s/Route::post('\/view\/{server:id}\/delete', \[Admin\\ServersController::class, 'delete'\])/Route::post('\/view\/{server:id}\/delete', [Admin\\ServersController::class, 'delete'])->middleware(['custom.security'])/g" "$ADMIN_FILE" 2>/dev/null || warn "Server post delete route not found"
         fi
@@ -241,14 +344,11 @@ apply_manual_routes() {
             sed -i "s/Route::patch('\/view\/{server:id}\/details', \[Admin\\ServersController::class, 'setDetails'\])/Route::patch('\/view\/{server:id}\/details', [Admin\\ServersController::class, 'setDetails'])->middleware(['custom.security'])/g" "$ADMIN_FILE" 2>/dev/null || warn "Server setDetails route not found"
         fi
 
-        # Method 3: Manual inspection and protection
         log "🔍 Manual inspection of admin.php routes..."
         
-        # Count total routes in admin.php
         total_routes=$(grep -c "Route::" "$ADMIN_FILE" || true)
         log "📊 Total routes found in admin.php: $total_routes"
         
-        # Show first few routes to understand the format
         log "📋 Sample routes in admin.php:"
         grep "Route::" "$ADMIN_FILE" | head -10 | while read -r route_line; do
             log "   📝 $(echo "$route_line" | tr -s ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
@@ -275,7 +375,6 @@ install_middleware() {
     log "🚀 Installing Custom Security Middleware for Pterodactyl..."
     log "📁 Pterodactyl directory: $PTERO_DIR"
 
-    # Check if routes directory exists
     if [ ! -d "$PTERO_DIR/routes" ]; then
         error "Routes directory not found: $PTERO_DIR/routes"
     fi
@@ -585,13 +684,13 @@ EOF
     log "💬 Source Code Credit by - @naeldev'"
     echo
     warn "⚠️ IMPORTANT: Test dengan login sebagai admin dan coba akses tabs yang diblokir"
-    log "   Untuk uninstall, hapus middleware dari Kernel.php dan routes"
+    log "   Gunakan opsi 'Clear Security' untuk menguninstall"
 }
 
 main() {
     while true; do
         show_menu
-        read -p "$(info 'Pilih opsi (1-4): ')" choice
+        read -p "$(info 'Pilih opsi (1-5): ')" choice
         
         case $choice in
             1)
@@ -605,12 +704,15 @@ main() {
                 custom_error_message
                 ;;
             4)
+                clear_security
+                ;;
+            5)
                 echo
                 log "Terima kasih! Keluar dari program."
                 exit 0
                 ;;
             *)
-                error "Pilihan tidak valid! Silakan pilih 1, 2, 3, atau 4."
+                error "Pilihan tidak valid! Silakan pilih 1, 2, 3, 4, atau 5."
                 ;;
         esac
         
