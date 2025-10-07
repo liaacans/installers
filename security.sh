@@ -690,7 +690,7 @@ EOF
 main() {
     while true; do
         show_menu
-        read -p "$(info 'Pilih opsi (1-5): ')" choice
+        read -p "$(info 'Silahkan pilih opsi (1-5): ')" choice
         
         case $choice in
             1)
