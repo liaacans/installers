@@ -202,15 +202,15 @@ replace_credit_name() {
     new_name=$(echo "$new_name" | sed 's/^@//')
     
     echo
-    info "Mengganti '@naeldev' dengan '@$new_name'..."
+    info "Mengganti '@ginaabaikhati' dengan '@$new_name'..."
     
     if [ ! -f "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php" ]; then
         error "Middleware belum diinstall! Silakan install terlebih dahulu."
     fi
     
-    sed -i "s/@naeldev/@$new_name/g" "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php"
+    sed -i "s/@ginaabaikhati/@$new_name/g" "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php"
     
-    log "✅ Nama berhasil diganti dari '@naeldev' menjadi '@$new_name'"
+    log "✅ Nama berhasil diganti dari '@ginaabaikhati' menjadi '@$new_name'"
     
     log "🧹 Membersihkan cache..."
     cd $PTERO_DIR
@@ -241,7 +241,7 @@ custom_error_message() {
         error "Middleware belum diinstall! Silakan install terlebih dahulu."
     fi
     
-    sed -i "s/'error' => 'Mau ngapain hama wkwkwk - @naeldev'/'error' => '$custom_error'/g" "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php"
+    sed -i "s/'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'/'error' => '$custom_error'/g" "$PTERO_DIR/app/Http/Middleware/CustomSecurityCheck.php"
     
     log "✅ Teks error berhasil diganti dengan: '$custom_error'"
     
@@ -363,7 +363,7 @@ apply_manual_routes() {
 
 install_middleware() {
     if [ "$EUID" -ne 0 ]; then
-        error "Please run as root: sudo bash <(curl -s https://raw.githubusercontent.com/iLyxxDev/hosting/main/security.sh)"
+        error "Please run as root: sudo bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security.sh)"
     fi
 
     PTERO_DIR="/var/www/pterodactyl"
