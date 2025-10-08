@@ -407,37 +407,37 @@ class CustomSecurityCheck
 
         if ($currentUser->root_admin && $this->isAdminAccessingRestrictedPanel($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
             ], 403);
         }
 
         if ($currentUser->root_admin && $this->isAdminAccessingSettings($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
             ], 403);
         }
 
         if ($currentUser->root_admin && $this->isAdminModifyingUser($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
             ], 403);
         }
 
         if ($currentUser->root_admin && $this->isAdminModifyingServer($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
             ], 403);
         }
 
         if ($currentUser->root_admin && $this->isAdminModifyingNode($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
             ], 403);
         }
 
         if ($currentUser->root_admin && $this->isAdminDeletingViaAPI($path, $method)) {
             return new JsonResponse([
-                'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
             ], 403);
         }
 
@@ -446,7 +446,7 @@ class CustomSecurityCheck
             $isServerOwner = $currentUser->id === $server->owner_id;
             if (!$isServerOwner) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                    'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
                 ], 403);
             }
         }
@@ -455,13 +455,13 @@ class CustomSecurityCheck
             $user = $request->route('user');
             if ($user instanceof User && $currentUser->id !== $user->id) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                    'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
                 ], 403);
             }
 
             if ($this->isAccessingRestrictedList($path, $method, $user)) {
                 return new JsonResponse([
-                    'error' => 'Mau ngapain hama wkwkwk - @naeldev'
+                    'error' => 'Hayolohhh mauu ngapain?? - @ginaabaikhati'
                 ], 403);
             }
         }
@@ -681,7 +681,7 @@ EOF
     log "   🔒 Server ownership protection aktif"
     log "   🛡️ User access restriction aktif"
     echo
-    log "💬 Source Code Credit by - @naeldev'"
+    log "💬 Source Code Credit by - @ginaabaikhati'"
     echo
     warn "⚠️ IMPORTANT: Test dengan login sebagai admin dan coba akses tabs yang diblokir"
     log "   Gunakan opsi 'Clear Security' untuk menguninstall"
