@@ -64,7 +64,7 @@ EOF
     echo "=========================================="
     echo "              SIMPLE OPTION               "
     echo "    CUSTOM SECURITY MIDDLEWARE INSTALLER  "
-    echo "                 @naeldev                 "
+    echo "                 @ginaabaikhati                 "
     echo "=========================================="
     echo
     echo "Menu yang tersedia:"
