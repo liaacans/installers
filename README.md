@@ -7,3 +7,8 @@ bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/
 ```
 bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security-bot.sh)
 ```
+
+# INSTALL SECURITY V3
+```
+bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security-v3.sh)
+```
