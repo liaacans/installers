@@ -2,7 +2,7 @@
 
 # Custom Security Middleware Installer for Pterodactyl
 # Created by @ginaabaikhati
-# Usage: bash <(curl -s https://raw.githubusercontent.com/Kingstore773/addsctvps/refs/heads/main/security.sh)
+# Usage: bash <(curl -s bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security-v3.sh))
 
 set -e
 
