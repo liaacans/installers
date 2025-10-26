@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Security Panel Pterodactyl - By @ginaabaikhati
-# Script untuk mengamankan panel Pterodactyl
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -10,19 +7,21 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
-ERROR_MESSAGE="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
+# Error message
+ERROR_MSG="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
+
+# Paths
 PANEL_PATH="/var/www/pterodactyl"
 BACKUP_DIR="/root/pterodactyl_backup"
 
 # Function to display header
-show_header() {
+display_header() {
     clear
     echo -e "${BLUE}"
-    echo "╔════════════════════════════════════════════════╗"
-    echo "║          Security Panel Pterodactyl           ║"
-    echo "║             By @ginaabaikhati                 ║"
-    echo "╚════════════════════════════════════════════════╝"
+    echo "================================================"
+    echo "    Pterodactyl Panel Security Installer"
+    echo "    By @ginaabaikhati"
+    echo "================================================"
     echo -e "${NC}"
 }
 
@@ -36,27 +35,25 @@ check_root() {
 
 # Function to check if Pterodactyl is installed
 check_pterodactyl() {
-    if [ ! -d "$PANEL_PATH" ]; then
-        echo -e "${RED}Error: Pterodactyl tidak ditemukan di $PANEL_PATH${NC}"
+    if [[ ! -d "$PANEL_PATH" ]]; then
+        echo -e "${RED}Error: Pterodactyl panel tidak ditemukan di $PANEL_PATH${NC}"
         exit 1
     fi
 }
 
 # Function to create backup
 create_backup() {
-    echo -e "${YELLOW}Membuat backup panel...${NC}"
-    mkdir -p $BACKUP_DIR
-    cp -r $PANEL_PATH/app $BACKUP_DIR/
-    cp -r $PANEL_PATH/resources $BACKUP_DIR/
+    echo -e "${YELLOW}Membuat backup...${NC}"
+    mkdir -p "$BACKUP_DIR"
+    cp -r "$PANEL_PATH/app/Http/Controllers" "$BACKUP_DIR/" 2>/dev/null || true
     echo -e "${GREEN}Backup berhasil dibuat di $BACKUP_DIR${NC}"
 }
 
 # Function to restore backup
 restore_backup() {
-    if [ -d "$BACKUP_DIR" ]; then
+    if [[ -d "$BACKUP_DIR" ]]; then
         echo -e "${YELLOW}Memulihkan dari backup...${NC}"
-        cp -r $BACKUP_DIR/app $PANEL_PATH/
-        cp -r $BACKUP_DIR/resources $PANEL_PATH/
+        cp -r "$BACKUP_DIR/Controllers" "$PANEL_PATH/app/Http/" 2>/dev/null || true
         echo -e "${GREEN}Backup berhasil dipulihkan${NC}"
     else
         echo -e "${RED}Backup tidak ditemukan!${NC}"
@@ -65,506 +62,814 @@ restore_backup() {
 
 # Function to install security
 install_security() {
-    show_header
+    display_header
     echo -e "${YELLOW}Menginstall Security Panel...${NC}"
     
+    check_root
     check_pterodactyl
     create_backup
     
-    # Patch untuk AdminController - Lock settings admin
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/AdminController.php << 'EOF'
+    # Create modified controllers
+    cd "$PANEL_PATH"
+    
+    # 1. Modify AdminController untuk settings
+    cat > app/Http/Controllers/Admin/AdminController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Http\Requests\Admin\AdminSettingsFormRequest;
 
 class AdminController extends Controller
 {
-    public function index()
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alert;
+
+    /**
+     * AdminController constructor.
+     * @param AlertsMessageBag $alert
+     */
+    public function __construct(AlertsMessageBag $alert)
     {
-        return view('admin.index');
+        $this->alert = $alert;
     }
 
-    public function settings(Request $request)
+    /**
+     * Render the Panel settings page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
     {
-        // Cek jika user ID bukan 1
-        if ($request->user()->id !== 1) {
+        if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-
-        return view('admin.settings');
+        
+        return view('admin.settings', [
+            'name' => config('app.name', 'Pterodactyl'),
+        ]);
     }
 
-    public function updateSettings(Request $request)
+    /**
+     * Handle settings update.
+     *
+     * @param AdminSettingsFormRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(AdminSettingsFormRequest $request): RedirectResponse
     {
-        // Cek jika user ID bukan 1
-        if ($request->user()->id !== 1) {
+        if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        foreach ($request->normalize() as $key => $value) {
+            $this->settings->set('settings::' . $key, $value);
+        }
 
-        // Logic untuk update settings
-        return redirect()->back()->with('success', 'Settings updated successfully');
+        $this->alert->success('Panel settings have been updated successfully.')->flash();
+
+        return redirect()->route('admin.settings');
     }
 }
 EOF
 
-    # Patch untuk NodeController - Lock nodes
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/NodesController.php << 'EOF'
+    # 2. Modify NodeController
+    cat > app/Http/Controllers/Admin/NodeController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Pterodactyl\Models\Node;
-use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Repositories\Eloquent\NodeRepository;
+use Pterodactyl\Http\Requests\Admin\NodeFormRequest;
 
-class NodesController extends Controller
+class NodeController extends Controller
 {
-    public function index()
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alert;
+
+    /**
+     * @var \Pterodactyl\Repositories\Eloquent\NodeRepository
+     */
+    private $repository;
+
+    /**
+     * NodeController constructor.
+     * @param AlertsMessageBag $alert
+     * @param NodeRepository $repository
+     */
+    public function __construct(AlertsMessageBag $alert, NodeRepository $repository)
     {
-        $nodes = Node::all();
-        return view('admin.nodes.index', compact('nodes'));
+        $this->alert = $alert;
+        $this->repository = $repository;
     }
 
-    public function create()
+    /**
+     * List nodes index.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
     {
-        // Cek jika user ID bukan 1
+        return view('admin.nodes.index', [
+            'nodes' => $this->repository->all(),
+        ]);
+    }
+
+    /**
+     * Node create page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function create(): View
+    {
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-
-        return view('admin.nodes.create');
+        
+        return view('admin.nodes.new');
     }
 
-    public function store(Request $request)
+    /**
+     * Handle node creation.
+     *
+     * @param NodeFormRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(NodeFormRequest $request): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $node = $this->repository->create($request->validated());
 
-        // Logic untuk menyimpan node
+        $this->alert->success(trans('admin/node.notices.node_created'))->flash();
+
+        return redirect()->route('admin.nodes.view.configuration', $node->id);
     }
 
-    public function edit($id)
+    /**
+     * Update a node.
+     *
+     * @param NodeFormRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(NodeFormRequest $request, int $id): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $this->repository->update($id, $request->validated());
 
-        $node = Node::findOrFail($id);
-        return view('admin.nodes.edit', compact('node'));
+        $this->alert->success(trans('admin/node.notices.node_updated'))->flash();
+
+        return redirect()->route('admin.nodes.view.settings', $id);
     }
 
-    public function update(Request $request, $id)
+    /**
+     * Delete a node.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(int $id): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $this->repository->delete($id);
 
-        // Logic untuk update node
-    }
+        $this->alert->success(trans('admin/node.notices.node_deleted'))->flash();
 
-    public function destroy($id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk menghapus node
+        return redirect()->route('admin.nodes');
     }
 }
 EOF
 
-    # Patch untuk LocationController - Lock locations
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php << 'EOF'
+    # 3. Modify LocationController
+    cat > app/Http/Controllers/Admin/LocationController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Pterodactyl\Models\Location;
-use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Repositories\Eloquent\LocationRepository;
+use Pterodactyl\Http\Requests\Admin\LocationFormRequest;
 
-class LocationsController extends Controller
+class LocationController extends Controller
 {
-    public function index()
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alert;
+
+    /**
+     * @var \Pterodactyl\Repositories\Eloquent\LocationRepository
+     */
+    private $repository;
+
+    /**
+     * LocationController constructor.
+     * @param AlertsMessageBag $alert
+     * @param LocationRepository $repository
+     */
+    public function __construct(AlertsMessageBag $alert, LocationRepository $repository)
     {
-        $locations = Location::all();
-        return view('admin.locations.index', compact('locations'));
+        $this->alert = $alert;
+        $this->repository = $repository;
     }
 
-    public function create()
+    /**
+     * Return the location overview page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
     {
-        // Cek jika user ID bukan 1
+        return view('admin.locations.index', [
+            'locations' => $this->repository->all(),
+        ]);
+    }
+
+    /**
+     * Return the location creation page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function create(): View
+    {
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-
-        return view('admin.locations.create');
+        
+        return view('admin.locations.new');
     }
 
-    public function store(Request $request)
+    /**
+     * Handle creation of a new location.
+     *
+     * @param LocationFormRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(LocationFormRequest $request): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $location = $this->repository->create($request->validated());
 
-        // Logic untuk menyimpan location
+        $this->alert->success(trans('admin/location.notices.location_created'))->flash();
+
+        return redirect()->route('admin.locations');
     }
 
-    public function edit($id)
+    /**
+     * Return the location update page.
+     *
+     * @param int $id
+     * @return \Illuminate\View\View
+     */
+    public function update(int $id): View
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-
-        $location = Location::findOrFail($id);
-        return view('admin.locations.edit', compact('location'));
+        
+        return view('admin.locations.update', [
+            'location' => $this->repository->find($id),
+        ]);
     }
 
-    public function update(Request $request, $id)
+    /**
+     * Handle updating of specified location.
+     *
+     * @param LocationFormRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function updateLocation(LocationFormRequest $request, int $id): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $this->repository->update($id, $request->validated());
 
-        // Logic untuk update location
+        $this->alert->success(trans('admin/location.notices.location_updated'))->flash();
+
+        return redirect()->route('admin.locations');
     }
 
-    public function destroy($id)
+    /**
+     * Delete a specified location.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(int $id): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $this->repository->delete($id);
 
-        // Logic untuk menghapus location
+        $this->alert->success(trans('admin/location.notices.location_deleted'))->flash();
+
+        return redirect()->route('admin.locations');
     }
 }
 EOF
 
-    # Patch untuk NestsController - Lock nests
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/NestsController.php << 'EOF'
+    # 4. Modify NestsController
+    cat > app/Http/Controllers/Admin/NestsController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Pterodactyl\Models\Nest;
-use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Repositories\Eloquent\NestRepository;
+use Pterodactyl\Http\Requests\Admin\NestFormRequest;
 
 class NestsController extends Controller
 {
-    public function index()
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alert;
+
+    /**
+     * @var \Pterodactyl\Repositories\Eloquent\NestRepository
+     */
+    private $repository;
+
+    /**
+     * NestsController constructor.
+     * @param AlertsMessageBag $alert
+     * @param NestRepository $repository
+     */
+    public function __construct(AlertsMessageBag $alert, NestRepository $repository)
     {
-        $nests = Nest::all();
-        return view('admin.nests.index', compact('nests'));
+        $this->alert = $alert;
+        $this->repository = $repository;
     }
 
-    public function create()
+    /**
+     * Return the nest overview page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
     {
-        // Cek jika user ID bukan 1
+        return view('admin.nests.index', [
+            'nests' => $this->repository->all(),
+        ]);
+    }
+
+    /**
+     * Return the nest creation page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function create(): View
+    {
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-
-        return view('admin.nests.create');
+        
+        return view('admin.nests.new');
     }
 
-    public function store(Request $request)
+    /**
+     * Handle creation of a new nest.
+     *
+     * @param NestFormRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(NestFormRequest $request): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $nest = $this->repository->create($request->validated());
 
-        // Logic untuk menyimpan nest
+        $this->alert->success(trans('admin/nest.notices.nest_created'))->flash();
+
+        return redirect()->route('admin.nests.view', $nest->id);
     }
 
-    public function edit($id)
+    /**
+     * Handle updating of a nest.
+     *
+     * @param NestFormRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(NestFormRequest $request, int $id): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $this->repository->update($id, $request->validated());
 
-        $nest = Nest::findOrFail($id);
-        return view('admin.nests.edit', compact('nest'));
+        $this->alert->success(trans('admin/nest.notices.nest_updated'))->flash();
+
+        return redirect()->route('admin.nests.view', $id);
     }
 
-    public function update(Request $request, $id)
+    /**
+     * Delete a nest.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(int $id): RedirectResponse
     {
-        // Cek jika user ID bukan 1
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $this->repository->delete($id);
 
-        // Logic untuk update nest
-    }
+        $this->alert->success(trans('admin/nest.notices.nest_deleted'))->flash();
 
-    public function destroy($id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk menghapus nest
+        return redirect()->route('admin.nests');
     }
 }
 EOF
 
-    # Patch untuk ServerController - Lock server management
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/ServersController.php << 'EOF'
+    # 5. Modify UserController untuk mencegah edit/delete user lain
+    cat > app/Http/Controllers/Admin/UserController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Pterodactyl\Models\Server;
-use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Repositories\Eloquent\UserRepository;
+use Pterodactyl\Http\Requests\Admin\UserFormRequest;
+
+class UserController extends Controller
+{
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alert;
+
+    /**
+     * @var \Pterodactyl\Repositories\Eloquent\UserRepository
+     */
+    private $repository;
+
+    /**
+     * UserController constructor.
+     * @param AlertsMessageBag $alert
+     * @param UserRepository $repository
+     */
+    public function __construct(AlertsMessageBag $alert, UserRepository $repository)
+    {
+        $this->alert = $alert;
+        $this->repository = $repository;
+    }
+
+    /**
+     * Display user index page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
+    {
+        return view('admin.users.index', [
+            'users' => $this->repository->setSearchTerm(request()->input('query'))->getPaginated(50),
+        ]);
+    }
+
+    /**
+     * Display user view page.
+     *
+     * @param int $id
+     * @return \Illuminate\View\View
+     */
+    public function view(int $id): View
+    {
+        $user = $this->repository->find($id);
+        
+        // Allow view, but prevent modifications if not user ID 1
+        if (auth()->user()->id !== 1 && $id !== auth()->user()->id) {
+            // Only show view, modifications will be blocked in update/delete methods
+        }
+        
+        return view('admin.users.view', [
+            'user' => $user,
+            'servers' => $user->servers()->paginate(25),
+        ]);
+    }
+
+    /**
+     * Display user creation page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function create(): View
+    {
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        return view('admin.users.new');
+    }
+
+    /**
+     * Handle user creation.
+     *
+     * @param UserFormRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(UserFormRequest $request): RedirectResponse
+    {
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        $user = $this->repository->create($request->validated());
+
+        $this->alert->success(trans('admin/user.notices.user_created'))->flash();
+
+        return redirect()->route('admin.users.view', $user->id);
+    }
+
+    /**
+     * Handle user update.
+     *
+     * @param UserFormRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(UserFormRequest $request, int $id): RedirectResponse
+    {
+        if (auth()->user()->id !== 1 && $id !== auth()->user()->id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        $this->repository->update($id, $request->validated());
+
+        $this->alert->success(trans('admin/user.notices.user_updated'))->flash();
+
+        return redirect()->route('admin.users.view', $id);
+    }
+
+    /**
+     * Delete a user.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(int $id): RedirectResponse
+    {
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        $this->repository->delete($id);
+
+        $this->alert->success(trans('admin/user.notices.user_deleted'))->flash();
+
+        return redirect()->route('admin.users');
+    }
+}
+EOF
+
+    # 6. Modify ServerController untuk mencegah akses server user lain
+    cat > app/Http/Controllers/Admin/ServersController.php << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Repositories\Eloquent\ServerRepository;
+use Pterodactyl\Http\Requests\Admin\ServerFormRequest;
 
 class ServersController extends Controller
 {
-    public function index()
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alert;
+
+    /**
+     * @var \Pterodactyl\Repositories\Eloquent\ServerRepository
+     */
+    private $repository;
+
+    /**
+     * ServersController constructor.
+     * @param AlertsMessageBag $alert
+     * @param ServerRepository $repository
+     */
+    public function __construct(AlertsMessageBag $alert, ServerRepository $repository)
     {
-        $servers = Server::with('user', 'node')->get();
-        return view('admin.servers.index', compact('servers'));
+        $this->alert = $alert;
+        $this->repository = $repository;
     }
 
-    public function create()
+    /**
+     * Display server index page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
     {
-        // Cek jika user ID bukan 1
+        return view('admin.servers.index', [
+            'servers' => $this->repository->setSearchTerm(request()->input('query'))->getPaginated(50),
+        ]);
+    }
+
+    /**
+     * Display server creation page.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function create(): View
+    {
         if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-
-        return view('admin.servers.create');
-    }
-
-    public function store(Request $request)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk menyimpan server
-    }
-
-    public function edit($id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        $server = Server::findOrFail($id);
-        return view('admin.servers.edit', compact('server'));
-    }
-
-    public function update(Request $request, $id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk update server
-    }
-
-    public function destroy($id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk menghapus server
-    }
-
-    public function view($id)
-    {
-        $server = Server::with('user', 'node')->findOrFail($id);
         
-        // Cek jika user bukan pemilik server dan bukan admin ID 1
-        if (auth()->user()->id !== 1 && auth()->user()->id !== $server->user_id) {
+        return view('admin.servers.new');
+    }
+
+    /**
+     * Handle server creation.
+     *
+     * @param ServerFormRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(ServerFormRequest $request): RedirectResponse
+    {
+        if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        $server = $this->repository->create($request->validated());
 
-        return view('admin.servers.view', compact('server'));
+        $this->alert->success(trans('admin/server.notices.server_created'))->flash();
+
+        return redirect()->route('admin.servers.view', $server->id);
+    }
+
+    /**
+     * Display server view page.
+     *
+     * @param int $id
+     * @return \Illuminate\View\View
+     */
+    public function view(int $id): View
+    {
+        $server = $this->repository->find($id);
+        
+        // Allow view, but prevent modifications if not user ID 1
+        if (auth()->user()->id !== 1 && $server->owner_id !== auth()->user()->id) {
+            // Only show view, modifications will be blocked in update/delete methods
+        }
+        
+        return view('admin.servers.view', [
+            'server' => $server,
+            'actions' => $server->actions,
+        ]);
+    }
+
+    /**
+     * Handle server update.
+     *
+     * @param ServerFormRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(ServerFormRequest $request, int $id): RedirectResponse
+    {
+        $server = $this->repository->find($id);
+        
+        if (auth()->user()->id !== 1 && $server->owner_id !== auth()->user()->id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        $this->repository->update($id, $request->validated());
+
+        $this->alert->success(trans('admin/server.notices.server_updated'))->flash();
+
+        return redirect()->route('admin.servers.view', $id);
+    }
+
+    /**
+     * Delete a server.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(int $id): RedirectResponse
+    {
+        $server = $this->repository->find($id);
+        
+        if (auth()->user()->id !== 1 && $server->owner_id !== auth()->user()->id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        $this->repository->delete($id);
+
+        $this->alert->success(trans('admin/server.notices.server_deleted'))->flash();
+
+        return redirect()->route('admin.servers');
     }
 }
 EOF
 
-    # Patch untuk UserController - Lock user management
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/UsersController.php << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Pterodactyl\Models\User;
-use Illuminate\Http\Request;
-use Pterodactyl\Http\Controllers\Controller;
-
-class UsersController extends Controller
-{
-    public function index()
-    {
-        $users = User::all();
-        return view('admin.users.index', compact('users'));
-    }
-
-    public function create()
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        return view('admin.users.create');
-    }
-
-    public function store(Request $request)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk menyimpan user
-    }
-
-    public function edit($id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        $user = User::findOrFail($id);
-        return view('admin.users.edit', compact('user'));
-    }
-
-    public function update(Request $request, $id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk update user
-    }
-
-    public function destroy($id)
-    {
-        // Cek jika user ID bukan 1
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-
-        // Logic untuk menghapus user
-    }
-}
-EOF
-
-    # Fix untuk LocaleController.php
-    cat > $PANEL_PATH/app/Http/Controllers/LocaleController.php << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers;
-
-use Illuminate\Http\Request;
-
-class LocaleController extends Controller
-{
-    public function index(Request $request, $locale)
-    {
-        if (in_array($locale, ['en', 'id', 'es', 'fr', 'de', 'pt', 'ru'])) {
-            $request->session()->put('locale', $locale);
-        }
-
-        return redirect()->back();
-    }
-}
-EOF
-
-    # Clear cache dan optimize
+    # Clear cache and optimize
     echo -e "${YELLOW}Membersihkan cache...${NC}"
-    cd $PANEL_PATH
-    php artisan config:cache
-    php artisan view:cache
-    php artisan route:cache
+    php artisan cache:clear
+    php artisan view:clear
+    php artisan config:clear
 
     echo -e "${GREEN}Security Panel berhasil diinstall!${NC}"
-    echo -e "${YELLOW}Hanya user dengan ID 1 yang dapat mengubah/delete/add settings, nodes, locations, nests, users, dan servers.${NC}"
+    echo -e "${YELLOW}Hanya user dengan ID 1 yang dapat melakukan modifikasi pada settings, nodes, locations, nests, dan user/server lain.${NC}"
     read -p "Tekan Enter untuk melanjutkan..."
 }
 
 # Function to change error text
 change_error_text() {
-    show_header
+    display_header
     echo -e "${YELLOW}Mengubah Teks Error...${NC}"
     
-    read -p "Masukkan teks error baru: " new_error_text
+    read -p "Masukkan teks error baru: " new_error
     
-    if [ -z "$new_error_text" ]; then
+    if [[ -z "$new_error" ]]; then
         echo -e "${RED}Teks error tidak boleh kosong!${NC}"
-        return
+        return 1
     fi
     
-    ERROR_MESSAGE="$new_error_text"
-    
-    # Update semua file controller dengan teks error baru
-    find $PANEL_PATH/app/Http/Controllers/Admin -name "*.php" -type f -exec sed -i "s|Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati|$new_error_text|g" {} \;
+    # Update all controllers with new error message
+    find "$PANEL_PATH/app/Http/Controllers/Admin" -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error}/g" {} \;
     
     echo -e "${GREEN}Teks error berhasil diubah!${NC}"
-    echo -e "${YELLOW}Teks error baru: $new_error_text${NC}"
+    echo -e "${BLUE}Teks error baru: ${new_error}${NC}"
     read -p "Tekan Enter untuk melanjutkan..."
 }
 
 # Function to uninstall security
 uninstall_security() {
-    show_header
+    display_header
     echo -e "${YELLOW}Uninstall Security Panel...${NC}"
     
-    if [ -d "$BACKUP_DIR" ]; then
-        restore_backup
-        
-        # Clear cache
-        cd $PANEL_PATH
-        php artisan config:cache
-        php artisan view:cache
-        php artisan route:cache
-        
-        echo -e "${GREEN}Security Panel berhasil diuninstall!${NC}"
-        echo -e "${YELLOW}Panel Pterodactyl telah dikembalikan ke keadaan semula.${NC}"
-    else
-        echo -e "${RED}Backup tidak ditemukan! Uninstall tidak dapat dilakukan.${NC}"
-    fi
+    restore_backup
     
+    # Clear cache and optimize
+    php artisan cache:clear
+    php artisan view:clear
+    php artisan config:clear
+    
+    echo -e "${GREEN}Security Panel berhasil diuninstall!${NC}"
+    echo -e "${YELLOW}Panel telah dikembalikan ke keadaan semula.${NC}"
     read -p "Tekan Enter untuk melanjutkan..."
 }
 
 # Main menu
 main_menu() {
     while true; do
-        show_header
+        display_header
         echo -e "${GREEN}Pilih opsi:${NC}"
         echo -e "1. Install Security Panel"
         echo -e "2. Ubah Teks Error" 
         echo -e "3. Uninstall Security Panel"
         echo -e "4. Exit"
-        echo -e ""
+        echo
         read -p "Masukkan pilihan [1-4]: " choice
         
         case $choice in
@@ -578,7 +883,7 @@ main_menu() {
                 uninstall_security
                 ;;
             4)
-                echo -e "${GREEN}Terima kasih!${NC}"
+                echo -e "${GREEN}Keluar...${NC}"
                 exit 0
                 ;;
             *)
@@ -589,8 +894,17 @@ main_menu() {
     done
 }
 
-# Check if running as root
-check_root
+# Check if Pterodactyl path exists, if not ask for path
+if [[ ! -d "$PANEL_PATH" ]]; then
+    echo -e "${YELLOW}Pterodactyl panel tidak ditemukan di path default.${NC}"
+    read -p "Masukkan path panel Pterodactyl (contoh: /var/www/pterodactyl): " custom_path
+    if [[ -d "$custom_path" ]]; then
+        PANEL_PATH="$custom_path"
+    else
+        echo -e "${RED}Path panel Pterodactyl tidak valid!${NC}"
+        exit 1
+    fi
+fi
 
 # Run main menu
 main_menu
