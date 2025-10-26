@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Security Panel Pterodactyl
+# By @ginaabaikhati
+
+PANEL_PATH="/var/www/pterodactyl"
+BACKUP_PATH="/root/pterodactyl_backup"
+ERROR_MESSAGE="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -7,115 +14,732 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default error message
-ERROR_MSG="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
-
-# Backup directory
-BACKUP_DIR="/var/www/pterodactyl-backup"
-
 # Function to display header
-show_header() {
+display_header() {
     clear
     echo -e "${BLUE}"
-    echo "╔══════════════════════════════════════╗"
-    echo "║    Pterodactyl Security Panel        ║"
-    echo "║          By @ginaabaikhati           ║"
-    echo "╚══════════════════════════════════════╝"
+    echo "╔════════════════════════════════════════════════╗"
+    echo "║           Pterodactyl Security Panel           ║"
+    echo "║              By @ginaabaikhati                 ║"
+    echo "╚════════════════════════════════════════════════╝"
     echo -e "${NC}"
+}
+
+# Function to check if panel directory exists
+check_panel_exists() {
+    if [ ! -d "$PANEL_PATH" ]; then
+        echo -e "${RED}Error: Pterodactyl panel directory not found at $PANEL_PATH${NC}"
+        echo "Please update PANEL_PATH variable in the script to match your installation"
+        exit 1
+    fi
 }
 
 # Function to create backup
 create_backup() {
-    echo -e "${YELLOW}Membuat backup file...${NC}"
-    
-    if [ ! -d "$BACKUP_DIR" ]; then
-        mkdir -p "$BACKUP_DIR"
-    fi
-    
-    # Backup important files
-    cp /var/www/pterodactyl/app/Http/Controllers/Admin/*.php "$BACKUP_DIR/" 2>/dev/null || true
-    cp /var/www/pterodactyl/app/Http/Middleware/*.php "$BACKUP_DIR/" 2>/dev/null || true
-    cp /var/www/pterodactyl/app/Http/Controllers/Controller.php "$BACKUP_DIR/" 2>/dev/null || true
-    
-    echo -e "${GREEN}Backup berhasil dibuat di: $BACKUP_DIR${NC}"
+    echo -e "${YELLOW}Creating backup...${NC}"
+    mkdir -p "$BACKUP_PATH"
+    cp -r "$PANEL_PATH/app" "$BACKUP_PATH/app_backup_$(date +%Y%m%d_%H%M%S)"
+    echo -e "${GREEN}Backup created successfully!${NC}"
 }
 
-# Function to restore backup
+# Function to restore from backup
 restore_backup() {
-    echo -e "${YELLOW}Memulihkan dari backup...${NC}"
+    local latest_backup=$(ls -dt "$BACKUP_PATH/app_backup_"* | head -1)
     
-    if [ ! -d "$BACKUP_DIR" ]; then
-        echo -e "${RED}Backup directory tidak ditemukan!${NC}"
+    if [ -z "$latest_backup" ]; then
+        echo -e "${RED}No backup found!${NC}"
         return 1
     fi
     
-    # Restore files
-    cp "$BACKUP_DIR"/*.php /var/www/pterodactyl/app/Http/Controllers/Admin/ 2>/dev/null || true
-    cp "$BACKUP_DIR"/*.php /var/www/pterodactyl/app/Http/Middleware/ 2>/dev/null || true
-    cp "$BACKUP_DIR"/Controller.php /var/www/pterodactyl/app/Http/Controllers/ 2>/dev/null || true
-    
-    # Run migrations and clear cache
-    cd /var/www/pterodactyl
-    php artisan migrate --force
-    php artisan config:cache
-    php artisan view:cache
-    
-    echo -e "${GREEN}Restore berhasil! Security panel telah diuninstall.${NC}"
+    echo -e "${YELLOW}Restoring from backup: $latest_backup${NC}"
+    rm -rf "$PANEL_PATH/app"
+    cp -r "$latest_backup" "$PANEL_PATH/app"
+    echo -e "${GREEN}Backup restored successfully!${NC}"
 }
 
 # Function to install security
 install_security() {
-    echo -e "${YELLOW}Menginstall Security Panel...${NC}"
-    
-    # Create backup first
+    check_panel_exists
     create_backup
     
-    # Navigate to Pterodactyl directory
-    cd /var/www/pterodactyl
+    echo -e "${YELLOW}Installing security features...${NC}"
     
-    # Create custom middleware
-    cat > /var/www/pterodactyl/app/Http/Middleware/AdminSecurity.php << 'EOF'
+    # Backup original files first
+    cp "$PANEL_PATH/app/Http/Controllers/Admin"/*.php "$BACKUP_PATH/" 2>/dev/null || true
+    cp "$PANEL_PATH/app/Http/Controllers/Api/Client"/*.php "$BACKUP_PATH/" 2>/dev/null || true
+    cp "$PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php" "$BACKUP_PATH/" 2>/dev/null || true
+    
+    # 1. Modify Admin Settings Controller
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/SettingsController.php" << 'EOF'
 <?php
 
-namespace Pterodactyl\Http\Middleware;
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use App\Http\Controllers\Controller;
+use App\Services\Helpers\SettingsValidationService;
+use App\Traits\Controllers\JavascriptInjection;
+use App\Services\Settings\SettingsUpdateService;
+use App\Services\Settings\SettingsCreationService;
+use Illuminate\Contracts\Console\Kernel;
+use App\Models\Settings;
+use Illuminate\Http\Response;
+
+class SettingsController extends Controller
+{
+    use JavascriptInjection;
+
+    public function __construct(
+        private SettingsCreationService $creationService,
+        private SettingsUpdateService $updateService,
+        private Kernel $kernel,
+        private SettingsValidationService $validator,
+    ) {
+    }
+
+    /**
+     * Render the UI for basic panel settings.
+     */
+    public function index(): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.settings.index', [
+            'settings' => Settings::first(),
+        ]);
+    }
+
+    /**
+     * Handle request to update basic panel settings.
+     *
+     * @throws \App\Exceptions\Model\DataValidationException
+     * @throws \App\Exceptions\Service\Settings\UnexpectedConfigValueException
+     */
+    public function update(): RedirectResponse
+    {
+        // Security check - only user ID 1 can update
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $settings = Settings::first();
+        $this->validator->handle(config('panel.validation.settings'), $settings);
+
+        $this->updateService->handle($settings, $settings->toArray());
+        $this->kernel->call('queue:restart');
+
+        return redirect()->route('admin.settings');
+    }
+}
+EOF
+
+    # 2. Modify Nodes Controller
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use App\Http\Controllers\Controller;
+use App\Repositories\Eloquent\NodeRepository;
+use App\Services\Nodes\NodeUpdateService;
+use App\Services\Nodes\NodeCreationService;
+use App\Services\Nodes\NodeDeletionService;
+
+class NodesController extends Controller
+{
+    public function __construct(
+        protected NodeRepository $repository,
+        protected NodeCreationService $creationService,
+        protected NodeUpdateService $updateService,
+        protected NodeDeletionService $deletionService,
+    ) {
+    }
+
+    /**
+     * Display node index page.
+     */
+    public function index(): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $nodes = $this->repository->all();
+        
+        return view('admin.nodes.index', [
+            'nodes' => $nodes,
+        ]);
+    }
+
+    /**
+     * Display node create page.
+     */
+    public function create(): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.nodes.create');
+    }
+
+    /**
+     * Store a new node.
+     */
+    public function store(Request $request)
+    {
+        // Security check - only user ID 1 can create
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $node = $this->creationService->handle($request->normalize());
+        return redirect()->route('admin.nodes.view', $node->id);
+    }
+
+    /**
+     * Display node detail page.
+     */
+    public function view(int $id): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $node = $this->repository->getNodeForUpdate($id);
+        
+        return view('admin.nodes.view', [
+            'node' => $node,
+        ]);
+    }
+
+    /**
+     * Update a node.
+     */
+    public function update(Request $request, int $id)
+    {
+        // Security check - only user ID 1 can update
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $node = $this->repository->getNodeForUpdate($id);
+        $this->updateService->handle($node, $request->normalize());
+        
+        return redirect()->route('admin.nodes.view', $node->id);
+    }
+
+    /**
+     * Delete a node.
+     */
+    public function delete(int $id)
+    {
+        // Security check - only user ID 1 can delete
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $node = $this->repository->getNodeForUpdate($id);
+        $this->deletionService->handle($node);
+        
+        return redirect()->route('admin.nodes');
+    }
+}
+EOF
+
+    # 3. Modify Locations Controller
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Repositories\Eloquent\LocationRepository;
+use App\Services\Locations\LocationUpdateService;
+use App\Services\Locations\LocationCreationService;
+use App\Services\Locations\LocationDeletionService;
+
+class LocationsController extends Controller
+{
+    public function __construct(
+        protected LocationRepository $repository,
+        protected LocationCreationService $creationService,
+        protected LocationUpdateService $updateService,
+        protected LocationDeletionService $deletionService,
+    ) {
+    }
+
+    /**
+     * Display location index page.
+     */
+    public function index(): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $locations = $this->repository->all();
+        
+        return view('admin.locations.index', [
+            'locations' => $locations,
+        ]);
+    }
+
+    /**
+     * Display location create page.
+     */
+    public function create(): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.locations.create');
+    }
+
+    /**
+     * Store a new location.
+     */
+    public function store(Request $request)
+    {
+        // Security check - only user ID 1 can create
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $location = $this->creationService->handle($request->normalize());
+        return redirect()->route('admin.locations.view', $location->id);
+    }
+
+    /**
+     * Display location detail page.
+     */
+    public function view(int $id): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $location = $this->repository->getWithNodes($id);
+        
+        return view('admin.locations.view', [
+            'location' => $location,
+        ]);
+    }
+
+    /**
+     * Update a location.
+     */
+    public function update(Request $request, int $id)
+    {
+        // Security check - only user ID 1 can update
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $location = $this->repository->getWithNodes($id);
+        $this->updateService->handle($location, $request->normalize());
+        
+        return redirect()->route('admin.locations.view', $location->id);
+    }
+
+    /**
+     * Delete a location.
+     */
+    public function delete(int $id)
+    {
+        // Security check - only user ID 1 can delete
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $location = $this->repository->getWithNodes($id);
+        $this->deletionService->handle($location);
+        
+        return redirect()->route('admin.locations');
+    }
+}
+EOF
+
+    # 4. Modify Nests Controller
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Repositories\Eloquent\NestRepository;
+use App\Services\Nests\NestUpdateService;
+use App\Services\Nests\NestCreationService;
+use App\Services\Nests\NestDeletionService;
+use App\Services\Eggs\EggUpdateService;
+use App\Services\Eggs\EggCreationService;
+use App\Services\Eggs\EggDeletionService;
+
+class NestsController extends Controller
+{
+    public function __construct(
+        protected NestRepository $repository,
+        protected NestCreationService $creationService,
+        protected NestUpdateService $updateService,
+        protected NestDeletionService $deletionService,
+        protected EggCreationService $eggCreationService,
+        protected EggUpdateService $eggUpdateService,
+        protected EggDeletionService $eggDeletionService,
+    ) {
+    }
+
+    /**
+     * Display nest index page.
+     */
+    public function index(): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $nests = $this->repository->getWithEggs();
+        
+        return view('admin.nests.index', [
+            'nests' => $nests,
+        ]);
+    }
+
+    /**
+     * Display nest create page.
+     */
+    public function create(): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.nests.create');
+    }
+
+    /**
+     * Store a new nest.
+     */
+    public function store(Request $request)
+    {
+        // Security check - only user ID 1 can create
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $nest = $this->creationService->handle($request->normalize());
+        return redirect()->route('admin.nests.view', $nest->id);
+    }
+
+    /**
+     * Display nest detail page.
+     */
+    public function view(int $id): View
+    {
+        // Security check - only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $nest = $this->repository->getWithEggs($id);
+        
+        return view('admin.nests.view', [
+            'nest' => $nest,
+        ]);
+    }
+
+    /**
+     * Update a nest.
+     */
+    public function update(Request $request, int $id)
+    {
+        // Security check - only user ID 1 can update
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $nest = $this->repository->getWithEggs($id);
+        $this->updateService->handle($nest, $request->normalize());
+        
+        return redirect()->route('admin.nests.view', $nest->id);
+    }
+
+    /**
+     * Delete a nest.
+     */
+    public function delete(int $id)
+    {
+        // Security check - only user ID 1 can delete
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $nest = $this->repository->getWithEggs($id);
+        $this->deletionService->handle($nest);
+        
+        return redirect()->route('admin.nests');
+    }
+}
+EOF
+
+    # 5. Modify Users Controller for additional security
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/UsersController.php" << 'EOF'
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\Request;
+use App\Models\User;
+use App\Http\Controllers\Controller;
+use App\Repositories\Eloquent\UserRepository;
+use App\Services\Users\UserUpdateService;
+use App\Services\Users\UserCreationService;
+use App\Services\Users\UserDeletionService;
+
+class UsersController extends Controller
+{
+    public function __construct(
+        protected UserRepository $repository,
+        protected UserCreationService $creationService,
+        protected UserUpdateService $updateService,
+        protected UserDeletionService $deletionService,
+    ) {
+    }
+
+    /**
+     * Display user index page.
+     */
+    public function index(): View
+    {
+        $users = $this->repository->all();
+        
+        return view('admin.users.index', [
+            'users' => $users,
+        ]);
+    }
+
+    /**
+     * Display user create page.
+     */
+    public function create(): View
+    {
+        return view('admin.users.create');
+    }
+
+    /**
+     * Store a new user.
+     */
+    public function store(Request $request)
+    {
+        // Security check - only user ID 1 can create users
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $user = $this->creationService->handle($request->normalize());
+        return redirect()->route('admin.users.view', $user->id);
+    }
+
+    /**
+     * Display user detail page.
+     */
+    public function view(int $id): View
+    {
+        $user = $this->repository->getWithServers($id);
+        
+        // Security check - users can only view their own profile unless ID 1
+        if (auth()->user()->id !== 1 && auth()->user()->id !== $user->id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        return view('admin.users.view', [
+            'user' => $user,
+        ]);
+    }
+
+    /**
+     * Update a user.
+     */
+    public function update(Request $request, int $id)
+    {
+        $user = $this->repository->getWithServers($id);
+        
+        // Security check - only user ID 1 can update other users
+        if (auth()->user()->id !== 1 && auth()->user()->id !== $user->id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $this->updateService->handle($user, $request->normalize());
+        
+        return redirect()->route('admin.users.view', $user->id);
+    }
+
+    /**
+     * Delete a user.
+     */
+    public function delete(int $id)
+    {
+        // Security check - only user ID 1 can delete users
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $user = $this->repository->getWithServers($id);
+        $this->deletionService->handle($user);
+        
+        return redirect()->route('admin.users');
+    }
+}
+EOF
+
+    # 6. Modify Server Controller for security
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Repositories\Eloquent\ServerRepository;
+use App\Services\Servers\ServerUpdateService;
+use App\Services\Servers\ServerCreationService;
+use App\Services\Servers\ServerDeletionService;
+use App\Services\Servers\ServerSuspensionService;
+
+class ServersController extends Controller
+{
+    public function __construct(
+        protected ServerRepository $repository,
+        protected ServerCreationService $creationService,
+        protected ServerUpdateService $updateService,
+        protected ServerDeletionService $deletionService,
+        protected ServerSuspensionService $suspensionService,
+    ) {
+    }
+
+    /**
+     * Display server index page.
+     */
+    public function index(): View
+    {
+        $servers = $this->repository->getAllServers();
+        
+        return view('admin.servers.index', [
+            'servers' => $servers,
+        ]);
+    }
+
+    /**
+     * Display server detail page.
+     */
+    public function view(int $id): View
+    {
+        $server = $this->repository->getServerForView($id);
+        
+        // Security check - users can only view their own servers unless ID 1
+        if (auth()->user()->id !== 1 && auth()->user()->id !== $server->user_id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        return view('admin.servers.view', [
+            'server' => $server,
+        ]);
+    }
+
+    /**
+     * Update a server.
+     */
+    public function update(Request $request, int $id)
+    {
+        $server = $this->repository->getServerForView($id);
+        
+        // Security check - only user ID 1 can update other users' servers
+        if (auth()->user()->id !== 1 && auth()->user()->id !== $server->user_id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $this->updateService->handle($server, $request->normalize());
+        
+        return redirect()->route('admin.servers.view', $server->id);
+    }
+
+    /**
+     * Delete a server.
+     */
+    public function delete(int $id)
+    {
+        $server = $this->repository->getServerForView($id);
+        
+        // Security check - only user ID 1 can delete other users' servers
+        if (auth()->user()->id !== 1 && auth()->user()->id !== $server->user_id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $this->deletionService->handle($server);
+        
+        return redirect()->route('admin.servers');
+    }
+}
+EOF
+
+    # 7. Create custom middleware for additional security
+    cat > "$PANEL_PATH/app/Http/Middleware/CheckAdminAccess.php" << 'EOF'
+<?php
+
+namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
-class AdminSecurity
+class CheckAdminAccess
 {
-    public function handle(Request $request, Closure $next)
+    /**
+     * Handle an incoming request.
+     */
+    public function handle(Request $request, Closure $next, string $permission = null)
     {
         $user = $request->user();
-        $route = $request->route()->getName();
         
-        // ID 1 has full access
-        if ($user && $user->id === 1) {
-            return $next($request);
+        // Check if user is authenticated
+        if (!$user) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
         
-        // Define restricted routes
+        // Routes that only user ID 1 can access
         $restrictedRoutes = [
-            'admin.settings', 'admin.settings.*',
-            'admin.nodes', 'admin.nodes.*', 
-            'admin.locations', 'admin.locations.*',
-            'admin.nests', 'admin.nests.*',
-            'admin.servers.view', 'admin.servers.view.*',
-            'admin.users.delete', 'admin.users.edit',
-            'admin.servers.delete', 'admin.servers.edit'
+            'admin.settings',
+            'admin.nodes',
+            'admin.locations', 
+            'admin.nests',
         ];
         
-        // Check if current route is restricted
-        foreach ($restrictedRoutes as $restricted) {
-            if (strpos($restricted, '.*') !== false) {
-                $baseRoute = str_replace('.*', '', $restricted);
-                if (strpos($route, $baseRoute) === 0) {
-                    throw new AccessDeniedHttpException(config('security.error_message', 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'));
-                }
-            } elseif ($route === $restricted) {
-                throw new AccessDeniedHttpException(config('security.error_message', 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'));
-            }
+        $currentRoute = $request->route()->getName();
+        
+        // Check if current route is restricted to user ID 1 only
+        if (in_array($currentRoute, $restrictedRoutes) && $user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
         
         return $next($request);
@@ -123,245 +747,81 @@ class AdminSecurity
 }
 EOF
 
-    # Modify AdminController
-    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin/AdminController.php" ]; then
-        cp "/var/www/pterodactyl/app/Http/Controllers/Admin/AdminController.php" "/var/www/pterodactyl/app/Http/Controllers/Admin/AdminController.php.backup"
-        
-        # Create secured AdminController
-        cat > /var/www/pterodactyl/app/Http/Controllers/Admin/AdminController.php << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\Http\Request;
-use Prologue\Alerts\AlertsMessageBag;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Contracts\Repository\SettingsRepositoryInterface;
-
-class AdminController extends Controller
-{
-    protected $alert;
-    protected $settings;
-
-    public function __construct(AlertsMessageBag $alert, SettingsRepositoryInterface $settings)
-    {
-        $this->alert = $alert;
-        $this->settings = $settings;
-    }
-
-    public function index()
-    {
-        return view('admin.index');
-    }
-
-    public function settings(Request $request)
-    {
-        // Security check - only user ID 1 can access settings
-        if ($request->user()->id !== 1) {
-            abort(403, config('security.error_message', 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'));
-        }
-
-        return view('admin.settings');
-    }
-
-    public function updateSettings(Request $request)
-    {
-        // Security check - only user ID 1 can update settings
-        if ($request->user()->id !== 1) {
-            abort(403, config('security.error_message', 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'));
-        }
-
-        foreach ($request->except('_token') as $key => $value) {
-            $this->settings->set('settings::' . $key, $value);
-        }
-
-        $this->alert->success('Settings have been updated successfully.')->flash();
-        return redirect()->back();
-    }
-}
-EOF
-    fi
-
-    # Modify NodesController
-    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php" ]; then
-        cp "/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php" "/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php.backup"
-        
-        # Add security check to existing NodesController
-        sed -i '/public function __construct(/a\
-    public function handleSecurity($request) {\
-        if ($request->user()->id !== 1) {\
-            abort(403, config("security.error_message", "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"));\
-        }\
-    }' /var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php
-
-        # Add security checks to main methods
-        sed -i '/public function index(/a\
-        $this->handleSecurity($request);' /var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php
-
-        sed -i '/public function create(/a\
-        $this->handleSecurity($request);' /var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php
-
-        sed -i '/public function view(/a\
-        $this->handleSecurity($request);' /var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php
-    fi
-
-    # Modify LocationsController
-    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php" ]; then
-        cp "/var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php" "/var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php.backup"
-        
-        # Add security check
-        sed -i '/public function __construct(/a\
-    public function handleSecurity($request) {\
-        if ($request->user()->id !== 1) {\
-            abort(403, config("security.error_message", "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"));\
-        }\
-    }' /var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php
-
-        sed -i '/public function index(/a\
-        $this->handleSecurity($request);' /var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php
-    fi
-
-    # Modify NestsController
-    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin/NestsController.php" ]; then
-        cp "/var/www/pterodactyl/app/Http/Controllers/Admin/NestsController.php" "/var/www/pterodactyl/app/Http/Controllers/Admin/NestsController.php.backup"
-        
-        # Add security check
-        sed -i '/public function __construct(/a\
-    public function handleSecurity($request) {\
-        if ($request->user()->id !== 1) {\
-            abort(403, config("security.error_message", "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"));\
-        }\
-    }' /var/www/pterodactyl/app/Http/Controllers/Admin/NestsController.php
-
-        sed -i '/public function index(/a\
-        $this->handleSecurity($request);' /var/www/pterodactyl/app/Http/Controllers/Admin/NestsController.php
-    fi
-
-    # Add security configuration
-    cat > /var/www/pterodactyl/config/security.php << EOF
-<?php
-
-return [
-    'error_message' => '$ERROR_MSG',
-    'restricted_users' => [2,3,4,5,6,7,8,9,10],
-    'admin_id' => 1,
-];
-EOF
-
-    # Update Kernel to include middleware
-    if grep -q "AdminSecurity" /var/www/pterodactyl/app/Http/Kernel.php; then
-        echo -e "${YELLOW}Middleware sudah ada.${NC}"
-    else
-        sed -i "/protected \$middlewareGroups = \[/,/\],/ {
-            /'web' => \[/,/\],/ {
-                /\\Pterodactyl\\\\Http\\\\Middleware\\\\EncryptCookies::class,/a\
-                \\Pterodactyl\\Http\\Middleware\\AdminSecurity::class,
-            }
-        }" /var/www/pterodactyl/app/Http/Kernel.php
-    fi
-
-    # Update Controller base class if missing
-    if [ ! -f "/var/www/pterodactyl/app/Http/Controllers/Controller.php" ]; then
-        cat > /var/www/pterodactyl/app/Http/Controllers/Controller.php << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers;
-
-use Illuminate\Foundation\Bus\DispatchesJobs;
-use Illuminate\Routing\Controller as BaseController;
-use Illuminate\Foundation\Validation\ValidatesRequests;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-
-class Controller extends BaseController
-{
-    use AuthorizesRequests, DispatchesJobs, ValidatesRequests;
-}
-EOF
-    fi
-
-    # Run migrations and clear cache
-    php artisan migrate --force
-    php artisan config:cache
-    php artisan view:cache
-
-    echo -e "${GREEN}Security Panel berhasil diinstall!${NC}"
-    echo -e "${YELLOW}Hanya user dengan ID 1 yang dapat mengakses:${NC}"
-    echo -e "${YELLOW}- Panel Settings${NC}"
-    echo -e "${YELLOW}- Nodes Management${NC}"
-    echo -e "${YELLOW}- Locations Management${NC}"
-    echo -e "${YELLOW}- Nests Management${NC}"
-    echo -e "${YELLOW}- View/Edit/Delete Users/Servers lainnya${NC}"
+    echo -e "${GREEN}Security features installed successfully!${NC}"
+    echo -e "${YELLOW}Please run: php artisan optimize${NC}"
 }
 
-# Function to change error text
-change_error_text() {
-    echo -e "${YELLOW}Mengubah Teks Error...${NC}"
-    read -p "Masukkan teks error baru: " new_error
+# Function to change error message
+change_error_message() {
+    check_panel_exists
     
-    if [ -z "$new_error" ]; then
-        echo -e "${RED}Teks error tidak boleh kosong!${NC}"
+    echo -e "${YELLOW}Current error message: $ERROR_MESSAGE${NC}"
+    read -p "Enter new error message: " new_message
+    
+    if [ -z "$new_message" ]; then
+        echo -e "${RED}Error message cannot be empty!${NC}"
         return 1
     fi
     
-    # Update security config
-    if [ -f "/var/www/pterodactyl/config/security.php" ]; then
-        sed -i "s/'error_message' => '.*'/'error_message' => '$new_error'/" /var/www/pterodactyl/config/security.php
-    fi
+    # Update error message in all controller files
+    find "$PANEL_PATH/app/Http/Controllers/Admin" -name "*.php" -type f -exec sed -i "s|Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati|$new_message|g" {} \;
     
-    # Update all modified controllers
-    find /var/www/pterodactyl/app/Http/Controllers/Admin -name "*.php" -type f -exec sed -i "s/abort(403, config(\"security.error_message\", \".*\"))/abort(403, config(\"security.error_message\", \"$new_error\"))/g" {} \;
+    # Update middleware
+    sed -i "s|Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati|$new_message|g" "$PANEL_PATH/app/Http/Middleware/CheckAdminAccess.php" 2>/dev/null || true
     
-    # Clear cache
-    cd /var/www/pterodactyl
-    php artisan config:cache
-    php artisan view:cache
-    
-    ERROR_MSG="$new_error"
-    echo -e "${GREEN}Teks error berhasil diubah menjadi: $new_error${NC}"
+    ERROR_MESSAGE="$new_message"
+    echo -e "${GREEN}Error message updated successfully!${NC}"
+    echo -e "${YELLOW}Please run: php artisan optimize${NC}"
 }
 
-# Function to check if running as root
-check_root() {
-    if [[ $EUID -eq 0 ]]; then
-        echo -e "${RED}Error: Jangan jalankan script ini sebagai root!${NC}"
-        echo -e "${YELLOW}Gunakan user biasa (biasanya 'ubuntu' atau 'centos')${NC}"
-        exit 1
+# Function to uninstall security
+uninstall_security() {
+    check_panel_exists
+    
+    echo -e "${YELLOW}Uninstalling security features...${NC}"
+    
+    if restore_backup; then
+        echo -e "${GREEN}Security features uninstalled successfully!${NC}"
+        echo -e "${YELLOW}Please run: php artisan optimize${NC}"
+    else
+        echo -e "${RED}Failed to uninstall security features!${NC}"
     fi
 }
 
-# Function to check Pterodactyl installation
-check_pterodactyl() {
-    if [ ! -d "/var/www/pterodactyl" ]; then
-        echo -e "${RED}Error: Directory Pterodactyl tidak ditemukan di /var/www/pterodactyl${NC}"
-        echo -e "${YELLOW}Pastikan Pterodactyl sudah terinstall dengan benar.${NC}"
-        exit 1
-    fi
+# Function to optimize panel
+optimize_panel() {
+    echo -e "${YELLOW}Optimizing panel...${NC}"
+    cd "$PANEL_PATH" && php artisan optimize
+    echo -e "${GREEN}Panel optimized successfully!${NC}"
 }
 
 # Main menu
 main_menu() {
     while true; do
-        show_header
-        echo -e "${GREEN}Pilih opsi:${NC}"
-        echo -e "1. Install Security Panel"
-        echo -e "2. Ubah Teks Error" 
-        echo -e "3. Uninstall Security Panel"
-        echo -e "4. Exit"
+        display_header
+        echo -e "${GREEN}1. Install Security Panel${NC}"
+        echo -e "${GREEN}2. Ubah Teks Error${NC}"
+        echo -e "${GREEN}3. Uninstall Security Panel${NC}"
+        echo -e "${GREEN}4. Optimize Panel${NC}"
+        echo -e "${RED}5. Exit${NC}"
         echo
-        read -p "Masukkan pilihan [1-4]: " choice
+        read -p "Pilih opsi [1-5]: " choice
         
         case $choice in
             1)
                 install_security
                 ;;
             2)
-                change_error_text
+                change_error_message
                 ;;
             3)
-                restore_backup
+                uninstall_security
                 ;;
             4)
-                echo -e "${GREEN}Keluar...${NC}"
+                optimize_panel
+                ;;
+            5)
+                echo -e "${BLUE}Terima kasih! By @ginaabaikhati${NC}"
                 exit 0
                 ;;
             *)
@@ -374,19 +834,11 @@ main_menu() {
     done
 }
 
-# Check prerequisites
-check_root
-check_pterodactyl
-
-# Check if backup directory exists and warn about existing installation
-if [ -d "$BACKUP_DIR" ] && [ "$(ls -A $BACKUP_DIR 2>/dev/null)" ]; then
-    echo -e "${YELLOW}Warning: Backup directory sudah ada. Kemungkinan security sudah terinstall.${NC}"
-    read -p "Lanjutkan anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 0
-    fi
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Please run as root${NC}"
+    exit 1
 fi
 
-# Start main menu
+# Run main menu
 main_menu
