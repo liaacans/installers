@@ -12,372 +12,215 @@ NC='\033[0m' # No Color
 
 # Configuration
 PANEL_PATH="/var/www/pterodactyl"
-BACKUP_DIR="/root/pterodactyl_backup"
-SECURITY_LOG="/var/log/pterodactyl_security.log"
-
-# Log function
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$SECURITY_LOG"
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-# Error function
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-    log "ERROR: $1"
-}
-
-# Success function
-success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-    log "SUCCESS: $1"
-}
-
-# Warning function
-warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-    log "WARNING: $1"
-}
+BACKUP_PATH="/root/pterodactyl_backup"
+SECURITY_MESSAGE="Ngapain sih? mau nyolong sc org? - By @ginaabaikhati"
 
 # Check if running as root
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        error "Script harus dijalankan sebagai root"
-        exit 1
-    fi
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}Error: Script harus dijalankan sebagai root${NC}"
+   exit 1
+fi
+
+# Function to display header
+display_header() {
+    clear
+    echo -e "${BLUE}"
+    echo "=========================================="
+    echo "    Pterodactyl Security Panel"
+    echo "    By @ginaabaikhati"
+    echo "=========================================="
+    echo -e "${NC}"
 }
 
-# Check if Pterodactyl panel exists
-check_panel() {
-    if [[ ! -d "$PANEL_PATH" ]]; then
-        error "Directory Pterodactyl tidak ditemukan di $PANEL_PATH"
-        exit 1
-    fi
+# Function to create backup
+create_backup() {
+    echo -e "${YELLOW}Membuat backup file...${NC}"
+    mkdir -p $BACKUP_PATH
+    
+    # Backup important files
+    cp $PANEL_PATH/app/Http/Controllers/Admin/*.php $BACKUP_PATH/ 2>/dev/null
+    cp $PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php $BACKUP_PATH/ 2>/dev/null
+    cp $PANEL_PATH/routes/admin.php $BACKUP_PATH/ 2>/dev/null
+    
+    echo -e "${GREEN}Backup berhasil dibuat di: $BACKUP_PATH${NC}"
 }
 
-# Backup original files
-backup_files() {
-    log "Membuat backup file original..."
-    mkdir -p "$BACKUP_DIR"
-    
-    local files=(
-        "app/Http/Controllers/Admin"
-        "app/Http/Middleware"
-        "resources/views/admin"
-        "app/Models/User.php"
-        "routes/web.php"
-    )
-    
-    for file in "${files[@]}"; do
-        if [[ -f "$PANEL_PATH/$file" || -d "$PANEL_PATH/$file" ]]; then
-            cp -r "$PANEL_PATH/$file" "$BACKUP_DIR/" 2>/dev/null
-        fi
-    done
-    
-    success "Backup berhasil disimpan di $BACKUP_DIR"
-}
-
-# Restore from backup
+# Function to restore backup
 restore_backup() {
-    if [[ ! -d "$BACKUP_DIR" ]]; then
-        error "Backup directory tidak ditemukan"
+    echo -e "${YELLOW}Memulihkan dari backup...${NC}"
+    
+    if [ ! -d "$BACKUP_PATH" ]; then
+        echo -e "${RED}Backup tidak ditemukan!${NC}"
         return 1
     fi
     
-    log "Memulihkan file dari backup..."
+    # Restore files
+    cp $BACKUP_PATH/*.php $PANEL_PATH/app/Http/Controllers/Admin/ 2>/dev/null
+    cp $BACKUP_PATH/AdminAuthenticate.php $PANEL_PATH/app/Http/Middleware/ 2>/dev/null
+    cp $BACKUP_PATH/admin.php $PANEL_PATH/routes/ 2>/dev/null
     
-    cp -r "$BACKUP_DIR/"* "$PANEL_PATH/" 2>/dev/null
-    
-    success "File berhasil dipulihkan dari backup"
+    echo -e "${GREEN}Restore backup berhasil!${NC}"
 }
 
-# Install security modifications
+# Function to install security
 install_security() {
-    log "Memulai instalasi security panel..."
+    display_header
+    echo -e "${YELLOW}Menginstal Security Panel...${NC}"
     
-    # Backup files first
-    backup_files
+    # Check if panel path exists
+    if [ ! -d "$PANEL_PATH" ]; then
+        echo -e "${RED}Directory Pterodactyl tidak ditemukan di: $PANEL_PATH${NC}"
+        echo -e "${YELLOW}Silakan edit PANEL_PATH dalam script jika directory berbeda${NC}"
+        return 1
+    fi
     
-    # 1. Modify User Model to add security check
-    modify_user_model
+    create_backup
     
-    # 2. Create custom middleware
-    create_security_middleware
-    
-    # 3. Modify admin controllers
-    modify_admin_controllers
-    
-    # 4. Modify routes
-    modify_routes
-    
-    # 5. Create error views
-    create_error_views
-    
-    # 6. Update dependencies
-    update_dependencies
-    
-    success "Instalasi security panel selesai"
-}
-
-# Modify User Model
-modify_user_model() {
-    log "Memodifikasi User Model..."
-    
-    cat > "$PANEL_PATH/app/Models/User.php" << 'EOF'
-<?php
-
-namespace App\Models;
-
-use Illuminate\Notifications\Notifiable;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Laravel\Sanctum\HasApiTokens;
-
-class User extends Authenticatable
-{
-    use HasApiTokens, HasFactory, Notifiable;
-
-    protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'role',
-        'root_admin',
-    ];
-
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
-
-    protected $casts = [
-        'email_verified_at' => 'datetime',
-    ];
-
-    // Security check function
-    public function isSuperAdmin()
-    {
-        return $this->id === 1 && $this->root_admin === 1;
-    }
-
-    public function canAccessAdminPanel()
-    {
-        return $this->isSuperAdmin();
-    }
-
-    public function canManageServers()
-    {
-        return $this->isSuperAdmin();
-    }
-
-    public function canManageNodes()
-    {
-        return $this->isSuperAdmin();
-    }
-
-    public function canManageNests()
-    {
-        return $this->isSuperAdmin();
-    }
-
-    public function canManageLocations()
-    {
-        return $this->isSuperAdmin();
-    }
-
-    public function canManageSettings()
-    {
-        return $this->isSuperAdmin();
-    }
-}
-EOF
-    success "User Model berhasil dimodifikasi"
-}
-
-# Create security middleware
-create_security_middleware() {
-    log "Membuat Security Middleware..."
-    
-    mkdir -p "$PANEL_PATH/app/Http/Middleware"
-    
-    cat > "$PANEL_PATH/app/Http/Middleware/AdminSecurity.php" << 'EOF'
+    # Create custom middleware for admin ID 1 restriction
+    cat > $PANEL_PATH/app/Http/Middleware/AdminIdRestriction.php << 'EOF'
 <?php
 
 namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use App\Models\User;
+use Symfony\Component\HttpFoundation\Response;
 
-class AdminSecurity
+class AdminIdRestriction
 {
-    public function handle(Request $request, Closure $next)
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     */
+    public function handle(Request $request, Closure $next, string $resource): Response
     {
-        $user = $request->user();
-        
-        // Check if user is authenticated
-        if (!$user) {
-            return redirect('/auth/login');
-        }
-
-        // Only user ID 1 can access admin features
-        if (!$user->isSuperAdmin()) {
-            $path = $request->path();
-            
-            // Check if trying to access restricted admin areas
-            if (str_starts_with($path, 'admin') || 
-                str_contains($path, 'servers') ||
-                str_contains($path, 'nodes') ||
-                str_contains($path, 'nests') ||
-                str_contains($path, 'locations') ||
-                str_contains($path, 'settings')) {
-                
-                return response()->view('errors.security', [], 403);
-            }
+        // Allow only admin with ID 1
+        if (auth()->check() && auth()->user()->id !== 1) {
+            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
         }
 
         return $next($request);
     }
 }
 EOF
-    success "Security Middleware berhasil dibuat"
-}
 
-# Modify admin controllers
-modify_admin_controllers() {
-    log "Memodifikasi Admin Controllers..."
-    
-    # Create or modify admin controllers directory
-    mkdir -p "$PANEL_PATH/app/Http/Controllers/Admin"
-    
-    # BaseAdminController for all admin controllers
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/BaseAdminController.php" << 'EOF'
+    # Modify Admin Controller to add security checks
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/AdminControllerSecure.php << 'EOF'
 <?php
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
 use App\Models\User;
 
-class BaseAdminController extends Controller
+class AdminControllerSecure extends Controller
 {
-    public function __construct()
+    /**
+     * Check if current user is admin ID 1
+     */
+    protected function checkAdminIdOne()
     {
-        $this->middleware('auth');
-        $this->middleware('admin.security');
-        
-        // Additional security check
-        $this->checkAdminAccess();
-    }
-    
-    protected function checkAdminAccess()
-    {
-        $user = auth()->user();
-        
-        if (!$user || !$user->isSuperAdmin()) {
-            abort(403, 'Unauthorized');
+        if (auth()->check() && auth()->user()->id !== 1) {
+            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
         }
     }
+
+    /**
+     * Display admin settings page
+     */
+    public function settings()
+    {
+        // Allow access to settings for all admins
+        return app('App\Http\Controllers\Admin\SettingsController')->index();
+    }
+
+    /**
+     * Restrict access to servers for non-admin ID 1
+     */
+    public function servers()
+    {
+        $this->checkAdminIdOne();
+        return app('App\Http\Controllers\Admin\ServersController')->index();
+    }
+
+    /**
+     * Restrict access to nodes for non-admin ID 1
+     */
+    public function nodes()
+    {
+        $this->checkAdminIdOne();
+        return app('App\Http\Controllers\Admin\NodesController')->index();
+    }
+
+    /**
+     * Restrict access to nests for non-admin ID 1
+     */
+    public function nests()
+    {
+        $this->checkAdminIdOne();
+        return app('App\Http\Controllers\Admin\NestsController')->index();
+    }
+
+    /**
+     * Restrict access to locations for non-admin ID 1
+     */
+    public function locations()
+    {
+        $this->checkAdminIdOne();
+        return app('App\Http\Controllers\Admin\LocationsController')->index();
+    }
 }
 EOF
 
-    # Modify existing controllers or create security checks
-    local controllers=(
-        "ServerController.php"
-        "NodeController.php" 
-        "NestController.php"
-        "LocationController.php"
-        "SettingsController.php"
-    )
-    
-    for controller in "${controllers[@]}"; do
-        if [[ -f "$PANEL_PATH/app/Http/Controllers/Admin/$controller" ]]; then
-            # Add security check to existing controllers
-            sed -i 's/use App\\Http\\Controllers\\Controller;/use App\\Http\\Controllers\\Admin\\BaseAdminController;/g' "$PANEL_PATH/app/Http/Controllers/Admin/$controller"
-            sed -i 's/extends Controller/extends BaseAdminController/g' "$PANEL_PATH/app/Http/Controllers/Admin/$controller"
-        fi
-    done
-    
-    success "Admin Controllers berhasil dimodifikasi"
+    # Create custom error page handler
+    cat > $PANEL_PATH/app/Exceptions/HandlerSecure.php << 'EOF'
+<?php
+
+namespace App\Exceptions;
+
+use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Throwable;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+
+class HandlerSecure extends ExceptionHandler
+{
+    /**
+     * Render an exception into an HTTP response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Throwable  $exception
+     * @return \Symfony\Component\HttpFoundation\Response
+     *
+     * @throws \Throwable
+     */
+    public function render($request, Throwable $exception)
+    {
+        // Custom message for 403 errors
+        if ($exception instanceof HttpException && $exception->getStatusCode() === 403) {
+            $message = $exception->getMessage();
+            if (strpos($message, 'Ngapain sih? mau nyolong sc org?') !== false) {
+                return response()->view('errors.403_custom', [
+                    'message' => $message
+                ], 403);
+            }
+        }
+
+        return parent::render($request, $exception);
+    }
 }
-
-# Modify routes
-modify_routes() {
-    log "Memodifikasi routes..."
-    
-    # Backup original routes
-    cp "$PANEL_PATH/routes/web.php" "$BACKUP_DIR/web.php.backup"
-    
-    # Add middleware to routes
-    cat >> "$PANEL_PATH/routes/web.php" << 'EOF'
-
-// Security Middleware
-Route::group(['middleware' => ['auth', 'admin.security']], function () {
-    // Admin routes - only accessible by user ID 1
-    Route::group(['prefix' => 'admin', 'namespace' => 'Admin'], function () {
-        Route::get('/servers', function () {
-            $user = auth()->user();
-            if (!$user->isSuperAdmin()) {
-                return response()->view('errors.security', [], 403);
-            }
-            return app('App\Http\Controllers\Admin\ServerController')->index();
-        });
-        
-        Route::get('/nodes', function () {
-            $user = auth()->user();
-            if (!$user->isSuperAdmin()) {
-                return response()->view('errors.security', [], 403);
-            }
-            return app('App\Http\Controllers\Admin\NodeController')->index();
-        });
-        
-        Route::get('/nests', function () {
-            $user = auth()->user();
-            if (!$user->isSuperAdmin()) {
-                return response()->view('errors.security', [], 403);
-            }
-            return app('App\Http\Controllers\Admin\NestController')->index();
-        });
-        
-        Route::get('/locations', function () {
-            $user = auth()->user();
-            if (!$user->isSuperAdmin()) {
-                return response()->view('errors.security', [], 403);
-            }
-            return app('App\Http\Controllers\Admin\LocationController')->index();
-        });
-        
-        Route::get('/settings', function () {
-            $user = auth()->user();
-            if (!$user->isSuperAdmin()) {
-                return response()->view('errors.security', [], 403);
-            }
-            return app('App\Http\Controllers\Admin\SettingsController')->index();
-        });
-    });
-});
-
-// Register middleware
-app('router')->aliasMiddleware('admin.security', \App\Http\Middleware\AdminSecurity::class);
 EOF
-    success "Routes berhasil dimodifikasi"
-}
 
-# Create error views
-create_error_views() {
-    log "Membuat error views..."
-    
-    mkdir -p "$PANEL_PATH/resources/views/errors"
-    
-    cat > "$PANEL_PATH/resources/views/errors/security.blade.php" << 'EOF'
+    # Create custom error view
+    mkdir -p $PANEL_PATH/resources/views/errors
+    cat > $PANEL_PATH/resources/views/errors/403_custom.blade.php << 'EOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Access Denied - Security Restriction</title>
+    <title>Access Denied</title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -387,207 +230,223 @@ create_error_views() {
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            color: #333;
+            height: 100vh;
+            color: white;
         }
         .error-container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
             text-align: center;
-            max-width: 500px;
-            width: 90%;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
-        .error-icon {
-            font-size: 64px;
-            color: #e74c3c;
-            margin-bottom: 20px;
-        }
-        .error-title {
-            font-size: 28px;
-            color: #e74c3c;
-            margin-bottom: 15px;
+        .error-code {
+            font-size: 72px;
             font-weight: bold;
+            margin-bottom: 20px;
+            color: #ff6b6b;
         }
         .error-message {
-            font-size: 18px;
-            color: #666;
-            margin-bottom: 25px;
+            font-size: 24px;
+            margin-bottom: 30px;
             line-height: 1.5;
         }
-        .security-note {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 20px 0;
+        .signature {
             font-size: 14px;
-            color: #856404;
-        }
-        .home-button {
-            background: #3498db;
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: background 0.3s;
-        }
-        .home-button:hover {
-            background: #2980b9;
+            color: #ccc;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
     <div class="error-container">
-        <div class="error-icon">🚫</div>
-        <div class="error-title">Access Denied</div>
-        <div class="error-message">
-            Ngapain sih? mau nyolong sc org? - By @ginaabaikhati
-        </div>
-        <div class="security-note">
-            <strong>Security Notice:</strong> This action has been logged and monitored.
-        </div>
-        <a href="/" class="home-button">Return to Home</a>
+        <div class="error-code">403</div>
+        <div class="error-message">{{ $message ?? 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati' }}</div>
+        <div class="signature">Security System Activated</div>
     </div>
 </body>
 </html>
 EOF
-    success "Error views berhasil dibuat"
-}
 
-# Update dependencies
-update_dependencies() {
-    log "Update dependencies..."
+    # Modify routes to use security middleware
+    if [ -f "$PANEL_PATH/routes/admin.php" ]; then
+        cp $PANEL_PATH/routes/admin.php $BACKUP_PATH/admin_original.php
+        
+        # Add custom routes with security
+        cat >> $PANEL_PATH/routes/admin.php << 'EOF'
+
+// =====================
+// SECURITY ROUTES - ADMIN ID 1 ONLY
+// By @ginaabaikhati
+// =====================
+
+Route::group(['prefix' => 'security', 'middleware' => 'admin'], function () {
+    // Servers - Admin ID 1 only
+    Route::get('/servers', [\App\Http\Controllers\Admin\AdminControllerSecure::class, 'servers'])
+        ->name('admin.security.servers');
     
-    cd "$PANEL_PATH" || exit 1
+    // Nodes - Admin ID 1 only  
+    Route::get('/nodes', [\App\Http\Controllers\Admin\AdminControllerSecure::class, 'nodes'])
+        ->name('admin.security.nodes');
     
-    # Clear cache and update
-    php artisan config:clear
-    php artisan cache:clear
+    // Nests - Admin ID 1 only
+    Route::get('/nests', [\App\Http\Controllers\Admin\AdminControllerSecure::class, 'nests'])
+        ->name('admin.security.nests');
+    
+    // Locations - Admin ID 1 only
+    Route::get('/locations', [\App\Http\Controllers\Admin\AdminControllerSecure::class, 'locations'])
+        ->name('admin.security.locations');
+    
+    // Settings - All admins can access
+    Route::get('/settings', [\App\Http\Controllers\Admin\AdminControllerSecure::class, 'settings'])
+        ->name('admin.security.settings');
+});
+
+EOF
+    fi
+
+    # Update middleware registration
+    if [ -f "$PANEL_PATH/app/Http/Kernel.php" ]; then
+        # Check if middleware already exists
+        if ! grep -q "AdminIdRestriction" $PANEL_PATH/app/Http/Kernel.php; then
+            sed -i "/protected \$routeMiddleware = \[/a\
+        'admin.restrict' => \\App\\Http\\Middleware\\AdminIdRestriction::class," $PANEL_PATH/app/Http/Kernel.php
+        fi
+    fi
+
+    # Run Laravel commands
+    echo -e "${YELLOW}Menjalankan optimasi Laravel...${NC}"
+    cd $PANEL_PATH
+    php artisan route:clear
     php artisan view:clear
-    
-    # Run composer dump-autoload
-    composer dump-autoload
-    
-    success "Dependencies berhasil diupdate"
+    php artisan cache:clear
+
+    echo -e "${GREEN}Security Panel berhasil diinstal!${NC}"
+    echo -e "${YELLOW}Catatan: Hanya admin dengan ID 1 yang bisa mengakses:${NC}"
+    echo -e "${YELLOW}- Servers${NC}"
+    echo -e "${YELLOW}- Nodes${NC}" 
+    echo -e "${YELLOW}- Nests${NC}"
+    echo -e "${YELLOW}- Locations${NC}"
+    echo -e "${GREEN}Settings dapat diakses oleh semua admin${NC}"
 }
 
-# Change error text
+# Function to change error text
 change_error_text() {
-    log "Mengganti teks error..."
+    display_header
+    echo -e "${YELLOW}Mengganti Teks Error...${NC}"
     
-    if [[ ! -f "$PANEL_PATH/resources/views/errors/security.blade.php" ]]; then
-        error "File error view tidak ditemukan. Install security terlebih dahulu."
+    read -p "Masukkan teks error baru: " new_text
+    
+    if [ -z "$new_text" ]; then
+        echo -e "${RED}Teks error tidak boleh kosong!${NC}"
         return 1
     fi
     
-    read -p "Masukkan teks error baru: " new_error_text
-    
-    if [[ -z "$new_error_text" ]]; then
-        error "Teks error tidak boleh kosong"
-        return 1
-    fi
-    
-    # Escape special characters for sed
-    escaped_text=$(printf '%s\n' "$new_error_text" | sed 's/[[\.*^$/]/\\&/g')
-    
-    # Replace the error text
-    sed -i "s/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/$escaped_text/g" "$PANEL_PATH/resources/views/errors/security.blade.php"
+    # Update text in middleware
+    sed -i "s/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/${new_text}/g" $PANEL_PATH/app/Http/Middleware/AdminIdRestriction.php 2>/dev/null
+    sed -i "s/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/${new_text}/g" $PANEL_PATH/app/Http/Controllers/Admin/AdminControllerSecure.php 2>/dev/null
+    sed -i "s/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/${new_text}/g" $PANEL_PATH/resources/views/errors/403_custom.blade.php 2>/dev/null
     
     # Clear cache
-    cd "$PANEL_PATH" && php artisan view:clear
+    cd $PANEL_PATH
+    php artisan view:clear
+    php artisan cache:clear
     
-    success "Teks error berhasil diganti"
-    log "Teks error diubah menjadi: $new_error_text"
+    echo -e "${GREEN}Teks error berhasil diubah!${NC}"
+    echo -e "${BLUE}Teks baru: ${new_text}${NC}"
 }
 
-# Uninstall security
+# Function to uninstall security
 uninstall_security() {
-    log "Memulai uninstall security panel..."
+    display_header
+    echo -e "${YELLOW}Uninstalling Security Panel...${NC}"
     
-    read -p "Apakah Anda yakin ingin uninstall security panel? (y/n): " confirm
-    
-    if [[ $confirm != "y" && $confirm != "Y" ]]; then
-        log "Uninstall dibatalkan"
-        return
+    if [ ! -d "$BACKUP_PATH" ]; then
+        echo -e "${RED}Backup tidak ditemukan! Tidak bisa uninstall.${NC}"
+        return 1
     fi
     
-    if restore_backup; then
-        # Clear cache
-        cd "$PANEL_PATH" && php artisan config:clear && php artisan cache:clear && php artisan view:clear
-        
-        success "Security panel berhasil diuninstall"
-        log "Security panel diuninstall"
+    restore_backup
+    
+    # Remove created files
+    rm -f $PANEL_PATH/app/Http/Middleware/AdminIdRestriction.php
+    rm -f $PANEL_PATH/app/Http/Controllers/Admin/AdminControllerSecure.php
+    rm -f $PANEL_PATH/app/Exceptions/HandlerSecure.php
+    rm -f $PANEL_PATH/resources/views/errors/403_custom.blade.php
+    
+    # Clear cache
+    cd $PANEL_PATH
+    php artisan route:clear
+    php artisan view:clear
+    php artisan cache:clear
+    
+    echo -e "${GREEN}Security Panel berhasil diuninstall!${NC}"
+}
+
+# Function to check security status
+check_status() {
+    display_header
+    echo -e "${YELLOW}Checking Security Status...${NC}"
+    
+    if [ -f "$PANEL_PATH/app/Http/Middleware/AdminIdRestriction.php" ]; then
+        echo -e "${GREEN}✓ Security Middleware: Installed${NC}"
     else
-        error "Gagal menguninstall security panel"
+        echo -e "${RED}✗ Security Middleware: Not Installed${NC}"
     fi
+    
+    if [ -f "$PANEL_PATH/app/Http/Controllers/Admin/AdminControllerSecure.php" ]; then
+        echo -e "${GREEN}✓ Security Controller: Installed${NC}"
+    else
+        echo -e "${RED}✗ Security Controller: Not Installed${NC}"
+    fi
+    
+    if [ -f "$PANEL_PATH/resources/views/errors/403_custom.blade.php" ]; then
+        echo -e "${GREEN}✓ Custom Error Page: Installed${NC}"
+    else
+        echo -e "${RED}✗ Custom Error Page: Not Installed${NC}"
+    fi
+    
+    echo -e "\n${BLUE}Security Configuration:${NC}"
+    echo -e "${YELLOW}• Hanya admin ID 1 yang bisa akses:${NC}"
+    echo -e "  - Servers, Nodes, Nests, Locations"
+    echo -e "${GREEN}• Semua admin bisa akses:${NC}"
+    echo -e "  - Settings"
 }
 
 # Main menu
-main_menu() {
-    clear
-    echo -e "${BLUE}"
-    echo "╔══════════════════════════════════════╗"
-    echo "║    Security Panel Pterodactyl       ║"
-    echo "║        By @ginaabaikhati            ║"
-    echo "╠══════════════════════════════════════╣"
-    echo "║${NC}${GREEN} 1. Install Security Panel${BLUE}           ║"
-    echo "║${NC}${YELLOW} 2. Ganti Teks Error${BLUE}                ║"
-    echo "║${NC}${RED} 3. Uninstall Security Panel${BLUE}        ║"
-    echo "║${NC}${BLUE} 4. Exit Security Panel${BLUE}              ║"
-    echo "╚══════════════════════════════════════╝"
-    echo -e "${NC}"
-    
-    read -p "Pilih opsi [1-4]: " choice
-    
+while true; do
+    display_header
+    echo -e "${BLUE}Pilih opsi:${NC}"
+    echo -e "1. Install Security Panel"
+    echo -e "2. Ganti Teks Error" 
+    echo -e "3. Uninstall Security Panel"
+    echo -e "4. Check Status"
+    echo -e "5. Exit"
+    echo -e "=========================================="
+    read -p "Masukkan pilihan [1-5]: " choice
+
     case $choice in
         1)
-            check_root
-            check_panel
             install_security
             ;;
         2)
-            check_root
-            check_panel
             change_error_text
             ;;
         3)
-            check_root
-            check_panel
             uninstall_security
             ;;
         4)
-            log "Keluar dari Security Panel"
-            echo "Terima kasih telah menggunakan Security Panel!"
+            check_status
+            ;;
+        5)
+            echo -e "${GREEN}Keluar dari Security Panel.${NC}"
             exit 0
             ;;
         *)
-            error "Pilihan tidak valid"
+            echo -e "${RED}Pilihan tidak valid!${NC}"
             ;;
     esac
     
-    read -p "Tekan Enter untuk melanjutkan..."
-    main_menu
-}
-
-# Check if script is sourced or executed directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # Create log directory if not exists
-    mkdir -p "/var/log"
-    
-    # Show welcome message
-    echo -e "${GREEN}"
-    echo "=========================================="
-    echo "    Security Panel Pterodactyl"
-    echo "        By @ginaabaikhati"
-    echo "=========================================="
-    echo -e "${NC}"
-    
-    # Run main menu
-    main_menu
-fi
+    echo -e "\n${YELLOW}Tekan Enter untuk melanjutkan...${NC}"
+    read
+done
