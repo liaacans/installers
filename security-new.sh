@@ -10,539 +10,522 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
-PANEL_PATH="/var/www/pterodactyl"
-BACKUP_PATH="/root/pterodactyl_backup"
-SECURITY_LOG="/var/log/pterodactyl_security.log"
+# Security configuration
+SECURITY_DIR="/var/www/pterodactyl-security"
+BACKUP_DIR="/var/www/pterodactyl-backups"
+PANEL_DIR="/var/www/pterodactyl"
 
-# Log function
-log_action() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$SECURITY_LOG"
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-# Error function
-log_error() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: $1" >> "$SECURITY_LOG"
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Warning function
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+# Error message
+ERROR_MSG="Ngapain sih? mau nyolong sc org? - By @ginaabaikhati"
 
 # Check if running as root
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        log_error "Script ini harus dijalankan sebagai root!"
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}Error: Script harus dijalankan sebagai root${NC}"
+   exit 1
+fi
+
+# Function to display header
+display_header() {
+    clear
+    echo -e "${BLUE}"
+    echo "╔══════════════════════════════════════════════╗"
+    echo "║           Pterodactyl Security Panel         ║"
+    echo "║            By @ginaabaikhati                 ║"
+    echo "╚══════════════════════════════════════════════╝"
+    echo -e "${NC}"
+}
+
+# Function to check if Pterodactyl is installed
+check_pterodactyl() {
+    if [ ! -d "$PANEL_DIR" ]; then
+        echo -e "${RED}Error: Directory Pterodactyl tidak ditemukan di $PANEL_DIR${NC}"
+        exit 1
+    fi
+    
+    if [ ! -f "$PANEL_DIR/app/Http/Controllers/Admin/AdminController.php" ]; then
+        echo -e "${RED}Error: File controller admin tidak ditemukan${NC}"
         exit 1
     fi
 }
 
-# Check if Pterodactyl panel exists
-check_panel_exists() {
-    if [[ ! -d "$PANEL_PATH" ]]; then
-        log_error "Directory Pterodactyl tidak ditemukan di $PANEL_PATH"
-        exit 1
+# Function to create backup
+create_backup() {
+    echo -e "${YELLOW}Membuat backup panel...${NC}"
+    
+    if [ ! -d "$BACKUP_DIR" ]; then
+        mkdir -p "$BACKUP_DIR"
+    fi
+    
+    BACKUP_FILE="$BACKUP_DIR/backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+    tar -czf "$BACKUP_FILE" -C /var/www/pterodactyl . 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Backup berhasil dibuat: $BACKUP_FILE${NC}"
+    else
+        echo -e "${RED}Warning: Gagal membuat backup${NC}"
     fi
 }
 
-# Backup original files
-backup_files() {
-    log_action "Membuat backup file original..."
+# Function to install security
+install_security() {
+    display_header
+    echo -e "${YELLOW}[1] Memulai instalasi security panel...${NC}"
     
-    mkdir -p "$BACKUP_PATH"
+    check_pterodactyl
+    create_backup
     
-    # Backup important files
-    local files=(
-        "app/Http/Controllers/Admin"
-        "app/Http/Middleware"
-        "app/Http/Controllers/Controller.php"
-        "routes/api.php"
-        "routes/web.php"
-    )
+    # Create security directory
+    mkdir -p "$SECURITY_DIR"
     
-    for file in "${files[@]}"; do
-        if [[ -f "$PANEL_PATH/$file" || -d "$PANEL_PATH/$file" ]]; then
-            cp -r "$PANEL_PATH/$file" "$BACKUP_PATH/${file//\//_}.backup"
-        fi
-    done
+    echo -e "${YELLOW}Mengimplementasikan security restrictions...${NC}"
     
-    log_action "Backup selesai disimpan di $BACKUP_PATH"
-}
-
-# Create security middleware
-create_security_middleware() {
-    log_action "Membuat security middleware..."
+    # Backup original files
+    cp "$PANEL_DIR/app/Http/Controllers/Admin/AdminController.php" "$SECURITY_DIR/AdminController.backup"
+    cp "$PANEL_DIR/app/Http/Controllers/Admin/ServersController.php" "$SECURITY_DIR/ServersController.backup"
+    cp "$PANEL_DIR/app/Http/Controllers/Admin/NodesController.php" "$SECURITY_DIR/NodesController.backup"
+    cp "$PANEL_DIR/app/Http/Controllers/Admin/NestsController.php" "$SECURITY_DIR/NestsController.backup"
+    cp "$PANEL_DIR/app/Http/Controllers/Admin/LocationsController.php" "$SECURITY_DIR/LocationsController.backup"
+    cp "$PANEL_DIR/app/Http/Controllers/Admin/SettingsController.php" "$SECURITY_DIR/SettingsController.backup"
     
-    cat > "$PANEL_PATH/app/Http/Middleware/AdminSecurity.php" << 'EOF'
+    # 1. Modify AdminController untuk general admin access
+    cat > "$PANEL_DIR/app/Http/Controllers/Admin/AdminController.php" << 'EOF'
 <?php
 
-namespace App\Http\Middleware;
+namespace Pterodactyl\Http\Controllers\Admin;
 
-use Closure;
+use Illuminate\View\View;
+use Pterodactyl\Http\Controllers\Controller;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
+use Pterodactyl\Exceptions\DisplayException;
 
-class AdminSecurity
+class AdminController extends Controller
 {
     /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * AdminController constructor.
      */
-    public function handle(Request $request, Closure $next): Response
+    public function __construct()
     {
-        // Check if user is authenticated
-        if (!auth()->check()) {
-            return redirect()->route('auth.login');
-        }
+        //
+    }
 
-        $user = auth()->user();
-        $route = $request->route()->getName();
+    /**
+     * Return the admin index view.
+     */
+    public function index(): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
         
-        // Admin ID 1 has full access
-        if ($user->id === 1) {
-            return $next($request);
+        return view('admin.index');
+    }
+    
+    /**
+     * Handle other admin methods
+     */
+    public function __call($method, $parameters)
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
         }
-
-        // Define restricted routes for other admins
-        $restrictedRoutes = [
-            'admin.servers', 'admin.servers.view', 'admin.servers.manage',
-            'admin.nodes', 'admin.nodes.view', 'admin.nodes.manage',
-            'admin.nests', 'admin.nests.view', 'admin.nests.manage', 
-            'admin.locations', 'admin.locations.view', 'admin.locations.manage',
-            'admin.settings', 'admin.settings.*'
-        ];
-
-        // Check if current route is restricted
-        foreach ($restrictedRoutes as $restricted) {
-            if (fnmatch($restricted, $route)) {
-                abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-            }
-        }
-
-        return $next($request);
+        
+        return parent::__call($method, $parameters);
     }
 }
 EOF
-}
 
-# Modify admin controller for servers
-modify_admin_controllers() {
-    log_action "Memodifikasi admin controllers..."
-    
-    # Servers Controller
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
+    # 2. Modify ServersController untuk server access
+    cat > "$PANEL_DIR/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace Pterodactyl\Http\Controllers\Admin;
 
-use App\Http\Controllers\Controller;
-use App\Models\Server;
-use App\Repositories\Daemon\DaemonServerRepository;
-use App\Services\Servers\ServerDeletionService;
-use Illuminate\Http\Request;
-use Illuminate\Http\Response;
-use Prologue\Alerts\AlertsMessageBag;
+use Illuminate\View\View;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Exceptions\DisplayException;
 
 class ServersController extends Controller
 {
-    public function __construct(
-        private AlertsMessageBag $alert,
-        private DaemonServerRepository $daemonServerRepository,
-        private ServerDeletionService $deletionService
-    ) {}
-
-    public function index()
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.servers.index', [
-            'servers' => Server::with(['user', 'node', 'allocation'])->paginate(50),
-        ]);
-    }
-
-    public function view(Server $server)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.servers.view', [
-            'server' => $server->load(['user', 'egg', 'node']),
-            'egg' => $server->egg,
-        ]);
-    }
-
-    public function settings(Server $server)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.servers.settings', [
-            'server' => $server,
-        ]);
-    }
-
-    public function delete(Request $request, Server $server)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        $this->deletionService->handle($server);
-        $this->alert->success('Server was successfully deleted from the system.')->flash();
-
-        return response('', Response::HTTP_NO_CONTENT);
-    }
-}
-EOF
-
-    # Nodes Controller
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use App\Models\Node;
-use Illuminate\View\View;
-use Illuminate\Http\Request;
-
-class NodesController extends Controller
-{
-    public function index(): View
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.nodes.index', [
-            'nodes' => Node::with('location')->get(),
-        ]);
-    }
-
-    public function view(Node $node): View
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.nodes.view', [
-            'node' => $node->load('location'),
-        ]);
-    }
-
-    public function settings(Node $node): View
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.nodes.settings', [
-            'node' => $node,
-        ]);
-    }
-}
-EOF
-
-    # Nests Controller
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use App\Models\Nest;
-use Illuminate\View\View;
-
-class NestsController extends Controller
-{
-    public function index(): View
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.nests.index', [
-            'nests' => Nest::with('eggs')->get(),
-        ]);
-    }
-
-    public function view(Nest $nest): View
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.nests.view', [
-            'nest' => $nest->load('eggs'),
-        ]);
-    }
-}
-EOF
-
-    # Locations Controller
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use App\Models\Location;
-use Illuminate\View\View;
-
-class LocationsController extends Controller
-{
-    public function index(): View
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.locations.index', [
-            'locations' => Location::with('nodes')->get(),
-        ]);
-    }
-
-    public function view(Location $location): View
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
-        }
-
-        return view('admin.locations.view', [
-            'location' => $location->load('nodes'),
-        ]);
-    }
-}
-EOF
-}
-
-# Modify base controller
-modify_base_controller() {
-    log_action "Memodifikasi base controller..."
-    
-    # Backup original controller
-    cp "$PANEL_PATH/app/Http/Controllers/Controller.php" "$BACKUP_PATH/Controller.php.backup"
-    
-    # Create modified controller
-    cat > "$PANEL_PATH/app/Http/Controllers/Controller.php" << 'EOF'
-<?php
-
-namespace App\Http\Controllers;
-
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Foundation\Validation\ValidatesRequests;
-use Illuminate\Routing\Controller as BaseController;
-
-class Controller extends BaseController
-{
-    use AuthorizesRequests, ValidatesRequests;
-
+    /**
+     * ServersController constructor.
+     */
     public function __construct()
     {
-        $this->middleware('auth');
-        
-        // Apply security middleware to all admin routes
-        $this->middleware('admin.security')->only([
-            'index', 'view', 'create', 'edit', 'update', 'destroy', 
-            'settings', 'manage', 'delete'
-        ]);
+        //
     }
 
     /**
-     * Custom security check for admin routes
+     * Return the servers index view.
      */
-    protected function checkAdminAccess()
+    public function index(): View
     {
-        if (auth()->check() && auth()->user()->id !== 1) {
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
         }
+        
+        return view('admin.servers.index');
+    }
+    
+    /**
+     * Handle server views
+     */
+    public function view($id): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return view('admin.servers.view', compact('id'));
+    }
+    
+    /**
+     * Handle other server methods
+     */
+    public function __call($method, $parameters)
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return parent::__call($method, $parameters);
     }
 }
 EOF
+
+    # 3. Modify NodesController untuk nodes access
+    cat > "$PANEL_DIR/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Exceptions\DisplayException;
+
+class NodesController extends Controller
+{
+    /**
+     * NodesController constructor.
+     */
+    public function __construct()
+    {
+        //
+    }
+
+    /**
+     * Return the nodes index view.
+     */
+    public function index(): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return view('admin.nodes.index');
+    }
+    
+    /**
+     * Handle node views
+     */
+    public function view($id): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return view('admin.nodes.view', compact('id'));
+    }
+    
+    /**
+     * Handle other node methods
+     */
+    public function __call($method, $parameters)
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return parent::__call($method, $parameters);
+    }
+}
+EOF
+
+    # 4. Modify NestsController untuk nests access
+    cat > "$PANEL_DIR/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Exceptions\DisplayException;
+
+class NestsController extends Controller
+{
+    /**
+     * NestsController constructor.
+     */
+    public function __construct()
+    {
+        //
+    }
+
+    /**
+     * Return the nests index view.
+     */
+    public function index(): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return view('admin.nests.index');
+    }
+    
+    /**
+     * Handle nest views
+     */
+    public function view($id): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return view('admin.nests.view', compact('id'));
+    }
+    
+    /**
+     * Handle other nest methods
+     */
+    public function __call($method, $parameters)
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return parent::__call($method, $parameters);
+    }
+}
+EOF
+
+    # 5. Modify LocationsController untuk locations access
+    cat > "$PANEL_DIR/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Exceptions\DisplayException;
+
+class LocationsController extends Controller
+{
+    /**
+     * LocationsController constructor.
+     */
+    public function __construct()
+    {
+        //
+    }
+
+    /**
+     * Return the locations index view.
+     */
+    public function index(): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return view('admin.locations.index');
+    }
+    
+    /**
+     * Handle location views
+     */
+    public function view($id): View
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return view('admin.locations.view', compact('id'));
+    }
+    
+    /**
+     * Handle other location methods
+     */
+    public function __call($method, $parameters)
+    {
+        // Security check - hanya admin ID 1 yang bisa akses
+        if (auth()->user()->id !== 1) {
+            throw new DisplayException('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+        }
+        
+        return parent::__call($method, $parameters);
+    }
+}
+EOF
+
+    # 6. Modify SettingsController - allow access for all admins
+    cat > "$PANEL_DIR/app/Http/Controllers/Admin/SettingsController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Pterodactyl\Http\Controllers\Controller;
+
+class SettingsController extends Controller
+{
+    /**
+     * SettingsController constructor.
+     */
+    public function __construct()
+    {
+        //
+    }
+
+    /**
+     * Return the settings index view.
+     */
+    public function index(): View
+    {
+        // Settings bisa diakses semua admin
+        return view('admin.settings.index');
+    }
+    
+    /**
+     * Handle other settings methods
+     */
+    public function __call($method, $parameters)
+    {
+        return parent::__call($method, $parameters);
+    }
+}
+EOF
+
+    # Clear view cache
+    echo -e "${YELLOW}Membersihkan cache...${NC}"
+    cd "$PANEL_DIR" && php artisan view:clear > /dev/null 2>&1
+    cd "$PANEL_DIR" && php artisan cache:clear > /dev/null 2>&1
+    
+    # Set permissions
+    chown -R www-data:www-data "$PANEL_DIR"
+    chmod -R 755 "$PANEL_DIR"
+    
+    echo -e "${GREEN}✓ Security panel berhasil diinstall!${NC}"
+    echo -e "${GREEN}✓ Hanya admin ID 1 yang bisa mengakses:${NC}"
+    echo -e "${GREEN}  - Servers, Nodes, Nests, Locations${NC}"
+    echo -e "${GREEN}✓ Settings bisa diakses semua admin${NC}"
+    echo -e "${GREEN}✓ Error message diterapkan: '$ERROR_MSG'${NC}"
+    
+    sleep 3
 }
 
-# Update routes
-update_routes() {
-    log_action "Memperbarui routes..."
-    
-    # Backup original routes
-    cp "$PANEL_PATH/routes/web.php" "$BACKUP_PATH/web.php.backup"
-    
-    # Add middleware to routes
-    if ! grep -q "AdminSecurity" "$PANEL_PATH/routes/web.php"; then
-        sed -i '1i use App\Http\Middleware\AdminSecurity;' "$PANEL_PATH/routes/web.php"
-    fi
-}
-
-# Register middleware
-register_middleware() {
-    log_action "Mendaftarkan middleware..."
-    
-    # Backup kernel
-    cp "$PANEL_PATH/app/Http/Kernel.php" "$BACKUP_PATH/Kernel.php.backup"
-    
-    # Add middleware to kernel
-    if ! grep -q "AdminSecurity" "$PANEL_PATH/app/Http/Kernel.php"; then
-        sed -i "/protected \$routeMiddleware = \[/a\        'admin.security' => \\App\\Http\\Middleware\\AdminSecurity::class," "$PANEL_PATH/app/Http/Kernel.php"
-    fi
-}
-
-# Update admin routes with middleware
-update_admin_routes() {
-    log_action "Memperbarui admin routes..."
-    
-    # This would require more complex route modifications
-    # For now, we rely on the controller modifications
-    log_warning "Pastikan routes admin sudah dilindungi oleh middleware yang sesuai"
-}
-
-# Clear cache and optimize
-clear_cache() {
-    log_action "Membersihkan cache..."
-    
-    cd "$PANEL_PATH" || exit 1
-    
-    php artisan config:cache
-    php artisan route:cache
-    php artisan view:cache
-    
-    log_action "Cache berhasil dibersihkan"
-}
-
-# Set permissions
-set_permissions() {
-    log_action "Mengatur permissions..."
-    
-    chown -R www-data:www-data "$PANEL_PATH"
-    chmod -R 755 "$PANEL_PATH"
-    chmod -R 755 "$PANEL_PATH/storage"
-    chmod -R 755 "$PANEL_PATH/bootstrap/cache"
-    
-    log_action "Permissions berhasil diatur"
-}
-
-# Install security
-install_security() {
-    echo -e "${BLUE}=== INSTALL SECURITY PANEL ===${NC}"
-    check_root
-    check_panel_exists
-    
-    log_action "Memulai instalasi security panel..."
-    
-    # Create backup
-    backup_files
-    
-    # Create security middleware
-    create_security_middleware
-    
-    # Modify controllers
-    modify_admin_controllers
-    modify_base_controller
-    
-    # Update routes and middleware
-    update_routes
-    register_middleware
-    update_admin_routes
-    
-    # Final steps
-    clear_cache
-    set_permissions
-    
-    log_action "Security panel berhasil diinstal!"
-    log_action "Hanya admin dengan ID 1 yang bisa mengakses semua fitur."
-    log_action "Admin lain akan melihat pesan error saat mencoba akses."
-}
-
-# Change error text
+# Function to change error text
 change_error_text() {
-    echo -e "${BLUE}=== GANTI TEKS ERROR ===${NC}"
+    display_header
+    echo -e "${YELLOW}[2] Mengganti teks error...${NC}"
     
-    local new_text=""
-    read -p "Masukkan teks error baru: " new_text
+    read -p "Masukkan teks error baru: " NEW_ERROR
     
-    if [[ -z "$new_text" ]]; then
-        log_error "Teks error tidak boleh kosong!"
+    if [ -z "$NEW_ERROR" ]; then
+        echo -e "${RED}Error: Teks tidak boleh kosong${NC}"
         return 1
     fi
     
-    # Update all controllers with new text
-    find "$PANEL_PATH/app/Http/Controllers/Admin" -name "*.php" -type f -exec sed -i "s/abort(403, '.*')/abort(403, '$new_text')/g" {} \;
-    
-    # Update middleware
-    sed -i "s/abort(403, '.*')/abort(403, '$new_text')/g" "$PANEL_PATH/app/Http/Middleware/AdminSecurity.php"
-    
-    clear_cache
-    
-    log_action "Teks error berhasil diganti menjadi: $new_text"
-}
-
-# Uninstall security
-uninstall_security() {
-    echo -e "${BLUE}=== UNINSTALL SECURITY PANEL ===${NC}"
-    check_root
-    
-    if [[ ! -d "$BACKUP_PATH" ]]; then
-        log_error "Backup tidak ditemukan! Tidak bisa uninstall."
-        exit 1
-    fi
-    
-    log_action "Memulai uninstall security panel..."
-    
-    # Restore backed up files
-    for backup_file in "$BACKUP_PATH"/*.backup; do
-        if [[ -f "$backup_file" ]]; then
-            filename=$(basename "$backup_file" .backup)
-            original_path="${filename//_/\/}"
-            
-            if [[ -f "$PANEL_PATH/$original_path" || -d "$PANEL_PATH/$original_path" ]]; then
-                cp -r "$backup_file" "$PANEL_PATH/$original_path"
-                log_action "Restored: $original_path"
-            fi
+    # Update error message in all controller files
+    for file in "$PANEL_DIR/app/Http/Controllers/Admin/"*Controller.php; do
+        if [ -f "$file" ]; then
+            sed -i "s/'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'/'$NEW_ERROR'/g" "$file"
         fi
     done
     
-    # Remove security middleware
-    if [[ -f "$PANEL_PATH/app/Http/Middleware/AdminSecurity.php" ]]; then
-        rm "$PANEL_PATH/app/Http/Middleware/AdminSecurity.php"
+    # Clear cache
+    cd "$PANEL_DIR" && php artisan view:clear > /dev/null 2>&1
+    cd "$PANEL_DIR" && php artisan cache:clear > /dev/null 2>&1
+    
+    echo -e "${GREEN}✓ Teks error berhasil diganti menjadi: '$NEW_ERROR'${NC}"
+    sleep 2
+}
+
+# Function to uninstall security
+uninstall_security() {
+    display_header
+    echo -e "${YELLOW}[3] Uninstall security panel...${NC}"
+    
+    if [ ! -d "$SECURITY_DIR" ]; then
+        echo -e "${RED}Error: Security panel belum diinstall${NC}"
+        sleep 2
+        return 1
     fi
     
-    # Remove middleware from kernel
-    sed -i "/'admin.security' =>.*/d" "$PANEL_PATH/app/Http/Kernel.php"
+    # Restore backup files
+    echo -e "${YELLOW}Memulihkan file original...${NC}"
     
-    clear_cache
-    set_permissions
+    if [ -f "$SECURITY_DIR/AdminController.backup" ]; then
+        cp "$SECURITY_DIR/AdminController.backup" "$PANEL_DIR/app/Http/Controllers/Admin/AdminController.php"
+    fi
     
-    log_action "Security panel berhasil diuninstall!"
-    log_warning "Backup files masih disimpan di $BACKUP_PATH untuk keamanan"
+    if [ -f "$SECURITY_DIR/ServersController.backup" ]; then
+        cp "$SECURITY_DIR/ServersController.backup" "$PANEL_DIR/app/Http/Controllers/Admin/ServersController.php"
+    fi
+    
+    if [ -f "$SECURITY_DIR/NodesController.backup" ]; then
+        cp "$SECURITY_DIR/NodesController.backup" "$PANEL_DIR/app/Http/Controllers/Admin/NodesController.php"
+    fi
+    
+    if [ -f "$SECURITY_DIR/NestsController.backup" ]; then
+        cp "$SECURITY_DIR/NestsController.backup" "$PANEL_DIR/app/Http/Controllers/Admin/NestsController.php"
+    fi
+    
+    if [ -f "$SECURITY_DIR/LocationsController.backup" ]; then
+        cp "$SECURITY_DIR/LocationsController.backup" "$PANEL_DIR/app/Http/Controllers/Admin/LocationsController.php"
+    fi
+    
+    if [ -f "$SECURITY_DIR/SettingsController.backup" ]; then
+        cp "$SECURITY_DIR/SettingsController.backup" "$PANEL_DIR/app/Http/Controllers/Admin/SettingsController.php"
+    fi
+    
+    # Clear cache
+    echo -e "${YELLOW}Membersihkan cache...${NC}"
+    cd "$PANEL_DIR" && php artisan view:clear > /dev/null 2>&1
+    cd "$PANEL_DIR" && php artisan cache:clear > /dev/null 2>&1
+    
+    # Remove security directory
+    rm -rf "$SECURITY_DIR"
+    
+    echo -e "${GREEN}✓ Security panel berhasil diuninstall!${NC}"
+    echo -e "${GREEN}✓ Semua restrictions telah dihapus${NC}"
+    
+    sleep 3
 }
 
-# Main menu
+# Function to show menu
 show_menu() {
-    echo -e "${BLUE}"
-    echo "=========================================="
-    echo "    SECURITY PANEL PTERODACTYL"
-    echo "         By @ginaabaikhati"
-    echo "=========================================="
-    echo -e "${NC}"
-    echo -e "${GREEN}1.${NC} Install Security Panel"
-    echo -e "${GREEN}2.${NC} Ganti Teks Error" 
-    echo -e "${GREEN}3.${NC} Uninstall Security Panel"
-    echo -e "${GREEN}4.${NC} Exit Security Panel"
-    echo -e "${BLUE}==========================================${NC}"
-}
-
-# Main function
-main() {
     while true; do
-        show_menu
+        display_header
+        echo -e "${GREEN}Pilihan Menu:${NC}"
+        echo -e "  ${YELLOW}[1]${NC} Install Security Panel"
+        echo -e "  ${YELLOW}[2]${NC} Ganti Teks Error" 
+        echo -e "  ${YELLOW}[3]${NC} Uninstall Security Panel"
+        echo -e "  ${YELLOW}[4]${NC} Exit Security Panel"
+        echo ""
         read -p "Pilih opsi [1-4]: " choice
         
         case $choice in
@@ -556,22 +539,24 @@ main() {
                 uninstall_security
                 ;;
             4)
-                log_action "Keluar dari Security Panel"
+                echo -e "${GREEN}Terima kasih! - By @ginaabaikhati${NC}"
                 exit 0
                 ;;
             *)
-                log_error "Pilihan tidak valid! Silakan pilih 1-4."
+                echo -e "${RED}Pilihan tidak valid!${NC}"
+                sleep 2
                 ;;
         esac
-        
-        echo
-        read -p "Tekan Enter untuk melanjutkan..."
-        clear
     done
 }
 
-# Check if script is sourced or executed directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    clear
-    main
+# Main execution
+if [ "$1" = "install" ]; then
+    install_security
+elif [ "$1" = "uninstall" ]; then
+    uninstall_security
+elif [ "$1" = "change-error" ]; then
+    change_error_text
+else
+    show_menu
 fi
