@@ -21,6 +21,7 @@ ERROR_MESSAGE="Ngapain sih? mau nyolong sc org? - By @ginaabaikhati"
 PTERODACTYL_DIR="/var/www/pterodactyl"
 CONTROLLERS_DIR="$PTERODACTYL_DIR/app/Http/Controllers"
 MIDDLEWARE_DIR="$PTERODACTYL_DIR/app/Http/Middleware"
+ROUTES_DIR="$PTERODACTYL_DIR/routes"
 
 # Function to log actions
 log_action() {
@@ -84,6 +85,7 @@ backup_files() {
     local files=(
         "$CONTROLLERS_DIR/Admin"
         "$MIDDLEWARE_DIR/AdminAuthenticate.php"
+        "$ROUTES_DIR/admin.php"
     )
     
     for file in "${files[@]}"; do
@@ -239,8 +241,8 @@ modify_controllers() {
     if [ -f "$CONTROLLERS_DIR/Admin/AdminController.php" ]; then
         cp "$CONTROLLERS_DIR/Admin/AdminController.php" "$BACKUP_DIR/AdminController.php.backup"
         
-        # Add security check to AdminController
-        sed -i '/public function __construct()/a\        $this->middleware(function ($request, $next) {\n            if (auth()->check() && auth()->user()->id !== 1) {\n                abort(403, "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati");\n            }\n            return $next($request);\n        });' "$CONTROLLERS_DIR/Admin/AdminController.php"
+        # Add security check to AdminController constructor
+        sed -i '/public function __construct()/a\        if (auth()->check() && auth()->user()->id !== 1) {\n            abort(403, "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati");\n        }' "$CONTROLLERS_DIR/Admin/AdminController.php"
         
         show_success "AdminController modified"
     fi
@@ -253,8 +255,14 @@ modify_controllers() {
         if [ -f "$controller_path" ]; then
             cp "$controller_path" "$BACKUP_DIR/${controller}.php.backup"
             
-            # Add security check at the beginning of the controller
-            sed -i '/class [a-zA-Z]*Controller extends Controller/a\    public function __construct()\n    {\n        parent::__construct();\n        if (auth()->check() && auth()->user()->id !== 1) {\n            abort(403, "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati");\n        }\n    }' "$controller_path"
+            # Check if constructor already exists
+            if grep -q "public function __construct()" "$controller_path"; then
+                # Add security check to existing constructor
+                sed -i '/public function __construct()/{n;a\        if (auth()->check() && auth()->user()->id !== 1) {\n            abort(403, "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati");\n        }' "$controller_path"
+            else
+                # Add new constructor with security check
+                sed -i "/class [a-zA-Z]*Controller extends Controller/a\    public function __construct()\n    {\n        parent::__construct();\n        if (auth()->check() && auth()->user()->id !== 1) {\n            abort(403, \"Ngapain sih? mau nyolong sc org? - By @ginaabaikhati\");\n        }\n    }" "$controller_path"
+            fi
             
             show_success "${controller} modified"
         else
@@ -263,20 +271,67 @@ modify_controllers() {
     done
 }
 
-# Function to update routes (if possible)
+# Function to update routes safely
 update_routes() {
-    local routes_file="$PTERODACTYL_DIR/routes/admin.php"
+    local routes_file="$ROUTES_DIR/admin.php"
     
     if [ -f "$routes_file" ]; then
         cp "$routes_file" "$BACKUP_DIR/admin_routes.php.backup"
         
-        # Add middleware group for security
-        sed -i '1i\<?php\n\n// Security Middleware - Admin ID 1 Only\nRoute::middleware([\"auth\", \"admin\"])->group(function () {' "$routes_file"
-        echo -e "\n}); // End Security Middleware" >> "$routes_file"
+        # Check if the file already has PHP opening tag
+        if ! head -n 1 "$routes_file" | grep -q "<?php"; then
+            show_error "Routes file doesn't start with PHP tag. Fixing..."
+            # Add PHP opening tag
+            echo "<?php" > "$routes_file.tmp"
+            cat "$BACKUP_DIR/admin_routes.php.backup" >> "$routes_file.tmp"
+            mv "$routes_file.tmp" "$routes_file"
+        fi
         
-        show_success "Routes file updated"
+        # Create a temporary file with the security wrapper
+        cat > "$routes_file.tmp" << 'EOF'
+<?php
+
+// =========================================
+// Security Wrapper - Admin ID 1 Only
+// By: @ginaabaikhati
+// =========================================
+
+use Illuminate\Support\Facades\Route;
+
+Route::group(['middleware' => ['auth', 'admin']], function () {
+EOF
+
+        # Add the original content (without opening PHP tag)
+        grep -v "<?php" "$BACKUP_DIR/admin_routes.php.backup" >> "$routes_file.tmp"
+        
+        # Close the route group
+        echo -e "\n}); // End Security Wrapper" >> "$routes_file.tmp"
+        
+        # Replace the original file
+        mv "$routes_file.tmp" "$routes_file"
+        
+        show_success "Routes file updated with security wrapper"
     else
-        show_warning "Admin routes file not found, skipping route modification"
+        show_warning "Admin routes file not found at $routes_file"
+    fi
+}
+
+# Function to create kernel modification
+modify_kernel() {
+    local kernel_file="$PTERODACTYL_DIR/app/Http/Kernel.php"
+    
+    if [ -f "$kernel_file" ]; then
+        cp "$kernel_file" "$BACKUP_DIR/Kernel.php.backup"
+        
+        # Add the custom middleware to kernel
+        if ! grep -q "AdminSecurityMiddleware" "$kernel_file"; then
+            sed -i "/protected \$routeMiddleware = \[/a\        'admin.security' => \\App\\Http\\Middleware\\AdminSecurityMiddleware::class," "$kernel_file"
+            show_success "Kernel updated with custom middleware"
+        else
+            show_warning "AdminSecurityMiddleware already exists in kernel"
+        fi
+    else
+        show_warning "Kernel file not found, skipping kernel modification"
     fi
 }
 
@@ -290,6 +345,38 @@ clear_cache() {
     show_success "Application cache cleared"
 }
 
+# Function to fix route file syntax
+fix_route_syntax() {
+    local routes_file="$ROUTES_DIR/admin.php"
+    
+    if [ -f "$routes_file" ]; then
+        # Check for syntax errors
+        if ! php -l "$routes_file" > /dev/null 2>&1; then
+            show_warning "Syntax error detected in routes file. Fixing..."
+            
+            # Restore from backup and apply safe modification
+            if [ -f "$BACKUP_DIR/admin_routes.php.backup" ]; then
+                cp "$BACKUP_DIR/admin_routes.php.backup" "$routes_file"
+                
+                # Apply safe route modification
+                update_routes
+                
+                # Verify the fix
+                if php -l "$routes_file" > /dev/null 2>&1; then
+                    show_success "Route syntax fixed successfully"
+                else
+                    show_error "Failed to fix route syntax. Restoring original..."
+                    cp "$BACKUP_DIR/admin_routes.php.backup" "$routes_file"
+                fi
+            else
+                show_error "No backup found for routes file. Cannot fix automatically."
+            fi
+        else
+            show_success "Route file syntax is valid"
+        fi
+    fi
+}
+
 # Function to install security
 install_security() {
     log_action "Starting security installation"
@@ -301,7 +388,9 @@ install_security() {
     create_custom_middleware
     modify_admin_middleware
     modify_controllers
+    modify_kernel
     update_routes
+    fix_route_syntax
     clear_cache
     
     show_success "Security panel installed successfully!"
@@ -332,7 +421,7 @@ change_error_text() {
     
     for file in "${files[@]}"; do
         if [ -f "$file" ]; then
-            sed -i "s/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/$new_error_text/g" "$file"
+            sed -i "s/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/$(echo "$new_error_text" | sed 's/\//\\\//g')/g" "$file"
             show_success "Updated: $(basename "$file")"
         fi
     done
@@ -356,48 +445,30 @@ uninstall_security() {
     # Restore backed up files
     show_warning "Restoring original files from backup..."
     
-    # Find and restore all backup files
-    find "$BACKUP_DIR" -name "*.backup" -type f | while read -r backup_file; do
-        original_name=$(basename "$backup_file" .backup)
-        original_path=""
-        
-        # Determine original path based on backup name
-        case $original_name in
-            "AdminAuthenticate.php")
-                original_path="$MIDDLEWARE_DIR/AdminAuthenticate.php"
-                ;;
-            "AdminController.php")
-                original_path="$CONTROLLERS_DIR/Admin/AdminController.php"
-                ;;
-            "ServerController.php")
-                original_path="$CONTROLLERS_DIR/Admin/ServerController.php"
-                ;;
-            "NodeController.php")
-                original_path="$CONTROLLERS_DIR/Admin/NodeController.php"
-                ;;
-            "NestController.php")
-                original_path="$CONTROLLERS_DIR/Admin/NestController.php"
-                ;;
-            "LocationController.php")
-                original_path="$CONTROLLERS_DIR/Admin/LocationController.php"
-                ;;
-            "SettingsController.php")
-                original_path="$CONTROLLERS_DIR/Admin/SettingsController.php"
-                ;;
-            "admin_routes.php")
-                original_path="$PTERODACTYL_DIR/routes/admin.php"
-                ;;
-            *)
-                # For directory backups
-                if [[ $backup_file == *"Admin-"* ]]; then
-                    original_path="$CONTROLLERS_DIR/Admin"
-                fi
-                ;;
-        esac
-        
-        if [ -n "$original_path" ] && [ -f "$backup_file" ]; then
-            cp "$backup_file" "$original_path"
-            show_success "Restored: $original_path"
+    # Restore routes file first
+    if [ -f "$BACKUP_DIR/admin_routes.php.backup" ]; then
+        cp "$BACKUP_DIR/admin_routes.php.backup" "$ROUTES_DIR/admin.php"
+        show_success "Restored routes file"
+    fi
+    
+    # Restore middleware
+    if [ -f "$BACKUP_DIR/AdminAuthenticate.php.backup" ]; then
+        cp "$BACKUP_DIR/AdminAuthenticate.php.backup" "$MIDDLEWARE_DIR/AdminAuthenticate.php"
+        show_success "Restored AdminAuthenticate middleware"
+    fi
+    
+    # Restore kernel
+    if [ -f "$BACKUP_DIR/Kernel.php.backup" ]; then
+        cp "$BACKUP_DIR/Kernel.php.backup" "$PTERODACTYL_DIR/app/Http/Kernel.php"
+        show_success "Restored Kernel"
+    fi
+    
+    # Restore controllers
+    local controllers=("AdminController" "ServerController" "NodeController" "NestController" "LocationController" "SettingsController")
+    for controller in "${controllers[@]}"; do
+        if [ -f "$BACKUP_DIR/${controller}.php.backup" ]; then
+            cp "$BACKUP_DIR/${controller}.php.backup" "$CONTROLLERS_DIR/Admin/${controller}.php"
+            show_success "Restored ${controller}"
         fi
     done
     
@@ -427,6 +498,42 @@ show_menu() {
     echo -n "Pilih opsi [1-4]: "
 }
 
+# Function to verify installation
+verify_installation() {
+    echo -e "\n${BLUE}Verifying installation...${NC}"
+    
+    # Check if middleware files exist
+    if [ -f "$MIDDLEWARE_DIR/AdminSecurityMiddleware.php" ]; then
+        show_success "Custom middleware installed"
+    else
+        show_error "Custom middleware missing"
+    fi
+    
+    # Check if routes file is syntactically correct
+    if [ -f "$ROUTES_DIR/admin.php" ]; then
+        if php -l "$ROUTES_DIR/admin.php" > /dev/null 2>&1; then
+            show_success "Routes file syntax is valid"
+        else
+            show_error "Routes file has syntax errors"
+        fi
+    fi
+    
+    # Check if controllers are modified
+    local modified_count=0
+    local controllers=("AdminController" "ServerController" "NodeController" "NestController" "LocationController" "SettingsController")
+    for controller in "${controllers[@]}"; do
+        if [ -f "$CONTROLLERS_DIR/Admin/${controller}.php" ] && grep -q "abort(403" "$CONTROLLERS_DIR/Admin/${controller}.php"; then
+            ((modified_count++))
+        fi
+    done
+    
+    if [ $modified_count -gt 0 ]; then
+        show_success "$modified_count controllers secured"
+    else
+        show_warning "No controllers modified yet"
+    fi
+}
+
 # Main script
 main() {
     # Check if security directory exists for persistence
@@ -441,6 +548,7 @@ main() {
         case $choice in
             1)
                 install_security
+                verify_installation
                 ;;
             2)
                 change_error_text
@@ -469,12 +577,16 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "${1:-}" in
         "install")
             install_security
+            verify_installation
             ;;
         "uninstall")
             uninstall_security
             ;;
         "change-text")
             change_error_text
+            ;;
+        "verify")
+            verify_installation
             ;;
         *)
             main
