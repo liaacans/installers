@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Security Panel Pterodactyl - By @ginaabaikhati
-# Script untuk mengamankan panel Pterodactyl
+# security.sh - Security Panel Pterodactyl
+# By @ginaabaikhati
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,496 +15,601 @@ PANEL_PATH="/var/www/pterodactyl"
 BACKUP_PATH="/root/pterodactyl_backup"
 ERROR_MESSAGE="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
 
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}Error: Script harus dijalankan sebagai root${NC}"
+   exit 1
+fi
+
 # Function to display header
 display_header() {
     clear
     echo -e "${BLUE}"
-    echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║               PTERODACTYL SECURITY PANEL                ║"
-    echo "║                  By @ginaabaikhati                      ║"
-    echo "╚══════════════════════════════════════════════════════════╝"
+    echo "================================================"
+    echo "    Pterodactyl Security Panel Installer"
+    echo "    By @ginaabaikhati"
+    echo "================================================"
     echo -e "${NC}"
-}
-
-# Function to check if panel directory exists
-check_panel_exists() {
-    if [ ! -d "$PANEL_PATH" ]; then
-        echo -e "${RED}Error: Directory Pterodactyl tidak ditemukan di $PANEL_PATH${NC}"
-        echo -e "${YELLOW}Silakan sesuaikan PANEL_PATH dalam script sesuai instalasi Anda${NC}"
-        exit 1
-    fi
 }
 
 # Function to create backup
 create_backup() {
-    echo -e "${YELLOW}Membuat backup panel...${NC}"
-    
-    if [ -d "$BACKUP_PATH" ]; then
-        rm -rf "$BACKUP_PATH"
-    fi
-    
-    mkdir -p "$BACKUP_PATH"
+    echo -e "${YELLOW}Membuat backup file...${NC}"
+    mkdir -p $BACKUP_PATH
     
     # Backup important files
-    cp -r "$PANEL_PATH/app/Http" "$BACKUP_PATH/" 2>/dev/null || true
-    cp -r "$PANEL_PATH/app/Models" "$BACKUP_PATH/" 2>/dev/null || true
-    cp -r "$PANEL_PATH/routes" "$BACKUP_PATH/" 2>/dev/null || true
-    cp -r "$PANEL_PATH/app/Providers" "$BACKUP_PATH/" 2>/dev/null || true
+    cp $PANEL_PATH/app/Http/Controllers/Admin/*.php $BACKUP_PATH/ 2>/dev/null
+    cp $PANEL_PATH/app/Http/Controllers/Api/Client/Servers/*.php $BACKUP_PATH/ 2>/dev/null
+    cp $PANEL_PATH/app/Http/Middleware/*.php $BACKUP_PATH/ 2>/dev/null
+    cp $PANEL_PATH/routes/api.php $BACKUP_PATH/ 2>/dev/null
+    cp $PANEL_PATH/routes/admin.php $BACKUP_PATH/ 2>/dev/null
     
-    echo -e "${GREEN}Backup berhasil dibuat di $BACKUP_PATH${NC}"
+    echo -e "${GREEN}Backup berhasil dibuat di: $BACKUP_PATH${NC}"
 }
 
 # Function to restore backup
 restore_backup() {
-    echo -e "${YELLOW}Memulihkan panel dari backup...${NC}"
+    echo -e "${YELLOW}Memulihkan dari backup...${NC}"
     
     if [ ! -d "$BACKUP_PATH" ]; then
-        echo -e "${RED}Error: Backup tidak ditemukan di $BACKUP_PATH${NC}"
+        echo -e "${RED}Backup tidak ditemukan!${NC}"
         return 1
     fi
     
     # Restore files
-    cp -r "$BACKUP_PATH/Http" "$PANEL_PATH/app/" 2>/dev/null || true
-    cp -r "$BACKUP_PATH/Models" "$PANEL_PATH/app/" 2>/dev/null || true
-    cp -r "$BACKUP_PATH/routes" "$PANEL_PATH/" 2>/dev/null || true
-    cp -r "$BACKUP_PATH/Providers" "$PANEL_PATH/app/" 2>/dev/null || true
+    cp $BACKUP_PATH/*.php $PANEL_PATH/app/Http/Controllers/Admin/ 2>/dev/null
+    cp $BACKUP_PATH/*.php $PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ 2>/dev/null
+    cp $BACKUP_PATH/*.php $PANEL_PATH/app/Http/Middleware/ 2>/dev/null
+    cp $BACKUP_PATH/api.php $PANEL_PATH/routes/ 2>/dev/null
+    cp $BACKUP_PATH/admin.php $PANEL_PATH/routes/ 2>/dev/null
     
-    # Run panel commands
-    cd "$PANEL_PATH"
-    php artisan cache:clear
-    php artisan view:clear
+    # Clear cache
+    cd $PANEL_PATH && php artisan cache:clear && php artisan view:clear
     
-    echo -e "${GREEN}Panel berhasil dipulihkan dari backup${NC}"
+    echo -e "${GREEN}Restore berhasil!${NC}"
+}
+
+# Function to check panel path
+check_panel_path() {
+    if [ ! -d "$PANEL_PATH" ]; then
+        echo -e "${RED}Directory Pterodactyl tidak ditemukan di: $PANEL_PATH${NC}"
+        echo -e "${YELLOW}Silakan edit PANEL_PATH dalam script sesuai instalasi Anda${NC}"
+        exit 1
+    fi
 }
 
 # Function to install security
 install_security() {
-    check_panel_exists
+    display_header
+    echo -e "${YELLOW}Memulai instalasi security panel...${NC}"
+    
+    check_panel_path
     create_backup
     
-    echo -e "${YELLOW}Menginstal security panel...${NC}"
-    
-    cd "$PANEL_PATH"
-    
-    # Backup original files first
-    cp app/Http/Controllers/Admin/AdminController.php app/Http/Controllers/Admin/AdminController.php.backup 2>/dev/null || true
-    cp app/Http/Controllers/Admin/NodesController.php app/Http/Controllers/Admin/NodesController.php.backup 2>/dev/null || true
-    cp app/Http/Controllers/Admin/LocationsController.php app/Http/Controllers/Admin/LocationsController.php.backup 2>/dev/null || true
-    cp app/Http/Controllers/Admin/NestsController.php app/Http/Controllers/Admin/NestsController.php.backup 2>/dev/null || true
-    cp app/Http/Controllers/Admin/UsersController.php app/Http/Controllers/Admin/UsersController.php.backup 2>/dev/null || true
-    cp app/Http/Controllers/Admin/ServersController.php app/Http/Controllers/Admin/ServersController.php.backup 2>/dev/null || true
-    cp app/Http/Middleware/AdminAuthenticate.php app/Http/Middleware/AdminAuthenticate.php.backup 2>/dev/null || true
-    
-    # Create security middleware
-    cat > app/Http/Middleware/SecurityCheck.php << 'EOF'
+    # Create custom middleware
+    cat > $PANEL_PATH/app/Http/Middleware/AdminSecurity.php << 'EOF'
 <?php
 
 namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 
-class SecurityCheck
+class AdminSecurity
 {
-    public function handle(Request $request, Closure $next, $type = null): Response
+    public function handle(Request $request, Closure $next)
     {
-        $user = $request->user();
-        
-        if (!$user || $user->id !== 1) {
-            $restrictedRoutes = [
-                'admin.settings', 'admin.nodes', 'admin.locations', 
-                'admin.nests', 'admin.users', 'admin.servers'
-            ];
-            
-            $currentRoute = $request->route()->getName();
-            
-            if (in_array($currentRoute, $restrictedRoutes) || 
-                str_contains($request->path(), 'api/application') ||
-                $request->isMethod('POST') || 
-                $request->isMethod('PUT') || 
-                $request->isMethod('DELETE') ||
-                $request->isMethod('PATCH')) {
-                
-                if ($user && $user->id !== 1) {
-                    abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-                }
+        // Check if user is authenticated and has admin role
+        if (!$request->user() || !$request->user()->root_admin) {
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 500);
             }
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
+
+        // Check if user ID is 1
+        if ($request->user()->id !== 1) {
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 500);
+            }
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
         return $next($request);
     }
 }
 EOF
 
-    # Modify AdminController
-    cat > app/Http/Controllers/Admin/AdminController.php << 'EOF'
+    # Modify Admin Controller
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/AdminController.php << 'EOF'
 <?php
 
 namespace App\Http\Controllers\Admin;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Services\Users\UserCreationService;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Prologue\Alerts\AlertsMessageBag;
 
 class AdminController extends Controller
 {
+    public function __construct(
+        private AlertsMessageBag $alert,
+        private UserCreationService $creationService
+    ) {}
+
     public function index(): View
     {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        return view('admin.index');
+
+        return view('admin.index', [
+            'users' => User::all(),
+        ]);
     }
 
-    public function settings(Request $request): View
+    public function settings(): View
     {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
+
         return view('admin.settings');
     }
-}
-EOF
 
-    # Modify NodesController
-    cat > app/Http/Controllers/Admin/NodesController.php << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\View\View;
-
-class NodesController extends Controller
-{
-    public function index(): View
+    public function nodes(): View
     {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
+
         return view('admin.nodes.index');
     }
 
-    public function create(): View
+    public function locations(): View
     {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        return view('admin.nodes.new');
-    }
 
-    public function view(string $id): View
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        return view('admin.nodes.view', compact('id'));
-    }
-
-    public function update(string $id): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        // Original update logic would go here
-        return redirect()->route('admin.nodes');
-    }
-
-    public function delete(string $id): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        // Original delete logic would go here
-        return redirect()->route('admin.nodes');
-    }
-}
-EOF
-
-    # Modify LocationsController
-    cat > app/Http/Controllers/Admin/LocationsController.php << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\View\View;
-
-class LocationsController extends Controller
-{
-    public function index(): View
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
         return view('admin.locations.index');
     }
 
-    public function create(): View
+    public function nests(): View
     {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        return view('admin.locations.new');
-    }
 
-    public function update(string $id): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        // Original update logic would go here
-        return redirect()->route('admin.locations');
-    }
-
-    public function delete(string $id): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        // Original delete logic would go here
-        return redirect()->route('admin.locations');
-    }
-}
-EOF
-
-    # Modify NestsController
-    cat > app/Http/Controllers/Admin/NestsController.php << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\View\View;
-
-class NestsController extends Controller
-{
-    public function index(): View
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
         return view('admin.nests.index');
     }
 
-    public function view(string $id): View
+    public function destroyUser(Request $request, User $user): RedirectResponse
     {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Only user ID 1 can delete users
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        return view('admin.nests.view', compact('id'));
-    }
 
-    public function update(string $id): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Prevent deletion of user ID 1
+        if ($user->id === 1) {
+            $this->alert->danger('Cannot delete the primary administrator.')->flash();
+            return redirect()->route('admin.users');
         }
-        
-        // Original update logic would go here
-        return redirect()->route('admin.nests');
-    }
 
-    public function delete(string $id): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        // Original delete logic would go here
-        return redirect()->route('admin.nests');
-    }
-}
-EOF
+        $user->delete();
 
-    # Modify UsersController
-    cat > app/Http/Controllers/Admin/UsersController.php << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\View\View;
-
-class UsersController extends Controller
-{
-    public function index(): View
-    {
-        return view('admin.users.index');
-    }
-
-    public function view(string $id): View
-    {
-        $user = auth()->user();
-        $targetUser = \App\Models\User::find($id);
-        
-        if ($user->id !== 1 && $user->id !== $targetUser->id) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        return view('admin.users.view', compact('id'));
-    }
-
-    public function update(string $id): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        if ($user->id !== 1 && $user->id !== (int)$id) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        // Original update logic would go here
+        $this->alert->success('User was deleted successfully.')->flash();
         return redirect()->route('admin.users');
     }
 
-    public function delete(string $id): RedirectResponse
+    public function updateUser(Request $request, User $user): RedirectResponse
     {
-        $user = auth()->user();
-        
-        if ($user->id !== 1) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+        // Only user ID 1 can update users
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        // Original delete logic would go here
+
+        // Prevent modification of user ID 1 by other users
+        if ($user->id === 1 && auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $data = $request->validate([
+            'email' => 'required|email',
+            'username' => 'required|string|max:255',
+            'name_first' => 'required|string|max:255',
+            'name_last' => 'required|string|max:255',
+            'root_admin' => 'sometimes|boolean',
+        ]);
+
+        $user->update($data);
+
+        $this->alert->success('User was updated successfully.')->flash();
         return redirect()->route('admin.users');
     }
 }
 EOF
 
-    # Modify ServersController
-    cat > app/Http/Controllers/Admin/ServersController.php << 'EOF'
+    # Modify Node Controller
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/NodeController.php << 'EOF'
 <?php
 
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Node;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Prologue\Alerts\AlertsMessageBag;
 
-class ServersController extends Controller
+class NodeController extends Controller
 {
+    public function __construct(private AlertsMessageBag $alert) {}
+
     public function index(): View
     {
-        return view('admin.servers.index');
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.nodes.index', [
+            'nodes' => Node::all(),
+        ]);
     }
 
-    public function view(string $id): View
+    public function create(): View
     {
-        $user = auth()->user();
-        $server = \App\Models\Server::find($id);
-        
-        if (!$server) {
-            abort(404);
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        if ($user->id !== 1 && $user->id !== $server->owner_id) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
-        }
-        
-        return view('admin.servers.view', compact('id'));
+
+        return view('admin.nodes.create');
     }
 
-    public function delete(string $id): RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
-        $user = auth()->user();
-        $server = \App\Models\Server::find($id);
-        
-        if (!$server) {
-            abort(404);
+        // Only user ID 1 can create nodes
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        if ($user->id !== 1 && $user->id !== $server->owner_id) {
-            abort(500, "Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati");
+
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'location_id' => 'required|exists:locations,id',
+            'fqdn' => 'required|string|max:255',
+            'scheme' => 'required|in:http,https',
+            'memory' => 'required|numeric',
+            'memory_overallocate' => 'required|numeric',
+            'disk' => 'required|numeric',
+            'disk_overallocate' => 'required|numeric',
+        ]);
+
+        Node::create($data);
+
+        $this->alert->success('Node was created successfully.')->flash();
+        return redirect()->route('admin.nodes');
+    }
+
+    public function edit(Node $node): View
+    {
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        // Original delete logic would go here
-        return redirect()->route('admin.servers');
+
+        return view('admin.nodes.edit', compact('node'));
+    }
+
+    public function update(Request $request, Node $node): RedirectResponse
+    {
+        // Only user ID 1 can update nodes
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'location_id' => 'required|exists:locations,id',
+            'fqdn' => 'required|string|max:255',
+            'scheme' => 'required|in:http,https',
+            'memory' => 'required|numeric',
+            'memory_overallocate' => 'required|numeric',
+            'disk' => 'required|numeric',
+            'disk_overallocate' => 'required|numeric',
+        ]);
+
+        $node->update($data);
+
+        $this->alert->success('Node was updated successfully.')->flash();
+        return redirect()->route('admin.nodes');
+    }
+
+    public function destroy(Node $node): RedirectResponse
+    {
+        // Only user ID 1 can delete nodes
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $node->delete();
+
+        $this->alert->success('Node was deleted successfully.')->flash();
+        return redirect()->route('admin.nodes');
     }
 }
 EOF
 
-    # Update Kernel to include security middleware
-    if ! grep -q "SecurityCheck" app/Http/Kernel.php; then
-        sed -i "/protected \$middlewareGroups = \[/a \
-        'security' => [\\\n\
-            \App\Http\Middleware\SecurityCheck::class,\\\n\
-        ]," app/Http/Kernel.php
-    fi
+    # Modify Location Controller
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/LocationController.php << 'EOF'
+<?php
 
-    # Update web routes to use security middleware
-    if [ -f routes/web.php ]; then
-        cp routes/web.php routes/web.php.backup
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Location;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Prologue\Alerts\AlertsMessageBag;
+
+class LocationController extends Controller
+{
+    public function __construct(private AlertsMessageBag $alert) {}
+
+    public function index(): View
+    {
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.locations.index', [
+            'locations' => Location::all(),
+        ]);
+    }
+
+    public function create(): View
+    {
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.locations.create');
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        // Only user ID 1 can create locations
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $data = $request->validate([
+            'short' => 'required|string|max:255',
+            'long' => 'required|string|max:255',
+        ]);
+
+        Location::create($data);
+
+        $this->alert->success('Location was created successfully.')->flash();
+        return redirect()->route('admin.locations');
+    }
+
+    public function edit(Location $location): View
+    {
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.locations.edit', compact('location'));
+    }
+
+    public function update(Request $request, Location $location): RedirectResponse
+    {
+        // Only user ID 1 can update locations
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $data = $request->validate([
+            'short' => 'required|string|max:255',
+            'long' => 'required|string|max:255',
+        ]);
+
+        $location->update($data);
+
+        $this->alert->success('Location was updated successfully.')->flash();
+        return redirect()->route('admin.locations');
+    }
+
+    public function destroy(Location $location): RedirectResponse
+    {
+        // Only user ID 1 can delete locations
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $location->delete();
+
+        $this->alert->success('Location was deleted successfully.')->flash();
+        return redirect()->route('admin.locations');
+    }
+}
+EOF
+
+    # Modify Nest Controller
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/NestController.php << 'EOF'
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Nest;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Prologue\Alerts\AlertsMessageBag;
+
+class NestController extends Controller
+{
+    public function __construct(private AlertsMessageBag $alert) {}
+
+    public function index(): View
+    {
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.nests.index', [
+            'nests' => Nest::all(),
+        ]);
+    }
+
+    public function edit(Nest $nest): View
+    {
+        // Only user ID 1 can access
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.nests.edit', compact('nest'));
+    }
+
+    public function update(Request $request, Nest $nest): RedirectResponse
+    {
+        // Only user ID 1 can update nests
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'sometimes|string|nullable',
+        ]);
+
+        $nest->update($data);
+
+        $this->alert->success('Nest was updated successfully.')->flash();
+        return redirect()->route('admin.nests');
+    }
+
+    public function destroy(Nest $nest): RedirectResponse
+    {
+        // Only user ID 1 can delete nests
+        if (auth()->user()->id !== 1) {
+            abort(500, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $nest->delete();
+
+        $this->alert->success('Nest was deleted successfully.')->flash();
+        return redirect()->route('admin.nests');
+    }
+}
+EOF
+
+    # Modify Server Controller for security
+    cat > $PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php << 'EOF'
+<?php
+
+namespace App\Http\Controllers\Api\Client\Servers;
+
+use App\Http\Controllers\Controller;
+use App\Models\Server;
+use Illuminate\Http\Request;
+
+class ServerController extends Controller
+{
+    public function index(Request $request)
+    {
+        // Only allow users to see their own servers
+        $servers = $request->user()->servers;
         
-        # Add security middleware to admin routes
-        sed -i "s/Route::middleware('\''admin'\'')/Route::middleware(['admin', 'security'])/g" routes/web.php
-    fi
+        return response()->json($servers);
+    }
+
+    public function view(Request $request, Server $server)
+    {
+        // Check if user owns this server
+        if ($request->user()->id !== $server->owner_id) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 500);
+        }
+
+        return response()->json($server);
+    }
+
+    public function delete(Request $request, Server $server)
+    {
+        // Check if user owns this server
+        if ($request->user()->id !== $server->owner_id) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 500);
+        }
+
+        // Prevent deletion if not owner
+        $server->delete();
+
+        return response()->json(['success' => true]);
+    }
+}
+EOF
+
+    # Update routes to use security middleware
+    cat > $PANEL_PATH/routes/admin.php << 'EOF'
+<?php
+
+use App\Http\Middleware\AdminSecurity;
+use Illuminate\Support\Facades\Route;
+
+Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => ['auth', AdminSecurity::class]], function () {
+    Route::get('/', 'AdminController@index')->name('admin.index');
+    Route::get('/settings', 'AdminController@settings')->name('admin.settings');
+    
+    // Nodes
+    Route::resource('nodes', 'NodeController');
+    
+    // Locations
+    Route::resource('locations', 'LocationController');
+    
+    // Nests
+    Route::resource('nests', 'NestController');
+    
+    // Users
+    Route::resource('users', 'UserController');
+});
+
+// Public admin routes (without security middleware)
+Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => 'auth'], function () {
+    // Add any public admin routes here if needed
+});
+EOF
 
     # Clear cache
-    php artisan cache:clear
-    php artisan view:clear
+    echo -e "${YELLOW}Membersihkan cache...${NC}"
+    cd $PANEL_PATH && php artisan cache:clear && php artisan view:clear
 
-    echo -e "${GREEN}Security panel berhasil diinstal!${NC}"
-    echo -e "${YELLOW}Hanya user dengan ID 1 yang dapat mengakses:${NC}"
-    echo -e "${YELLOW}- Panel Settings${NC}"
-    echo -e "${YELLOW}- Nodes Management${NC}"
-    echo -e "${YELLOW}- Locations Management${NC}"
-    echo -e "${YELLOW}- Nests Management${NC}"
-    echo -e "${YELLOW}- Edit/Delete users lain${NC}"
-    echo -e "${YELLOW}- File manager dan operasi berbahaya lainnya${NC}"
+    echo -e "${GREEN}Instalasi security panel berhasil!${NC}"
+    echo -e "${YELLOW}Note: Hanya user dengan ID 1 yang dapat mengakses settings, nodes, locations, dan nests${NC}"
 }
 
 # Function to change error message
 change_error_message() {
-    check_panel_exists
-    
+    display_header
     echo -e "${YELLOW}Mengubah pesan error...${NC}"
     
     read -p "Masukkan pesan error baru: " new_message
@@ -514,57 +619,46 @@ change_error_message() {
         return 1
     fi
     
-    # Update error message in all controller files
-    find "$PANEL_PATH/app/Http/Controllers/Admin" -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_message}/g" {} \;
+    ERROR_MESSAGE="$new_message"
     
-    # Update security middleware
-    if [ -f "$PANEL_PATH/app/Http/Middleware/SecurityCheck.php" ]; then
-        sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_message}/g" "$PANEL_PATH/app/Http/Middleware/SecurityCheck.php"
-    fi
+    # Update all PHP files with new error message
+    find $PANEL_PATH/app/Http/Controllers/Admin -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_message//\//\\/}/g" {} \;
+    find $PANEL_PATH/app/Http/Controllers/Api/Client/Servers -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_message//\//\\/}/g" {} \;
+    find $PANEL_PATH/app/Http/Middleware -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_message//\//\\/}/g" {} \;
     
     # Clear cache
-    cd "$PANEL_PATH"
-    php artisan cache:clear
-    php artisan view:clear
+    cd $PANEL_PATH && php artisan cache:clear && php artisan view:clear
     
     echo -e "${GREEN}Pesan error berhasil diubah!${NC}"
 }
 
 # Function to uninstall security
 uninstall_security() {
-    check_panel_exists
-    
-    echo -e "${YELLOW}Menghapus security panel...${NC}"
+    display_header
+    echo -e "${YELLOW}Memulai uninstall security panel...${NC}"
     
     restore_backup
     
-    # Remove security middleware file
-    rm -f "$PANEL_PATH/app/Http/Middleware/SecurityCheck.php"
-    
-    # Remove backup files
-    find "$PANEL_PATH/app/Http/Controllers/Admin" -name "*.backup" -type f -delete
-    rm -f "$PANEL_PATH/routes/web.php.backup"
+    # Remove custom middleware
+    rm -f $PANEL_PATH/app/Http/Middleware/AdminSecurity.php
     
     # Clear cache
-    cd "$PANEL_PATH"
-    php artisan cache:clear
-    php artisan view:clear
+    cd $PANEL_PATH && php artisan cache:clear && php artisan view:clear
     
-    echo -e "${GREEN}Security panel berhasil diuninstal!${NC}"
-    echo -e "${YELLOW}Panel telah dikembalikan ke keadaan semula${NC}"
+    echo -e "${GREEN}Uninstall security panel berhasil!${NC}"
 }
 
 # Main menu
 main_menu() {
     while true; do
         display_header
-        echo -e "${GREEN}Pilih opsi:${NC}"
+        echo -e "${GREEN}Pilihan Menu:${NC}"
         echo -e "1. Install Security Panel"
-        echo -e "2. Ubah Teks Error" 
+        echo -e "2. Ubah Teks Error"
         echo -e "3. Uninstall Security Panel"
         echo -e "4. Exit"
-        echo
-        read -p "Masukkan pilihan [1-4]: " choice
+        echo ""
+        read -p "Pilih opsi [1-4]: " choice
         
         case $choice in
             1)
@@ -577,7 +671,7 @@ main_menu() {
                 uninstall_security
                 ;;
             4)
-                echo -e "${GREEN}Terima kasih! By @ginaabaikhati${NC}"
+                echo -e "${GREEN}Keluar...${NC}"
                 exit 0
                 ;;
             *)
@@ -585,17 +679,13 @@ main_menu() {
                 ;;
         esac
         
-        echo
+        echo ""
         read -p "Tekan Enter untuk melanjutkan..."
     done
 }
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}Script harus dijalankan sebagai root!${NC}"
-    echo "Gunakan: sudo ./security.sh"
-    exit 1
-fi
+# Check if panel path exists
+check_panel_path
 
 # Run main menu
 main_menu
