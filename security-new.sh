@@ -1,134 +1,98 @@
 #!/bin/bash
 
-# Security Panel Pterodactyl - By @ginaabaikhati
-# Script ini hanya boleh dijalankan di server Pterodactyl yang sah
+# security.sh - Security Panel Pterodactyl
+# By @ginaabaikhati
 
-# Variabel global
-PANEL_PATH="/var/www/pterodactyl"
-BACKUP_PATH="/root/pterodactyl_backup"
-ERROR_MESSAGE="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
-ADMIN_ID="1"
-
-# Warna untuk output
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Fungsi untuk menampilkan header
-show_header() {
-    clear
-    echo -e "${BLUE}"
-    echo "╔════════════════════════════════════════════════╗"
-    echo "║           SECURITY PANEL PTERODACTYL           ║"
-    echo "║              By @ginaabaikhati                 ║"
-    echo "╚════════════════════════════════════════════════╝"
-    echo -e "${NC}"
-}
+# Security message
+SECURITY_MSG="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
 
-# Fungsi untuk memeriksa apakah ini server Pterodactyl yang valid
-check_pterodactyl_environment() {
-    echo -e "${YELLOW}[INFO] Memeriksa lingkungan Pterodactyl...${NC}"
+# Check if running on correct VPS
+CHECK_VPS() {
+    echo -e "${YELLOW}Memeriksa sistem...${NC}"
+    sleep 2
     
-    # Cek apakah directory panel ada
-    if [ ! -d "$PANEL_PATH" ]; then
-        echo -e "${RED}[ERROR] Directory Pterodactyl tidak ditemukan di $PANEL_PATH${NC}"
-        echo -e "${RED}[ERROR] Script ini hanya bisa dijalankan di server Pterodactyl${NC}"
+    # Check if Pterodactyl is installed
+    if [ ! -f "/var/www/pterodactyl/app/Http/Controllers/Controller.php" ] && [ ! -f "/var/www/pterodactyl/app/Models/User.php" ]; then
+        echo -e "${RED}ERROR: Pterodactyl tidak terdeteksi di sistem ini!${NC}"
+        echo -e "${RED}Script hanya bisa dijalankan di VPS yang sudah terinstall Pterodactyl.${NC}"
         exit 1
     fi
     
-    # Cek apakah file .env ada
-    if [ ! -f "$PANEL_PATH/.env" ]; then
-        echo -e "${RED}[ERROR] File .env tidak ditemukan${NC}"
-        echo -e "${RED}[ERROR] Pastikan ini adalah server Pterodactyl yang valid${NC}"
+    # Check if running as root
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}ERROR: Script harus dijalankan sebagai root!${NC}"
         exit 1
     fi
+}
+
+# Backup original files
+BACKUP_FILES() {
+    echo -e "${YELLOW}Membuat backup file original...${NC}"
     
-    # Cek apakah artisan ada
-    if [ ! -f "$PANEL_PATH/artisan" ]; then
-        echo -e "${RED}[ERROR] File artisan tidak ditemukan${NC}"
-        echo -e "${RED}[ERROR] Pastikan ini adalah server Pterodactyl yang valid${NC}"
-        exit 1
+    # Backup important files
+    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Api/Client/Servers/ServerController.php" ]; then
+        cp "/var/www/pterodactyl/app/Http/Controllers/Api/Client/Servers/ServerController.php" "/var/www/pterodactyl/app/Http/Controllers/Api/Client/Servers/ServerController.php.backup"
     fi
     
-    echo -e "${GREEN}[SUCCESS] Lingkungan Pterodactyl terdeteksi${NC}"
+    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin" ]; then
+        cp -r "/var/www/pterodactyl/app/Http/Controllers/Admin" "/var/www/pterodactyl/app/Http/Controllers/Admin.backup"
+    fi
+    
+    if [ -f "/var/www/pterodactyl/app/Models/User.php" ]; then
+        cp "/var/www/pterodactyl/app/Models/User.php" "/var/www/pterodactyl/app/Models/User.php.backup"
+    fi
+    
+    echo -e "${GREEN}Backup berhasil dibuat!${NC}"
 }
 
-# Fungsi untuk membuat backup
-create_backup() {
-    echo -e "${YELLOW}[INFO] Membuat backup file yang akan dimodifikasi...${NC}"
+# Install security
+INSTALL_SECURITY() {
+    echo -e "${YELLOW}Menginstall Security Panel Pterodactyl...${NC}"
     
-    mkdir -p $BACKUP_PATH
-    
-    # Backup file yang akan dimodifikasi
-    cp $PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php $BACKUP_PATH/ 2>/dev/null
-    cp $PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php $BACKUP_PATH/ 2>/dev/null
-    cp $PANEL_PATH/app/Http/Controllers/Admin/*.php $BACKUP_PATH/ 2>/dev/null
-    cp $PANEL_PATH/app/Http/Controllers/Controller.php $BACKUP_PATH/ 2>/dev/null
-    
-    echo -e "${GREEN}[SUCCESS] Backup berhasil dibuat di $BACKUP_PATH${NC}"
-}
-
-# Fungsi untuk install security
-install_security() {
-    show_header
-    echo -e "${YELLOW}[INFO] Memulai instalasi Security Panel...${NC}"
-    
-    check_pterodactyl_environment
-    create_backup
-    
-    # 1. Modifikasi AdminAuthenticate Middleware
-    echo -e "${YELLOW}[INFO] Memodifikasi AdminAuthenticate Middleware...${NC}"
-    
-    cat > $PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php << 'EOF'
+    # Create security middleware
+    cat > /var/www/pterodactyl/app/Http/Middleware/SecurityCheck.php << 'EOF'
 <?php
 
-namespace App\Http\Middleware;
+namespace Pterodactyl\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Pterodactyl\Models\User;
 
-class AdminAuthenticate
+class SecurityCheck
 {
     public function handle(Request $request, Closure $next)
     {
-        $user = Auth::user();
+        $user = $request->user();
         
-        // ID 1 selalu diizinkan
-        if ($user && $user->id === 1) {
-            return $next($request);
-        }
-        
-        // Cek akses ke routes yang dibatasi
-        $routeName = $request->route()->getName();
-        $restrictedRoutes = [
-            'admin.settings', 'admin.settings.*',
-            'admin.nodes', 'admin.nodes.*', 
-            'admin.locations', 'admin.locations.*',
-            'admin.nests', 'admin.nests.*',
-            'admin.users', 'admin.users.*',
-            'admin.servers', 'admin.servers.*',
-            'admin.server.view', 'admin.server.view.*',
-            'api.client.servers.delete',
-            'api.client.servers.update',
-            'api.admin.*'
-        ];
-        
-        $isRestricted = false;
-        foreach ($restrictedRoutes as $route) {
-            if (str_is($route, $routeName)) {
-                $isRestricted = true;
-                break;
+        // Block all admin actions except for user ID 1
+        if ($user && $user->id !== 1) {
+            $path = $request->path();
+            
+            // Check for sensitive actions
+            $sensitivePaths = [
+                'admin/nodes', 'admin/locations', 'admin/nests', 
+                'admin/settings', 'admin/users', 'api/application'
+            ];
+            
+            $sensitiveActions = ['store', 'update', 'destroy', 'delete'];
+            
+            foreach ($sensitivePaths as $sensitivePath) {
+                if (str_contains($path, $sensitivePath)) {
+                    foreach ($sensitiveActions as $action) {
+                        if (str_contains($path, $action) || $request->isMethod('post') || $request->isMethod('put') || $request->isMethod('delete')) {
+                            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+                        }
+                    }
+                }
             }
-        }
-        
-        if ($isRestricted && (!$user || $user->id !== 1)) {
-            if ($request->expectsJson()) {
-                return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
-            }
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
         
         return $next($request);
@@ -136,382 +100,265 @@ class AdminAuthenticate
 }
 EOF
 
-    # 2. Modifikasi Controller Base
-    echo -e "${YELLOW}[INFO] Memodifikasi Base Controller...${NC}"
-    
-    cat > $PANEL_PATH/app/Http/Controllers/Controller.php << 'EOF'
-<?php
-
-namespace App\Http\Controllers;
-
-use Illuminate\Foundation\Bus\DispatchesJobs;
-use Illuminate\Routing\Controller as BaseController;
-use Illuminate\Foundation\Validation\ValidatesRequests;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Support\Facades\Auth;
-
-class Controller extends BaseController
-{
-    use AuthorizesRequests, DispatchesJobs, ValidatesRequests;
-    
-    protected function checkAdminAccess()
-    {
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-    
-    protected function checkUserAccess($server)
-    {
-        $user = Auth::user();
-        if (!$user) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
+    # Modify User model to add security check
+    if [ -f "/var/www/pterodactyl/app/Models/User.php" ]; then
+        # Backup original
+        cp "/var/www/pterodactyl/app/Models/User.php" "/var/www/pterodactyl/app/Models/User.php.original"
         
-        // User hanya bisa mengakses server sendiri kecuali ID 1
-        if ($user->id !== 1 && $server->user_id !== $user->id) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
+        # Add security method to User model
+        sed -i '/class User extends.*/a \
+\    \
+\    public function isSuperAdmin() \
+\    { \
+\        return $this->id === 1; \
+\    }' "/var/www/pterodactyl/app/Models/User.php"
+    fi
+
+    # Modify Admin Controller files to add security
+    MODIFY_ADMIN_CONTROLLERS
+
+    # Update middleware in Kernel
+    if [ -f "/var/www/pterodactyl/app/Http/Kernel.php" ]; then
+        # Check if middleware already exists
+        if ! grep -q "SecurityCheck" "/var/www/pterodactyl/app/Http/Kernel.php"; then
+            sed -i "/protected \$routeMiddleware = \[/a \
+        'security' => \\\Pterodactyl\\Http\\Middleware\\SecurityCheck::class," "/var/www/pterodactyl/app/Http/Kernel.php"
+        fi
+    fi
+
+    # Apply security to routes
+    APPLY_ROUTE_SECURITY
+
+    echo -e "${GREEN}Security Panel berhasil diinstall!${NC}"
+    echo -e "${YELLOW}Hanya user dengan ID 1 yang bisa mengubah settings, nodes, locations, nests, dan users.${NC}"
 }
-EOF
 
-    # 3. Modifikasi Server Controller untuk API Client
-    echo -e "${YELLOW}[INFO] Memodifikasi Server Controller...${NC}"
+# Modify admin controllers
+MODIFY_ADMIN_CONTROLLERS() {
+    echo -e "${YELLOW}Memodifikasi controller admin...${NC}"
     
-    cat > $PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php << 'EOF'
+    # NodeController security
+    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php" ]; then
+        sed -i '/public function __construct(/a \
+\        $this->middleware(\"security\");' "/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php"
+    fi
+    
+    # LocationController security  
+    if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php" ]; then
+        # Fix the missing Controller class issue
+        if grep -q "Class.*Controller.*not found" "/var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php" 2>/dev/null; then
+            cat > "/var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
 <?php
 
-namespace App\Http\Controllers\Api\Client\Servers;
+namespace Pterodactyl\Http\Controllers\Admin;
 
-use App\Http\Controllers\Controller;
-use App\Models\Server;
-use App\Repositories\Proxmox\Server\ProxmoxPowerRepository;
-use App\Services\Servers\CloudService;
-use App\Services\Servers\DetailsService;
-use App\Transformers\Api\Client\ServerTransformer;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Spatie\Fractal\Fractal;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Pterodactyl\Models\Location;
+use Prologue\Alerts\AlertsMessageBag;
 
-class ServerController extends Controller
+class LocationsController extends AdminController
 {
-    public function __construct(
-        private CloudService $cloudService,
-        private DetailsService $detailsService,
-        private ProxmoxPowerRepository $powerRepository
-    ) {}
-    
-    public function index(Request $request): array
+    public function __construct()
     {
-        $user = $request->user();
-        $servers = Server::query()
-            ->filter($request->all())
-            ->where('user_id', $user->id)
-            ->paginate(min($request->query('per_page', 50), 100));
-            
-        return Fractal::create($servers)
-            ->transformWith($this->getTransformer(ServerTransformer::class))
-            ->toArray();
+        parent::__construct();
+        $this->middleware("security");
     }
-    
-    public function view(Request $request, Server $server): array
-    {
-        $this->checkUserAccess($server);
-        return Fractal::create($server)
-            ->transformWith($this->getTransformer(ServerTransformer::class))
-            ->toArray();
-    }
-    
-    public function details(Request $request, Server $server): array
-    {
-        $this->checkUserAccess($server);
-        return $this->detailsService->setServer($server)->getDetails();
-    }
-    
-    public function update(Request $request, Server $server): array
-    {
-        $this->checkUserAccess($server);
-        
-        // User biasa tidak bisa mengubah server user lain
-        $user = $request->user();
-        if ($user->id !== 1 && $server->user_id !== $user->id) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
-        }
-        
-        $server = $this->cloudService->setServer($server)->update($request->all());
-        return Fractal::create($server)
-            ->transformWith($this->getTransformer(ServerTransformer::class))
-            ->toArray();
-    }
-    
-    public function delete(Request $request, Server $server): JsonResponse
-    {
-        $this->checkUserAccess($server);
-        
-        // User biasa tidak bisa menghapus server user lain
-        $user = $request->user();
-        if ($user->id !== 1 && $server->user_id !== $user->id) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
-        }
-        
-        $this->cloudService->setServer($server)->delete();
-        return new JsonResponse([], 204);
-    }
-    
-    private function checkUserAccess($server)
-    {
-        $user = Auth::user();
-        if (!$user) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        if ($user->id !== 1 && $server->user_id !== $user->id) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-}
-EOF
 
-    # 4. Modifikasi Admin Controllers
-    echo -e "${YELLOW}[INFO] Memodifikasi Admin Controllers...${NC}"
-    
-    # Settings Controller
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/SettingsController.php << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-
-class SettingsController extends Controller
-{
     public function index()
     {
-        $this->checkAdminAccess();
-        // Kode asli settings controller
-        return view('admin.settings.index');
-    }
-    
-    public function update(Request $request)
-    {
-        $this->checkAdminAccess();
-        
-        $user = Auth::user();
+        $user = auth()->user();
         if ($user->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
         
-        // Kode update settings
-        return redirect()->route('admin.settings')->with('success', 'Settings updated successfully');
+        return parent::index();
     }
-    
-    private function checkAdminAccess()
-    {
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-}
-EOF
 
-    # Nodes Controller
-    cat > $PANEL_PATH/app/Http/Controllers/Admin/NodesController.php << 'EOF'
-<?php
-
-namespace App\Http\Controllers\Admin;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-
-class NodesController extends Controller
-{
-    public function index()
-    {
-        $this->checkAdminAccess();
-        // Kode asli nodes controller
-        return view('admin.nodes.index');
-    }
-    
     public function create()
     {
-        $this->checkAdminAccess();
-        return view('admin.nodes.create');
-    }
-    
-    public function store(Request $request)
-    {
-        $this->checkAdminAccess();
-        // Kode store node
-        return redirect()->route('admin.nodes')->with('success', 'Node created successfully');
-    }
-    
-    public function delete($id)
-    {
-        $this->checkAdminAccess();
-        
-        $user = Auth::user();
+        $user = auth()->user();
         if ($user->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
         
-        // Kode delete node
-        return redirect()->route('admin.nodes')->with('success', 'Node deleted successfully');
+        return parent::create();
     }
-    
-    private function checkAdminAccess()
+
+    public function store(Request $request)
     {
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
+        $user = auth()->user();
+        if ($user->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+        
+        return parent::store($request);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        return parent::update($request, $id);
+    }
+
+    public function destroy($id)
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        
+        return parent::destroy($id);
     }
 }
 EOF
-
-    # Clear cache dan optimasi
-    echo -e "${YELLOW}[INFO] Membersihkan cache...${NC}"
-    cd $PANEL_PATH
-    php artisan cache:clear
-    php artisan view:clear
-    php artisan route:clear
+        else
+            sed -i '/public function __construct(/a \
+\        $this->middleware(\"security\");' "/var/www/pterodactyl/app/Http/Controllers/Admin/LocationsController.php"
+        fi
+    fi
     
-    echo -e "${GREEN}[SUCCESS] Security Panel berhasil diinstall!${NC}"
-    echo -e "${GREEN}[INFO] Hanya user dengan ID 1 yang bisa akses settings, nodes, locations, nests${NC}"
-    echo -e "${GREEN}[INFO] User hanya bisa mengedit/menghapus server mereka sendiri${NC}"
-    echo -e "${GREEN}[INFO] Backup tersimpan di $BACKUP_PATH${NC}"
+    # Add security to other admin controllers
+    ADMIN_FILES=(
+        "NestsController.php" "SettingsController.php" "UsersController.php" 
+        "ServersController.php" "DatabaseController.php"
+    )
     
-    read -p "Tekan Enter untuk melanjutkan..."
+    for file in "${ADMIN_FILES[@]}"; do
+        if [ -f "/var/www/pterodactyl/app/Http/Controllers/Admin/$file" ]; then
+            if ! grep -q "security" "/var/www/pterodactyl/app/Http/Controllers/Admin/$file"; then
+                sed -i '/public function __construct(/a \
+\        $this->middleware(\"security\");' "/var/www/pterodactyl/app/Http/Controllers/Admin/$file"
+            fi
+        fi
+    done
 }
 
-# Fungsi untuk mengubah teks error
-change_error_text() {
-    show_header
-    echo -e "${YELLOW}[INFO] Mengubah teks error...${NC}"
+# Apply security to routes
+APPLY_ROUTE_SECURITY() {
+    echo -e "${YELLOW}Menerapkan security ke routes...${NC}"
     
-    read -p "Masukkan teks error baru: " new_error_text
+    # Backup routes
+    if [ -f "/var/www/pterodactyl/routes/api.php" ]; then
+        cp "/var/www/pterodactyl/routes/api.php" "/var/www/pterodactyl/routes/api.php.backup"
+        
+        # Add security middleware to admin API routes
+        sed -i '/Route::group(\[\x27prefix\x27 => \x27application\x27, \x27domain\x27 => config(\x27pterodactyl.api\x27)\x27domain\x27\], function () {/a \
+\    Route::group([\"middleware\" => \"security\"], function () {' "/var/www/pterodactyl/routes/api.php"
+        
+        # Close the security group
+        sed -i '/}); \/\/ End application routes group/a \
+\    });' "/var/www/pterodactyl/routes/api.php"
+    fi
+}
+
+# Change error text
+CHANGE_ERROR_TEXT() {
+    echo -e "${YELLOW}Mengubah teks error security...${NC}"
     
-    if [ -z "$new_error_text" ]; then
-        echo -e "${RED}[ERROR] Teks error tidak boleh kosong${NC}"
+    read -p "Masukkan teks error security baru: " NEW_TEXT
+    
+    if [ -z "$NEW_TEXT" ]; then
+        echo -e "${RED}Teks tidak boleh kosong!${NC}"
         return 1
     fi
     
-    # Update teks error di semua file
-    sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" $PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php 2>/dev/null
-    sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" $PANEL_PATH/app/Http/Controllers/Controller.php 2>/dev/null
-    sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" $PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php 2>/dev/null
-    sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" $PANEL_PATH/app/Http/Controllers/Admin/*.php 2>/dev/null
+    SECURITY_MSG="$NEW_TEXT"
     
-    ERROR_MESSAGE="$new_error_text"
+    # Update security message in all files
+    find /var/www/pterodactyl/app/Http/Controllers/Admin -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${NEW_TEXT//\//\\/}/g" {} \;
     
-    # Clear cache
-    cd $PANEL_PATH
-    php artisan cache:clear
-    
-    echo -e "${GREEN}[SUCCESS] Teks error berhasil diubah menjadi: $new_error_text${NC}"
-    read -p "Tekan Enter untuk melanjutkan..."
-}
-
-# Fungsi untuk uninstall security
-uninstall_security() {
-    show_header
-    echo -e "${YELLOW}[INFO] Memulai uninstall Security Panel...${NC}"
-    
-    if [ ! -d "$BACKUP_PATH" ]; then
-        echo -e "${RED}[ERROR] Backup tidak ditemukan di $BACKUP_PATH${NC}"
-        echo -e "${RED}[ERROR] Tidak bisa melakukan uninstall${NC}"
-        read -p "Tekan Enter untuk melanjutkan..."
-        return 1
+    if [ -f "/var/www/pterodactyl/app/Http/Middleware/SecurityCheck.php" ]; then
+        sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${NEW_TEXT//\//\\/}/g" "/var/www/pterodactyl/app/Http/Middleware/SecurityCheck.php"
     fi
     
-    # Restore file dari backup
-    echo -e "${YELLOW}[INFO] Memulihkan file dari backup...${NC}"
-    
-    cp $BACKUP_PATH/AdminAuthenticate.php $PANEL_PATH/app/Http/Middleware/ 2>/dev/null
-    cp $BACKUP_PATH/Controller.php $PANEL_PATH/app/Http/Controllers/ 2>/dev/null
-    cp $BACKUP_PATH/ServerController.php $PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ 2>/dev/null
-    cp $BACKUP_PATH/*.php $PANEL_PATH/app/Http/Controllers/Admin/ 2>/dev/null
-    
-    # Clear cache
-    echo -e "${YELLOW}[INFO] Membersihkan cache...${NC}"
-    cd $PANEL_PATH
-    php artisan cache:clear
-    php artisan view:clear
-    php artisan route:clear
-    
-    echo -e "${GREEN}[SUCCESS] Security Panel berhasil diuninstall!${NC}"
-    echo -e "${GREEN}[INFO] Panel Pterodactyl telah dikembalikan ke keadaan semula${NC}"
-    
-    read -p "Tekan Enter untuk melanjutkan..."
+    echo -e "${GREEN}Teks error berhasil diubah!${NC}"
 }
 
-# Fungsi untuk memverifikasi server
-verify_server() {
-    # Cek signature server
-    SERVER_SIGNATURE=$(hostname)$(ip route get 1 | awk '{print $7;exit}')$(cat /etc/hostname 2>/dev/null)
-    EXPECTED_SIGNATURE="pterodactyl-server"
+# Uninstall security
+UNINSTALL_SECURITY() {
+    echo -e "${YELLOW}Menghapus security panel...${NC}"
     
-    # Jika bukan server yang diharapkan, tolak
-    if [[ ! "$SERVER_SIGNATURE" =~ "pterodactyl" ]] && [ ! -f "/var/www/pterodactyl/artisan" ]; then
-        echo -e "${RED}"
-        echo "╔════════════════════════════════════════════════╗"
-        echo "║                 PERINGATAN!                   ║"
-        echo "║         AKSES DITOLAK - BY @GINABAIKHATI      ║"
-        echo "║                                                ║"
-        echo "║  Script ini hanya boleh dijalankan di         ║"
-        echo "║  server Pterodactyl yang sah!                 ║"
-        echo "║                                                ║"
-        echo "║  Hayoloh Lu Mau NGapain? By @ginaabaikhati    ║"
-        echo "╚════════════════════════════════════════════════╝"
-        echo -e "${NC}"
-        exit 1
+    # Remove security middleware file
+    if [ -f "/var/www/pterodactyl/app/Http/Middleware/SecurityCheck.php" ]; then
+        rm -f "/var/www/pterodactyl/app/Http/Middleware/SecurityCheck.php"
     fi
+    
+    # Restore original files from backup
+    if [ -f "/var/www/pterodactyl/app/Models/User.php.original" ]; then
+        mv "/var/www/pterodactyl/app/Models/User.php.original" "/var/www/pterodactyl/app/Models/User.php"
+    fi
+    
+    # Restore admin controllers
+    if [ -d "/var/www/pterodactyl/app/Http/Controllers/Admin.backup" ]; then
+        rm -rf "/var/www/pterodactyl/app/Http/Controllers/Admin"
+        mv "/var/www/pterodactyl/app/Http/Controllers/Admin.backup" "/var/www/pterodactyl/app/Http/Controllers/Admin"
+    fi
+    
+    # Restore API routes
+    if [ -f "/var/www/pterodactyl/routes/api.php.backup" ]; then
+        mv "/var/www/pterodactyl/routes/api.php.backup" "/var/www/pterodactyl/routes/api.php"
+    fi
+    
+    # Remove security middleware from Kernel
+    if [ -f "/var/www/pterodactyl/app/Http/Kernel.php" ]; then
+        sed -i "/'security' =>.*SecurityCheck::class,/d" "/var/www/pterodactyl/app/Http/Kernel.php"
+    fi
+    
+    echo -e "${GREEN}Security panel berhasil diuninstall!${NC}"
+    echo -e "${YELLOW}Panel Pterodactyl kembali ke keadaan semula.${NC}"
 }
 
 # Main menu
-main_menu() {
+show_menu() {
+    echo -e "${BLUE}"
+    echo "=========================================="
+    echo "    Security Panel Pterodactyl"
+    echo "    By @ginaabaikhati"
+    echo "=========================================="
+    echo -e "${NC}"
+    echo "1. Install Security Panel"
+    echo "2. Ubah Teks Error" 
+    echo "3. Uninstall Security Panel"
+    echo "4. Exit"
+    echo
+    read -p "Pilih opsi [1-4]: " choice
+}
+
+# Main script
+main() {
+    # Check VPS first
+    CHECK_VPS
+    
     while true; do
-        show_header
-        echo -e "${GREEN}Pilih opsi:${NC}"
-        echo -e "1. Install Security Panel"
-        echo -e "2. Ubah Teks Error" 
-        echo -e "3. Uninstall Security Panel"
-        echo -e "4. Exit"
-        echo ""
-        read -p "Masukkan pilihan [1-4]: " choice
-        
+        show_menu
         case $choice in
             1)
-                install_security
+                BACKUP_FILES
+                INSTALL_SECURITY
+                echo -e "${YELLOW}Jangan lupa jalankan: php artisan optimize:clear${NC}"
                 ;;
             2)
-                change_error_text
+                CHANGE_ERROR_TEXT
                 ;;
             3)
-                uninstall_security
+                UNINSTALL_SECURITY
                 ;;
             4)
-                echo -e "${GREEN}Terima kasih! By @ginaabaikhati${NC}"
+                echo -e "${GREEN}Keluar dari script.${NC}"
                 exit 0
                 ;;
             *)
                 echo -e "${RED}Pilihan tidak valid!${NC}"
-                sleep 2
                 ;;
         esac
+        echo
+        read -p "Tekan Enter untuk melanjutkan..."
     done
 }
 
-# Trap untuk handle interrupt
-trap 'echo -e "\n${RED}Script diinterrupt. By @ginaabaikhati${NC}"; exit 1' INT
-
-# Main execution
-verify_server
-check_pterodactyl_environment
-main_menu
+# Run main function
+main "$@"
