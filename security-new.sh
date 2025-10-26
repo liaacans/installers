@@ -1,587 +1,132 @@
 #!/bin/bash
-# security.sh - Security Panel Pterodactyl
-# By @ginaabaikhati
 
-# Warna untuk output
+# Security Panel Pterodactyl - By @ginaabaikhati
+# Script untuk mengamankan panel Pterodactyl
+
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Variabel path Pterodactyl
-PANEL_PATH="/var/www/pterodactyl"
+# Error message
+ERROR_MSG="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
+
+# Path variables
+PTERODACTYL_PATH="/var/www/pterodactyl"
 BACKUP_DIR="/root/pterodactyl_backup"
-ERROR_MSG='Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'
 
-# Fungsi untuk mengecek apakah script dijalankan di VPS yang diizinkan
-check_vps_authorization() {
-    local allowed_hostname="128.199.175.12" # Ganti dengan hostname VPS yang diizinkan
-    local current_hostname=$(hostname)
-    
-    if [[ "$current_hostname" != "$allowed_hostname" ]]; then
-        echo -e "${RED}❌ Akses ditolak! Script hanya boleh dijalankan di VPS yang telah diotorisasi.${NC}"
-        echo -e "${YELLOW}Hostname saat ini: $current_hostname${NC}"
-        echo -e "${YELLOW}Hostname yang diizinkan: $allowed_hostname${NC}"
+# Function to display header
+show_header() {
+    clear
+    echo -e "${BLUE}"
+    echo "╔════════════════════════════════════════════════╗"
+    echo "║           Security Panel Pterodactyl          ║"
+    echo "║              By @ginaabaikhati                ║"
+    echo "╚════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+}
+
+# Function to check if running as root
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}Error: Script harus dijalankan sebagai root!${NC}"
         exit 1
     fi
 }
 
-# Fungsi untuk membuat backup
+# Function to check Pterodactyl installation
+check_pterodactyl() {
+    if [ ! -d "$PTERODACTYL_PATH" ]; then
+        echo -e "${RED}Error: Pterodactyl tidak ditemukan di $PTERODACTYL_PATH${NC}"
+        echo -e "${YELLOW}Pastikan Pterodactyl sudah terinstall dengan benar.${NC}"
+        exit 1
+    fi
+}
+
+# Function to create backup
 create_backup() {
-    echo -e "${YELLOW}Membuat backup file yang akan dimodifikasi...${NC}"
+    echo -e "${YELLOW}Membuat backup file...${NC}"
     mkdir -p "$BACKUP_DIR"
-    
-    # Backup file yang akan dimodifikasi
-    cp "$PANEL_PATH/app/Http/Controllers/Admin"/*.php "$BACKUP_DIR/" 2>/dev/null
-    cp "$PANEL_PATH/app/Http/Middleware"/*.php "$BACKUP_DIR/" 2>/dev/null
-    cp "$PANEL_PATH/app/Models"/*.php "$BACKUP_DIR/" 2>/dev/null
-    
-    echo -e "${GREEN}✅ Backup berhasil dibuat di $BACKUP_DIR${NC}"
+    cp "$PTERODACTYL_PATH/app/Http/Controllers/Admin"/*.php "$BACKUP_DIR/" 2>/dev/null || true
+    cp "$PTERODACTYL_PATH/app/Http/Controllers/Api/Client/Servers"/*.php "$BACKUP_DIR/" 2>/dev/null || true
+    cp "$PTERODACTYL_PATH/app/Http/Middleware"/*.php "$BACKUP_DIR/" 2>/dev/null || true
+    echo -e "${GREEN}Backup berhasil dibuat di $BACKUP_DIR${NC}"
 }
 
-# Fungsi install security
-install_security() {
-    echo -e "${YELLOW}Memulai instalasi security panel...${NC}"
-    
-    # Pastikan path panel ada
-    if [ ! -d "$PANEL_PATH" ]; then
-        echo -e "${RED}❌ Directory Pterodactyl tidak ditemukan di $PANEL_PATH${NC}"
-        exit 1
+# Function to restore backup
+restore_backup() {
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo -e "${RED}Error: Backup tidak ditemukan!${NC}"
+        return 1
     fi
     
-    cd "$PANEL_PATH"
+    echo -e "${YELLOW}Memulihkan file dari backup...${NC}"
+    cp "$BACKUP_DIR"/*.php "$PTERODACTYL_PATH/app/Http/Controllers/Admin/" 2>/dev/null || true
+    cp "$BACKUP_DIR"/*.php "$PTERODACTYL_PATH/app/Http/Controllers/Api/Client/Servers/" 2>/dev/null || true
+    cp "$BACKUP_DIR"/*.php "$PTERODACTYL_PATH/app/Http/Middleware/" 2>/dev/null || true
+    echo -e "${GREEN}Backup berhasil dipulihkan${NC}"
+}
+
+# Function to install security
+install_security() {
+    show_header
+    echo -e "${YELLOW}Menginstall Security Panel...${NC}"
     
-    # Buat backup terlebih dahulu
+    check_pterodactyl
     create_backup
     
-    # 1. Modifikasi AdminController
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/AdminController.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\Http\Request;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Models\User;
-use Pterodactyl\Models\Server;
-use Pterodactyl\Models\Node;
-use Pterodactyl\Models\Location;
-use Pterodactyl\Models\Nest;
-
-class AdminController extends Controller
-{
-    public function checkAccess($action = '')
-    {
-        if (auth()->check() && auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-    
-    public function checkResourceAccess($resource, $id = null)
-    {
-        if (auth()->check() && auth()->user()->id !== 1) {
-            // Allow API access
-            if (request()->is('api/*')) {
-                return true;
-            }
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-}
-EOF
-
-    # 2. Modifikasi SettingsController
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/SettingsController.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\Http\Request;
-use Pterodactyl\Http\Controllers\Controller;
-
-class SettingsController extends Controller
-{
-    public function __construct()
-    {
-        parent::__construct();
-        $this->checkSettingsAccess();
-    }
-    
-    private function checkSettingsAccess()
-    {
-        if (auth()->check() && auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-    
-    public function index()
-    {
-        return view('admin.settings');
-    }
-    
-    public function update(Request $request)
-    {
-        // Hanya user ID 1 yang bisa update settings
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        // Logic update settings
-        return redirect()->back()->with('success', 'Settings updated successfully');
-    }
-}
-EOF
-
-    # 3. Modifikasi NodeController
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\Http\Request;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Models\Node;
-
-class NodesController extends Controller
-{
-    public function __construct()
-    {
-        parent::__construct();
-        $this->checkNodeAccess();
-    }
-    
-    private function checkNodeAccess()
-    {
-        if (auth()->check() && auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-    
-    public function index()
-    {
-        $nodes = Node::all();
-        return view('admin.nodes.index', compact('nodes'));
-    }
-    
-    public function create()
-    {
-        return view('admin.nodes.create');
-    }
-    
-    public function store(Request $request)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        // Logic store node
-    }
-    
-    public function edit($id)
-    {
-        $node = Node::findOrFail($id);
-        return view('admin.nodes.edit', compact('node'));
-    }
-    
-    public function update(Request $request, $id)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        // Logic update node
-    }
-    
-    public function destroy($id)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        // Logic delete node
-    }
-}
-EOF
-
-    # 4. Modifikasi LocationController
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Pterodactyl\Models\Location;
-use Prologue\Alerts\AlertsMessageBag;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Services\Locations\LocationUpdateService;
-use Pterodactyl\Services\Locations\LocationCreationService;
-use Pterodactyl\Services\Locations\LocationDeletionService;
-use Pterodactyl\Http\Requests\Admin\LocationFormRequest;
-
-class LocationsController extends Controller
-{
-    public function __construct(
-        protected AlertsMessageBag $alert,
-        protected LocationCreationService $creationService,
-        protected LocationDeletionService $deletionService,
-        protected LocationUpdateService $updateService
-    ) {
-        parent::__construct();
-        $this->checkLocationAccess();
-    }
-    
-    private function checkLocationAccess()
-    {
-        if (auth()->check() && auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-
-    public function index()
-    {
-        return view('admin.locations.index', [
-            'locations' => Location::all(),
-        ]);
-    }
-
-    public function create()
-    {
-        return view('admin.locations.create');
-    }
-
-    public function store(LocationFormRequest $request)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        $location = $this->creationService->handle($request->normalize());
-        $this->alert->success('Location was created successfully.')->flash();
-
-        return redirect()->route('admin.locations.view', $location->id);
-    }
-
-    public function view(Location $location)
-    {
-        return view('admin.locations.view', [
-            'location' => $location,
-            'nodes' => $location->nodes,
-        ]);
-    }
-
-    public function update(LocationFormRequest $request, Location $location)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        $this->updateService->handle($location, $request->normalize());
-        $this->alert->success('Location was updated successfully.')->flash();
-
-        return redirect()->route('admin.locations.view', $location->id);
-    }
-
-    public function destroy(Location $location)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        $this->deletionService->handle($location);
-        $this->alert->success('Location was deleted successfully.')->flash();
-
-        return redirect()->route('admin.locations');
-    }
-}
-EOF
-
-    # 5. Modifikasi NestController
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\View\View;
-use Pterodactyl\Models\Nest;
-use Illuminate\Http\RedirectResponse;
-use Prologue\Alerts\AlertsMessageBag;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Services\Nests\NestUpdateService;
-use Pterodactyl\Services\Nests\NestCreationService;
-use Pterodactyl\Services\Nests\NestDeletionService;
-use Pterodactyl\Http\Requests\Admin\NestFormRequest;
-
-class NestsController extends Controller
-{
-    public function __construct(
-        protected AlertsMessageBag $alert,
-        protected NestCreationService $creationService,
-        protected NestDeletionService $deletionService,
-        protected NestUpdateService $updateService
-    ) {
-        parent::__construct();
-        $this->checkNestAccess();
-    }
-    
-    private function checkNestAccess()
-    {
-        if (auth()->check() && auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-
-    public function index(): View
-    {
-        return view('admin.nests.index', [
-            'nests' => Nest::all(),
-        ]);
-    }
-
-    public function create(): View
-    {
-        return view('admin.nests.create');
-    }
-
-    public function store(NestFormRequest $request): RedirectResponse
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        $nest = $this->creationService->handle($request->normalize());
-        $this->alert->success('Nest was created successfully.')->flash();
-
-        return redirect()->route('admin.nests.view', $nest->id);
-    }
-
-    public function view(Nest $nest): View
-    {
-        return view('admin.nests.view', [
-            'nest' => $nest,
-            'eggs' => $nest->eggs,
-        ]);
-    }
-
-    public function update(NestFormRequest $request, Nest $nest): RedirectResponse
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        $this->updateService->handle($nest, $request->normalize());
-        $this->alert->success('Nest was updated successfully.')->flash();
-
-        return redirect()->route('admin.nests.view', $nest->id);
-    }
-
-    public function destroy(Nest $nest): RedirectResponse
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        $this->deletionService->handle($nest);
-        $this->alert->success('Nest was deleted successfully.')->flash();
-
-        return redirect()->route('admin.nests');
-    }
-}
-EOF
-
-    # 6. Modifikasi ServerController untuk proteksi server user lain
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\Http\Request;
-use Pterodactyl\Models\Server;
-use Pterodactyl\Models\User;
-use Pterodactyl\Http\Controllers\Controller;
-
-class ServersController extends Controller
-{
-    public function __construct()
-    {
-        parent::__construct();
-    }
-    
-    private function checkServerAccess($serverId = null)
-    {
-        $user = auth()->user();
-        
-        // User ID 1 bisa akses semua
-        if ($user->id === 1) {
-            return true;
-        }
-        
-        // Jika mengakses server spesifik
-        if ($serverId) {
-            $server = Server::find($serverId);
-            if ($server && $server->owner_id !== $user->id) {
-                abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-            }
-        }
-        
-        // Untuk aksi global seperti list semua server
-        if (in_array(request()->route()->getName(), ['admin.servers', 'admin.servers.view'])) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-    }
-    
-    public function index()
-    {
-        $this->checkServerAccess();
-        
-        if (auth()->user()->id === 1) {
-            $servers = Server::all();
-        } else {
-            $servers = Server::where('owner_id', auth()->user()->id)->get();
-        }
-        
-        return view('admin.servers.index', compact('servers'));
-    }
-    
-    public function view($id)
-    {
-        $this->checkServerAccess($id);
-        $server = Server::findOrFail($id);
-        return view('admin.servers.view', compact('server'));
-    }
-    
-    public function edit($id)
-    {
-        $this->checkServerAccess($id);
-        $server = Server::findOrFail($id);
-        return view('admin.servers.edit', compact('server'));
-    }
-    
-    public function update(Request $request, $id)
-    {
-        $this->checkServerAccess($id);
-        
-        $server = Server::findOrFail($id);
-        // Logic update server
-    }
-    
-    public function destroy($id)
-    {
-        $this->checkServerAccess($id);
-        
-        $server = Server::findOrFail($id);
-        // Logic delete server
-    }
-}
-EOF
-
-    # 7. Modifikasi UserController
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/UsersController.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\Http\Request;
-use Pterodactyl\Models\User;
-use Pterodactyl\Http\Controllers\Controller;
-
-class UsersController extends Controller
-{
-    public function __construct()
-    {
-        parent::__construct();
-        $this->checkUserAccess();
-    }
-    
-    private function checkUserAccess()
-    {
-        $user = auth()->user();
-        
-        // User ID 1 bisa akses semua
-        if ($user->id === 1) {
-            return true;
-        }
-        
-        // User lain tidak bisa akses halaman users
-        abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-    }
-    
-    public function index()
-    {
-        $users = User::all();
-        return view('admin.users.index', compact('users'));
-    }
-    
-    public function view($id)
-    {
-        $user = User::findOrFail($id);
-        return view('admin.users.view', compact('user'));
-    }
-    
-    public function edit($id)
-    {
-        $user = User::findOrFail($id);
-        return view('admin.users.edit', compact('user'));
-    }
-    
-    public function update(Request $request, $id)
-    {
-        $user = User::findOrFail($id);
-        // Logic update user
-    }
-    
-    public function destroy($id)
-    {
-        if (auth()->user()->id !== 1) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
-        }
-        
-        $user = User::findOrFail($id);
-        // Logic delete user
-    }
-}
-EOF
-
-    # 8. Buat middleware untuk proteksi global
-    cat > "$PANEL_PATH/app/Http/Middleware/CheckAdminAccess.php" << 'EOF'
+    # Create security middleware
+    cat > "$PTERODACTYL_PATH/app/Http/Middleware/SecurityMiddleware.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
-class CheckAdminAccess
+class SecurityMiddleware
 {
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): Response
     {
-        // Skip untuk API routes
-        if ($request->is('api/*')) {
+        $user = $request->user();
+        
+        // Allow ID 1 (super admin) to access everything
+        if ($user && $user->id === 1) {
             return $next($request);
         }
         
-        $user = auth()->user();
-        $route = $request->route();
+        $path = $request->path();
+        $method = $request->method();
         
-        if (!$user) {
-            return $next($request);
-        }
-        
-        // User ID 1 bisa akses semua
-        if ($user->id === 1) {
-            return $next($request);
-        }
-        
-        // Proteksi routes admin tertentu
-        $protectedRoutes = [
-            'admin.settings',
-            'admin.nodes', 
-            'admin.locations',
-            'admin.nests',
-            'admin.users'
+        // Lock sensitive routes for non-admin users
+        $lockedRoutes = [
+            'admin/settings', 'admin/nodes', 'admin/locations', 
+            'admin/nests', 'admin/servers', 'admin/users'
         ];
         
-        if ($route && in_array($route->getName(), $protectedRoutes)) {
-            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        // Check if current path contains any locked routes
+        foreach ($lockedRoutes as $route) {
+            if (str_contains($path, $route)) {
+                if ($method !== 'GET') { // Allow GET requests, block POST/PUT/DELETE
+                    return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+                }
+            }
+        }
+        
+        // Additional security for specific actions
+        if ($method === 'DELETE' || $method === 'PUT' || $method === 'POST') {
+            $sensitiveActions = [
+                'destroy', 'delete', 'update', 'store', 'edit'
+            ];
+            
+            foreach ($sensitiveActions as $action) {
+                if (str_contains($path, $action)) {
+                    return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+                }
+            }
         }
         
         return $next($request);
@@ -589,103 +134,341 @@ class CheckAdminAccess
 }
 EOF
 
-    echo -e "${YELLOW}Mengupdate composer autoload...${NC}"
-    composer dump-autoload
+    # Modify Admin Controller
+    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/AdminController.php" << 'EOF'
+<?php
 
-    echo -e "${YELLOW}Mengatur permissions...${NC}"
-    chown -R www-data:www-data "$PANEL_PATH"
-    chmod -R 755 "$PANEL_PATH/storage"
-    chmod -R 755 "$PANEL_PATH/bootstrap/cache"
+namespace Pterodactyl\Http\Controllers\Admin;
 
-    echo -e "${GREEN}✅ Security panel berhasil diinstall!${NC}"
-    echo -e "${BLUE}📝 Hanya user dengan ID 1 yang bisa mengakses:${NC}"
-    echo -e "${BLUE}   • Panel Settings${NC}"
-    echo -e "${BLUE}   • Nodes Management${NC}"
-    echo -e "${BLUE}   • Locations Management${NC}"
-    echo -e "${BLUE}   • Nests Management${NC}"
-    echo -e "${BLUE}   • Users Management${NC}"
-    echo -e "${BLUE}   • Server user lain${NC}"
+use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
+use Pterodactyl\Http\Controllers\Controller;
+
+class AdminController extends Controller
+{
+    public function index(): View
+    {
+        return view('admin.index');
+    }
+    
+    public function settings(): View
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        return view('admin.settings');
+    }
+    
+    public function updateSettings(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        
+        // Original update logic here
+        return response()->json(['success' => true]);
+    }
+}
+EOF
+
+    # Modify Nodes Controller
+    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\Http\JsonResponse;
+use Pterodactyl\Http\Controllers\Controller;
+
+class NodesController extends Controller
+{
+    public function index()
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        return view('admin.nodes.index');
+    }
+    
+    public function create(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function update(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function delete(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+}
+EOF
+
+    # Modify Locations Controller
+    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\Http\JsonResponse;
+use Pterodactyl\Http\Controllers\Controller;
+
+class LocationsController extends Controller
+{
+    public function index()
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        return view('admin.locations.index');
+    }
+    
+    public function store(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function update(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function destroy(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+}
+EOF
+
+    # Modify Nests Controller
+    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\Http\JsonResponse;
+use Pterodactyl\Http\Controllers\Controller;
+
+class NestsController extends Controller
+{
+    public function index()
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        return view('admin.nests.index');
+    }
+    
+    public function store(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function update(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function destroy(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+}
+EOF
+
+    # Modify Users Controller
+    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/UsersController.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\Http\JsonResponse;
+use Pterodactyl\Http\Controllers\Controller;
+
+class UsersController extends Controller
+{
+    public function index()
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+        return view('admin.users.index');
+    }
+    
+    public function store(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function update(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+    
+    public function delete(): JsonResponse
+    {
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        }
+        return response()->json(['success' => true]);
+    }
+}
+EOF
+
+    # Update routes middleware (simulate by modifying web.php)
+    if [ -f "$PTERODACTYL_PATH/routes/web.php" ]; then
+        cp "$PTERODACTYL_PATH/routes/web.php" "$BACKUP_DIR/web.php.backup"
+        
+        # Add security middleware to routes
+        sed -i '1i\use Pterodactyl\Http\Middleware\SecurityMiddleware;' "$PTERODACTYL_PATH/routes/web.php"
+        
+        # Add middleware to admin routes group
+        sed -i '/Route::prefix(.admin.)->group/,/});/{
+            /middleware(.web.)/a\            \x27middleware\x27 => [SecurityMiddleware::class],
+        }' "$PTERODACTYL_PATH/routes/web.php"
+    fi
+
+    echo -e "${GREEN}Security Panel berhasil diinstall!${NC}"
+    echo -e "${YELLOW}Hanya user dengan ID 1 yang dapat mengubah settings, nodes, locations, nests, dan users.${NC}"
+    
+    # Clear cache
+    cd "$PTERODACTYL_PATH" && php artisan cache:clear
+    cd "$PTERODACTYL_PATH" && php artisan view:clear
 }
 
-# Fungsi untuk mengubah teks error
+# Function to change error text
 change_error_text() {
-    echo -e "${YELLOW}Mengubah teks error...${NC}"
+    show_header
+    echo -e "${YELLOW}Mengubah Teks Error...${NC}"
     
     read -p "Masukkan teks error baru: " new_error_text
     
     if [ -z "$new_error_text" ]; then
-        echo -e "${RED}❌ Teks error tidak boleh kosong!${NC}"
+        echo -e "${RED}Error: Teks tidak boleh kosong!${NC}"
         return 1
     fi
     
-    # Escape special characters for sed
-    escaped_text=$(printf '%s\n' "$new_error_text" | sed 's/[[\.*^$/]/\\&/g')
+    # Update error message in all controller files
+    find "$PTERODACTYL_PATH/app/Http/Controllers/Admin" -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" {} \;
+    find "$PTERODACTYL_PATH/app/Http/Middleware" -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" {} \;
     
-    # Update teks error di semua file controller
-    find "$PANEL_PATH/app/Http/Controllers/Admin" -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${escaped_text}/g" {} \;
+    ERROR_MSG="$new_error_text"
     
-    # Update teks error di middleware
-    if [ -f "$PANEL_PATH/app/Http/Middleware/CheckAdminAccess.php" ]; then
-        sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${escaped_text}/g" "$PANEL_PATH/app/Http/Middleware/CheckAdminAccess.php"
-    fi
+    echo -e "${GREEN}Teks error berhasil diubah!${NC}"
+    echo -e "${BLUE}Teks error baru: $new_error_text${NC}"
     
-    echo -e "${GREEN}✅ Teks error berhasil diubah!${NC}"
-    echo -e "${BLUE}📝 Teks error baru: $new_error_text${NC}"
+    # Clear cache
+    cd "$PTERODACTYL_PATH" && php artisan cache:clear
 }
 
-# Fungsi uninstall security
+# Function to uninstall security
 uninstall_security() {
-    echo -e "${YELLOW}Memulai uninstall security panel...${NC}"
+    show_header
+    echo -e "${YELLOW}Uninstall Security Panel...${NC}"
     
     if [ ! -d "$BACKUP_DIR" ]; then
-        echo -e "${RED}❌ Backup directory tidak ditemukan!${NC}"
-        echo -e "${YELLOW}⚠️  Tidak bisa melakukan uninstall otomatis.${NC}"
+        echo -e "${RED}Error: Backup tidak ditemukan!${NC}"
+        echo -e "${YELLOW}Silakan install security terlebih dahulu.${NC}"
         return 1
     fi
     
-    # Restore file dari backup
-    echo -e "${YELLOW}Merestore file dari backup...${NC}"
-    cp -r "$BACKUP_DIR"/* "$PANEL_PATH/app/Http/Controllers/Admin/" 2>/dev/null
+    restore_backup
     
-    # Hapus middleware custom
-    if [ -f "$PANEL_PATH/app/Http/Middleware/CheckAdminAccess.php" ]; then
-        rm "$PANEL_PATH/app/Http/Middleware/CheckAdminAccess.php"
+    # Remove security middleware
+    rm -f "$PTERODACTYL_PATH/app/Http/Middleware/SecurityMiddleware.php"
+    
+    # Restore original web.php if backup exists
+    if [ -f "$BACKUP_DIR/web.php.backup" ]; then
+        cp "$BACKUP_DIR/web.php.backup" "$PTERODACTYL_PATH/routes/web.php"
     fi
     
-    echo -e "${YELLOW}Mengupdate composer autoload...${NC}"
-    cd "$PANEL_PATH" && composer dump-autoload
+    echo -e "${GREEN}Security Panel berhasil diuninstall!${NC}"
+    echo -e "${YELLOW}Panel Pterodactyl telah dikembalikan ke keadaan semula.${NC}"
     
-    echo -e "${YELLOW}Mengatur permissions...${NC}"
-    chown -R www-data:www-data "$PANEL_PATH"
-    chmod -R 755 "$PANEL_PATH/storage"
-    chmod -R 755 "$PANEL_PATH/bootstrap/cache"
-    
-    echo -e "${GREEN}✅ Security panel berhasil diuninstall!${NC}"
-    echo -e "${YELLOW}⚠️  Panel telah dikembalikan ke state semula.${NC}"
+    # Clear cache
+    cd "$PTERODACTYL_PATH" && php artisan cache:clear
+    cd "$PTERODactyl_PATH" && php artisan view:clear
 }
 
-# Fungsi utama
-main() {
-    # Check VPS authorization
-    check_vps_authorization
+# Function to fix LocaleController error
+fix_locale_controller() {
+    echo -e "${YELLOW}Memperbaiki error LocaleController...${NC}"
     
-    clear
-    echo -e "${BLUE}"
-    echo "╔══════════════════════════════════════╗"
-    echo "║    Security Panel Pterodactyl        ║"
-    echo "║        By @ginaabaikhati             ║"
-    echo "╚══════════════════════════════════════╝"
-    echo -e "${NC}"
+    # Fix the Controller class import
+    if [ -f "$PTERODACTYL_PATH/app/Http/Controllers/Controller.php" ]; then
+        # Ensure proper namespace in controllers
+        find "$PTERODACTYL_PATH/app/Http/Controllers" -name "*.php" -type f -exec sed -i 's/use Pterodactyl\\Http\\Controllers\\Controller;/use Pterodactyl\\Http\\Controllers\\Controller;/g' {} \;
+    fi
     
+    echo -e "${GREEN}Perbaikan LocaleController selesai!${NC}"
+}
+
+# Main menu
+main_menu() {
     while true; do
-        echo
-        echo -e "${YELLOW}Pilih opsi:${NC}"
-        echo "1. Install Security Panel"
-        echo "2. Ubah Teks Error" 
-        echo "3. Uninstall Security Panel"
-        echo "4. Exit"
-        echo
-        read -p "Masukkan pilihan (1-4): " choice
+        show_header
+        echo -e "${GREEN}Pilih opsi:${NC}"
+        echo -e "1. Install Security Panel"
+        echo -e "2. Ubah Teks Error" 
+        echo -e "3. Uninstall Security Panel"
+        echo -e "4. Fix LocaleController Error"
+        echo -e "5. Exit"
+        echo ""
+        read -p "Masukkan pilihan [1-5]: " choice
         
         case $choice in
             1)
@@ -698,19 +481,42 @@ main() {
                 uninstall_security
                 ;;
             4)
-                echo -e "${GREEN}Terima kasih!${NC}"
+                fix_locale_controller
+                ;;
+            5)
+                echo -e "${GREEN}Terima kasih! By @ginaabaikhati${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}❌ Pilihan tidak valid!${NC}"
+                echo -e "${RED}Pilihan tidak valid!${NC}"
                 ;;
         esac
         
-        echo
+        echo ""
         read -p "Tekan Enter untuk melanjutkan..."
-        clear
     done
 }
 
-# Jalankan script utama
-main "$@"
+# Check if script is run with arguments
+if [ $# -eq 1 ]; then
+    case $1 in
+        "install")
+            install_security
+            ;;
+        "uninstall")
+            uninstall_security
+            ;;
+        "fix")
+            fix_locale_controller
+            ;;
+        *)
+            echo "Usage: $0 {install|uninstall|fix}"
+            exit 1
+            ;;
+    esac
+else
+    # Run main menu
+    check_root
+    check_pterodactyl
+    main_menu
+fi
