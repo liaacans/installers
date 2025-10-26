@@ -714,3 +714,4 @@ main_menu() {
 check_panel_path
 
 # Run main menu
+main_menu
