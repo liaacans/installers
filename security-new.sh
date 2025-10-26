@@ -10,11 +10,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Error message
-ERROR_MSG="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
-
-# Path variables
-PTERODACTYL_PATH="/var/www/pterodactyl"
+# Configuration
+ERROR_MESSAGE="Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati"
+PANEL_PATH="/var/www/pterodactyl"
 BACKUP_DIR="/root/pterodactyl_backup"
 
 # Function to display header
@@ -22,8 +20,8 @@ show_header() {
     clear
     echo -e "${BLUE}"
     echo "╔════════════════════════════════════════════════╗"
-    echo "║           Security Panel Pterodactyl          ║"
-    echo "║              By @ginaabaikhati                ║"
+    echo "║          Security Panel Pterodactyl           ║"
+    echo "║             By @ginaabaikhati                 ║"
     echo "╚════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -36,37 +34,33 @@ check_root() {
     fi
 }
 
-# Function to check Pterodactyl installation
+# Function to check if Pterodactyl is installed
 check_pterodactyl() {
-    if [ ! -d "$PTERODACTYL_PATH" ]; then
-        echo -e "${RED}Error: Pterodactyl tidak ditemukan di $PTERODACTYL_PATH${NC}"
-        echo -e "${YELLOW}Pastikan Pterodactyl sudah terinstall dengan benar.${NC}"
+    if [ ! -d "$PANEL_PATH" ]; then
+        echo -e "${RED}Error: Pterodactyl tidak ditemukan di $PANEL_PATH${NC}"
         exit 1
     fi
 }
 
 # Function to create backup
 create_backup() {
-    echo -e "${YELLOW}Membuat backup file...${NC}"
-    mkdir -p "$BACKUP_DIR"
-    cp "$PTERODACTYL_PATH/app/Http/Controllers/Admin"/*.php "$BACKUP_DIR/" 2>/dev/null || true
-    cp "$PTERODACTYL_PATH/app/Http/Controllers/Api/Client/Servers"/*.php "$BACKUP_DIR/" 2>/dev/null || true
-    cp "$PTERODACTYL_PATH/app/Http/Middleware"/*.php "$BACKUP_DIR/" 2>/dev/null || true
+    echo -e "${YELLOW}Membuat backup panel...${NC}"
+    mkdir -p $BACKUP_DIR
+    cp -r $PANEL_PATH/app $BACKUP_DIR/
+    cp -r $PANEL_PATH/resources $BACKUP_DIR/
     echo -e "${GREEN}Backup berhasil dibuat di $BACKUP_DIR${NC}"
 }
 
 # Function to restore backup
 restore_backup() {
-    if [ ! -d "$BACKUP_DIR" ]; then
-        echo -e "${RED}Error: Backup tidak ditemukan!${NC}"
-        return 1
+    if [ -d "$BACKUP_DIR" ]; then
+        echo -e "${YELLOW}Memulihkan dari backup...${NC}"
+        cp -r $BACKUP_DIR/app $PANEL_PATH/
+        cp -r $BACKUP_DIR/resources $PANEL_PATH/
+        echo -e "${GREEN}Backup berhasil dipulihkan${NC}"
+    else
+        echo -e "${RED}Backup tidak ditemukan!${NC}"
     fi
-    
-    echo -e "${YELLOW}Memulihkan file dari backup...${NC}"
-    cp "$BACKUP_DIR"/*.php "$PTERODACTYL_PATH/app/Http/Controllers/Admin/" 2>/dev/null || true
-    cp "$BACKUP_DIR"/*.php "$PTERODACTYL_PATH/app/Http/Controllers/Api/Client/Servers/" 2>/dev/null || true
-    cp "$BACKUP_DIR"/*.php "$PTERODACTYL_PATH/app/Http/Middleware/" 2>/dev/null || true
-    echo -e "${GREEN}Backup berhasil dipulihkan${NC}"
 }
 
 # Function to install security
@@ -77,317 +71,443 @@ install_security() {
     check_pterodactyl
     create_backup
     
-    # Create security middleware
-    cat > "$PTERODACTYL_PATH/app/Http/Middleware/SecurityMiddleware.php" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Middleware;
-
-use Closure;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
-
-class SecurityMiddleware
-{
-    public function handle(Request $request, Closure $next): Response
-    {
-        $user = $request->user();
-        
-        // Allow ID 1 (super admin) to access everything
-        if ($user && $user->id === 1) {
-            return $next($request);
-        }
-        
-        $path = $request->path();
-        $method = $request->method();
-        
-        // Lock sensitive routes for non-admin users
-        $lockedRoutes = [
-            'admin/settings', 'admin/nodes', 'admin/locations', 
-            'admin/nests', 'admin/servers', 'admin/users'
-        ];
-        
-        // Check if current path contains any locked routes
-        foreach ($lockedRoutes as $route) {
-            if (str_contains($path, $route)) {
-                if ($method !== 'GET') { // Allow GET requests, block POST/PUT/DELETE
-                    return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
-                }
-            }
-        }
-        
-        // Additional security for specific actions
-        if ($method === 'DELETE' || $method === 'PUT' || $method === 'POST') {
-            $sensitiveActions = [
-                'destroy', 'delete', 'update', 'store', 'edit'
-            ];
-            
-            foreach ($sensitiveActions as $action) {
-                if (str_contains($path, $action)) {
-                    return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
-                }
-            }
-        }
-        
-        return $next($request);
-    }
-}
-EOF
-
-    # Modify Admin Controller
-    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/AdminController.php" << 'EOF'
+    # Patch untuk AdminController - Lock settings admin
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/AdminController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\View\View;
-use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 
 class AdminController extends Controller
 {
-    public function index(): View
+    public function index()
     {
         return view('admin.index');
     }
-    
-    public function settings(): View
+
+    public function settings(Request $request)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
+        // Cek jika user ID bukan 1
+        if ($request->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
+
         return view('admin.settings');
     }
-    
-    public function updateSettings(): JsonResponse
+
+    public function updateSettings(Request $request)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if ($request->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        
-        // Original update logic here
-        return response()->json(['success' => true]);
+
+        // Logic untuk update settings
+        return redirect()->back()->with('success', 'Settings updated successfully');
     }
 }
 EOF
 
-    # Modify Nodes Controller
-    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
+    # Patch untuk NodeController - Lock nodes
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/NodesController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\Http\JsonResponse;
+use Pterodactyl\Models\Node;
+use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 
 class NodesController extends Controller
 {
     public function index()
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
+        $nodes = Node::all();
+        return view('admin.nodes.index', compact('nodes'));
+    }
+
+    public function create()
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return view('admin.nodes.index');
+
+        return view('admin.nodes.create');
     }
-    
-    public function create(): JsonResponse
+
+    public function store(Request $request)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk menyimpan node
     }
-    
-    public function update(): JsonResponse
+
+    public function edit($id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        $node = Node::findOrFail($id);
+        return view('admin.nodes.edit', compact('node'));
     }
-    
-    public function delete(): JsonResponse
+
+    public function update(Request $request, $id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk update node
+    }
+
+    public function destroy($id)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        // Logic untuk menghapus node
     }
 }
 EOF
 
-    # Modify Locations Controller
-    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
+    # Patch untuk LocationController - Lock locations
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\Http\JsonResponse;
+use Pterodactyl\Models\Location;
+use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 
 class LocationsController extends Controller
 {
     public function index()
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
+        $locations = Location::all();
+        return view('admin.locations.index', compact('locations'));
+    }
+
+    public function create()
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return view('admin.locations.index');
+
+        return view('admin.locations.create');
     }
-    
-    public function store(): JsonResponse
+
+    public function store(Request $request)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk menyimpan location
     }
-    
-    public function update(): JsonResponse
+
+    public function edit($id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        $location = Location::findOrFail($id);
+        return view('admin.locations.edit', compact('location'));
     }
-    
-    public function destroy(): JsonResponse
+
+    public function update(Request $request, $id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk update location
+    }
+
+    public function destroy($id)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        // Logic untuk menghapus location
     }
 }
 EOF
 
-    # Modify Nests Controller
-    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
+    # Patch untuk NestsController - Lock nests
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/NestsController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\Http\JsonResponse;
+use Pterodactyl\Models\Nest;
+use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 
 class NestsController extends Controller
 {
     public function index()
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
+        $nests = Nest::all();
+        return view('admin.nests.index', compact('nests'));
+    }
+
+    public function create()
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return view('admin.nests.index');
+
+        return view('admin.nests.create');
     }
-    
-    public function store(): JsonResponse
+
+    public function store(Request $request)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk menyimpan nest
     }
-    
-    public function update(): JsonResponse
+
+    public function edit($id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        $nest = Nest::findOrFail($id);
+        return view('admin.nests.edit', compact('nest'));
     }
-    
-    public function destroy(): JsonResponse
+
+    public function update(Request $request, $id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk update nest
+    }
+
+    public function destroy($id)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        // Logic untuk menghapus nest
     }
 }
 EOF
 
-    # Modify Users Controller
-    cat > "$PTERODACTYL_PATH/app/Http/Controllers/Admin/UsersController.php" << 'EOF'
+    # Patch untuk ServerController - Lock server management
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/ServersController.php << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\Http\JsonResponse;
+use Pterodactyl\Models\Server;
+use Illuminate\Http\Request;
+use Pterodactyl\Http\Controllers\Controller;
+
+class ServersController extends Controller
+{
+    public function index()
+    {
+        $servers = Server::with('user', 'node')->get();
+        return view('admin.servers.index', compact('servers'));
+    }
+
+    public function create()
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.servers.create');
+    }
+
+    public function store(Request $request)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        // Logic untuk menyimpan server
+    }
+
+    public function edit($id)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        $server = Server::findOrFail($id);
+        return view('admin.servers.edit', compact('server'));
+    }
+
+    public function update(Request $request, $id)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        // Logic untuk update server
+    }
+
+    public function destroy($id)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        // Logic untuk menghapus server
+    }
+
+    public function view($id)
+    {
+        $server = Server::with('user', 'node')->findOrFail($id);
+        
+        // Cek jika user bukan pemilik server dan bukan admin ID 1
+        if (auth()->user()->id !== 1 && auth()->user()->id !== $server->user_id) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        return view('admin.servers.view', compact('server'));
+    }
+}
+EOF
+
+    # Patch untuk UserController - Lock user management
+    cat > $PANEL_PATH/app/Http/Controllers/Admin/UsersController.php << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Pterodactyl\Models\User;
+use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 
 class UsersController extends Controller
 {
     public function index()
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
+        $users = User::all();
+        return view('admin.users.index', compact('users'));
+    }
+
+    public function create()
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
             abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return view('admin.users.index');
+
+        return view('admin.users.create');
     }
-    
-    public function store(): JsonResponse
+
+    public function store(Request $request)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk menyimpan user
     }
-    
-    public function update(): JsonResponse
+
+    public function edit($id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        $user = User::findOrFail($id);
+        return view('admin.users.edit', compact('user'));
     }
-    
-    public function delete(): JsonResponse
+
+    public function update(Request $request, $id)
     {
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            return response()->json(['error' => 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati'], 403);
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
         }
-        return response()->json(['success' => true]);
+
+        // Logic untuk update user
+    }
+
+    public function destroy($id)
+    {
+        // Cek jika user ID bukan 1
+        if (auth()->user()->id !== 1) {
+            abort(403, 'Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati');
+        }
+
+        // Logic untuk menghapus user
     }
 }
 EOF
 
-    # Update routes middleware (simulate by modifying web.php)
-    if [ -f "$PTERODACTYL_PATH/routes/web.php" ]; then
-        cp "$PTERODACTYL_PATH/routes/web.php" "$BACKUP_DIR/web.php.backup"
-        
-        # Add security middleware to routes
-        sed -i '1i\use Pterodactyl\Http\Middleware\SecurityMiddleware;' "$PTERODACTYL_PATH/routes/web.php"
-        
-        # Add middleware to admin routes group
-        sed -i '/Route::prefix(.admin.)->group/,/});/{
-            /middleware(.web.)/a\            \x27middleware\x27 => [SecurityMiddleware::class],
-        }' "$PTERODACTYL_PATH/routes/web.php"
-    fi
+    # Fix untuk LocaleController.php
+    cat > $PANEL_PATH/app/Http/Controllers/LocaleController.php << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class LocaleController extends Controller
+{
+    public function index(Request $request, $locale)
+    {
+        if (in_array($locale, ['en', 'id', 'es', 'fr', 'de', 'pt', 'ru'])) {
+            $request->session()->put('locale', $locale);
+        }
+
+        return redirect()->back();
+    }
+}
+EOF
+
+    # Clear cache dan optimize
+    echo -e "${YELLOW}Membersihkan cache...${NC}"
+    cd $PANEL_PATH
+    php artisan config:cache
+    php artisan view:cache
+    php artisan route:cache
 
     echo -e "${GREEN}Security Panel berhasil diinstall!${NC}"
-    echo -e "${YELLOW}Hanya user dengan ID 1 yang dapat mengubah settings, nodes, locations, nests, dan users.${NC}"
-    
-    # Clear cache
-    cd "$PTERODACTYL_PATH" && php artisan cache:clear
-    cd "$PTERODACTYL_PATH" && php artisan view:clear
+    echo -e "${YELLOW}Hanya user dengan ID 1 yang dapat mengubah/delete/add settings, nodes, locations, nests, users, dan servers.${NC}"
+    read -p "Tekan Enter untuk melanjutkan..."
 }
 
 # Function to change error text
@@ -398,21 +518,18 @@ change_error_text() {
     read -p "Masukkan teks error baru: " new_error_text
     
     if [ -z "$new_error_text" ]; then
-        echo -e "${RED}Error: Teks tidak boleh kosong!${NC}"
-        return 1
+        echo -e "${RED}Teks error tidak boleh kosong!${NC}"
+        return
     fi
     
-    # Update error message in all controller files
-    find "$PTERODACTYL_PATH/app/Http/Controllers/Admin" -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" {} \;
-    find "$PTERODACTYL_PATH/app/Http/Middleware" -name "*.php" -type f -exec sed -i "s/Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati/${new_error_text}/g" {} \;
+    ERROR_MESSAGE="$new_error_text"
     
-    ERROR_MSG="$new_error_text"
+    # Update semua file controller dengan teks error baru
+    find $PANEL_PATH/app/Http/Controllers/Admin -name "*.php" -type f -exec sed -i "s|Akses ditolak: Hayoloh Lu Mau NGapain? By @ginaabaikhati|$new_error_text|g" {} \;
     
     echo -e "${GREEN}Teks error berhasil diubah!${NC}"
-    echo -e "${BLUE}Teks error baru: $new_error_text${NC}"
-    
-    # Clear cache
-    cd "$PTERODACTYL_PATH" && php artisan cache:clear
+    echo -e "${YELLOW}Teks error baru: $new_error_text${NC}"
+    read -p "Tekan Enter untuk melanjutkan..."
 }
 
 # Function to uninstall security
@@ -420,41 +537,22 @@ uninstall_security() {
     show_header
     echo -e "${YELLOW}Uninstall Security Panel...${NC}"
     
-    if [ ! -d "$BACKUP_DIR" ]; then
-        echo -e "${RED}Error: Backup tidak ditemukan!${NC}"
-        echo -e "${YELLOW}Silakan install security terlebih dahulu.${NC}"
-        return 1
+    if [ -d "$BACKUP_DIR" ]; then
+        restore_backup
+        
+        # Clear cache
+        cd $PANEL_PATH
+        php artisan config:cache
+        php artisan view:cache
+        php artisan route:cache
+        
+        echo -e "${GREEN}Security Panel berhasil diuninstall!${NC}"
+        echo -e "${YELLOW}Panel Pterodactyl telah dikembalikan ke keadaan semula.${NC}"
+    else
+        echo -e "${RED}Backup tidak ditemukan! Uninstall tidak dapat dilakukan.${NC}"
     fi
     
-    restore_backup
-    
-    # Remove security middleware
-    rm -f "$PTERODACTYL_PATH/app/Http/Middleware/SecurityMiddleware.php"
-    
-    # Restore original web.php if backup exists
-    if [ -f "$BACKUP_DIR/web.php.backup" ]; then
-        cp "$BACKUP_DIR/web.php.backup" "$PTERODACTYL_PATH/routes/web.php"
-    fi
-    
-    echo -e "${GREEN}Security Panel berhasil diuninstall!${NC}"
-    echo -e "${YELLOW}Panel Pterodactyl telah dikembalikan ke keadaan semula.${NC}"
-    
-    # Clear cache
-    cd "$PTERODACTYL_PATH" && php artisan cache:clear
-    cd "$PTERODactyl_PATH" && php artisan view:clear
-}
-
-# Function to fix LocaleController error
-fix_locale_controller() {
-    echo -e "${YELLOW}Memperbaiki error LocaleController...${NC}"
-    
-    # Fix the Controller class import
-    if [ -f "$PTERODACTYL_PATH/app/Http/Controllers/Controller.php" ]; then
-        # Ensure proper namespace in controllers
-        find "$PTERODACTYL_PATH/app/Http/Controllers" -name "*.php" -type f -exec sed -i 's/use Pterodactyl\\Http\\Controllers\\Controller;/use Pterodactyl\\Http\\Controllers\\Controller;/g' {} \;
-    fi
-    
-    echo -e "${GREEN}Perbaikan LocaleController selesai!${NC}"
+    read -p "Tekan Enter untuk melanjutkan..."
 }
 
 # Main menu
@@ -465,10 +563,9 @@ main_menu() {
         echo -e "1. Install Security Panel"
         echo -e "2. Ubah Teks Error" 
         echo -e "3. Uninstall Security Panel"
-        echo -e "4. Fix LocaleController Error"
-        echo -e "5. Exit"
-        echo ""
-        read -p "Masukkan pilihan [1-5]: " choice
+        echo -e "4. Exit"
+        echo -e ""
+        read -p "Masukkan pilihan [1-4]: " choice
         
         case $choice in
             1)
@@ -481,42 +578,19 @@ main_menu() {
                 uninstall_security
                 ;;
             4)
-                fix_locale_controller
-                ;;
-            5)
-                echo -e "${GREEN}Terima kasih! By @ginaabaikhati${NC}"
+                echo -e "${GREEN}Terima kasih!${NC}"
                 exit 0
                 ;;
             *)
                 echo -e "${RED}Pilihan tidak valid!${NC}"
+                sleep 2
                 ;;
         esac
-        
-        echo ""
-        read -p "Tekan Enter untuk melanjutkan..."
     done
 }
 
-# Check if script is run with arguments
-if [ $# -eq 1 ]; then
-    case $1 in
-        "install")
-            install_security
-            ;;
-        "uninstall")
-            uninstall_security
-            ;;
-        "fix")
-            fix_locale_controller
-            ;;
-        *)
-            echo "Usage: $0 {install|uninstall|fix}"
-            exit 1
-            ;;
-    esac
-else
-    # Run main menu
-    check_root
-    check_pterodactyl
-    main_menu
-fi
+# Check if running as root
+check_root
+
+# Run main menu
+main_menu
