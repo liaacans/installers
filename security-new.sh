@@ -16,9 +16,7 @@ NC='\033[0m' # No Color
 # Configuration
 PANEL_PATH="/var/www/pterodactyl"
 BACKUP_PATH="/root/pterodactyl_backup"
-SECURITY_BACKUP="$BACKUP_PATH/security_backup"
-CUSTOM_ERROR_500="hayoloh mau ngapainnn? - by @ginaabaikhati"
-CUSTOM_ERROR_403="Ngapain sih? mau nyolong sc org? - By @ginaabaikhati"
+SECURITY_BACKUP="$BACKUP_PATH/security_backup_$(date +%Y%m%d_%H%M%S)"
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
@@ -53,9 +51,7 @@ backup_files() {
         "app/Http/Middleware/AdminAuthenticate.php"
         "app/Http/Middleware/ClientAuthenticate.php"
         "app/Exceptions/Handler.php"
-        "app/Providers/AppServiceProvider.php"
-        "routes/api.php"
-        "routes/web.php"
+        "app/Http/Middleware/Api/Client/Server/AuthenticateServerAccess.php"
     )
     
     for file in "${files[@]}"; do
@@ -67,22 +63,26 @@ backup_files() {
         fi
     done
     
-    echo -e "${GREEN}Backup selesai!${NC}"
+    echo -e "${GREEN}Backup selesai! File disimpan di: $SECURITY_BACKUP${NC}"
 }
 
 # Function to restore from backup
 restore_backup() {
     echo -e "${YELLOW}Memulihkan file dari backup...${NC}"
     
-    if [ ! -d "$SECURITY_BACKUP" ]; then
-        echo -e "${RED}Backup tidak ditemukan!${NC}"
+    local backup_dir="$1"
+    
+    if [ ! -d "$backup_dir" ]; then
+        echo -e "${RED}Backup directory tidak ditemukan!${NC}"
+        echo -e "${YELLOW}Available backups:${NC}"
+        find /root/pterodactyl_backup -name "security_backup_*" -type d 2>/dev/null
         return 1
     fi
     
     # Restore files
     local files=(
         "ServerController.php"
-        "NodesController.php"
+        "NodesController.php" 
         "NestsController.php"
         "LocationsController.php"
         "ServersController.php"
@@ -90,35 +90,21 @@ restore_backup() {
         "AdminAuthenticate.php"
         "ClientAuthenticate.php"
         "Handler.php"
-        "AppServiceProvider.php"
-        "api.php"
-        "web.php"
+        "AuthenticateServerAccess.php"
     )
     
     for file in "${files[@]}"; do
-        if [ -f "$SECURITY_BACKUP/$file" ]; then
-            # Determine destination based on file type
+        if [ -f "$backup_dir/$file" ]; then
+            # Find the original location
             case $file in
                 "ServerController.php")
-                    cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/" 2>/dev/null
+                    cp "$backup_dir/$file" "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/" 2>/dev/null
                     ;;
-                "NodesController.php"|"NestsController.php"|"LocationsController.php"|"ServersController.php"|"UsersController.php")
-                    cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/app/Http/Controllers/Admin/" 2>/dev/null
+                "AuthenticateServerAccess.php")
+                    cp "$backup_dir/$file" "$PANEL_PATH/app/Http/Middleware/Api/Client/Server/" 2>/dev/null
                     ;;
-                "AdminAuthenticate.php"|"ClientAuthenticate.php")
-                    cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/app/Http/Middleware/" 2>/dev/null
-                    ;;
-                "Handler.php")
-                    cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/app/Exceptions/" 2>/dev/null
-                    ;;
-                "AppServiceProvider.php")
-                    cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/app/Providers/" 2>/dev/null
-                    ;;
-                "api.php")
-                    cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/routes/" 2>/dev/null
-                    ;;
-                "web.php")
-                    cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/routes/" 2>/dev/null
+                *)
+                    cp "$backup_dir/$file" "$PANEL_PATH/app/Http/Controllers/Admin/" 2>/dev/null
                     ;;
             esac
             echo -e "${GREEN}✓ Restore $file${NC}"
@@ -126,62 +112,6 @@ restore_backup() {
     done
     
     echo -e "${GREEN}Restore selesai!${NC}"
-}
-
-# Function to create custom error response
-create_error_response() {
-    local error_code=$1
-    local message=$2
-    
-    cat << EOF
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Error $error_code</title>
-    <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            color: white;
-        }
-        .error-container {
-            text-align: center;
-            background: rgba(0,0,0,0.7);
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        .error-code {
-            font-size: 72px;
-            font-weight: bold;
-            margin-bottom: 20px;
-        }
-        .error-message {
-            font-size: 24px;
-            margin-bottom: 30px;
-        }
-        .signature {
-            font-size: 14px;
-            opacity: 0.8;
-            margin-top: 20px;
-        }
-    </style>
-</head>
-<body>
-    <div class="error-container">
-        <div class="error-code">$error_code</div>
-        <div class="error-message">$message</div>
-        <div class="signature">Protected by @ginaabaikhati</div>
-    </div>
-</body>
-</html>
-EOF
 }
 
 # Function to install security protection
@@ -194,7 +124,7 @@ install_security() {
     # 1. Anti Delete Server & User Protection
     echo -e "${BLUE}Menginstall Anti Delete Server & User...${NC}"
     
-    # Modify ServersController.php for anti delete
+    # Modify ServersController.php for anti delete (admin panel)
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
 <?php
 
@@ -216,30 +146,28 @@ class ServersController extends Controller
 
     public function index()
     {
-        // Allow admin to see servers list
-        return view('admin.servers.index', [
-            'servers' => Server::with('user', 'node', 'nest')->get()
-        ]);
+        // Allow admin to see server list
+        return parent::index();
     }
 
     public function view(Request $request, $id)
     {
-        try {
-            $server = Server::with('user', 'node', 'nest')->findOrFail($id);
-            return view('admin.servers.view', ['server' => $server]);
-        } catch (\Exception $e) {
-            abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
-        }
+        // Allow admin to view server details
+        return parent::view($request, $id);
     }
 
     public function delete(Request $request, $id)
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block server deletion with custom error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.servers');
     }
 
     public function destroy(Request $request, $id)
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block server destruction with custom error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.servers');
     }
 }
 EOF
@@ -266,38 +194,36 @@ class UsersController extends Controller
 
     public function index()
     {
-        // Allow admin to see users list
-        return view('admin.users.index', [
-            'users' => User::all()
-        ]);
+        // Allow admin to see user list
+        return parent::index();
     }
 
     public function view(Request $request, $id)
     {
-        try {
-            $user = User::findOrFail($id);
-            return view('admin.users.view', ['user' => $user]);
-        } catch (\Exception $e) {
-            abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
-        }
+        // Allow admin to view user details
+        return parent::view($request, $id);
     }
 
     public function delete(Request $request, $id)
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block user deletion with custom error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.users');
     }
 
     public function destroy(Request $request, $id)
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block user destruction with custom error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.users');
     }
 }
 EOF
 
-    # 2. Anti Intip Location, Nodes, Nest dengan Error 500
+    # 2. Anti Intip Location, Nodes, Nest - TAMPILKAN ERROR 403
     echo -e "${BLUE}Menginstall Anti Intip Location, Nodes, Nest...${NC}"
     
-    # Modify NodesController.php
+    # Modify NodesController.php - BLOCK ACCESS
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
 <?php
 
@@ -307,6 +233,7 @@ use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Models\Node;
 use Prologue\Alerts\AlertsMessageBag;
+use Illuminate\Http\JsonResponse;
 
 class NodesController extends Controller
 {
@@ -319,27 +246,37 @@ class NodesController extends Controller
 
     public function index()
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block node listing with 403 error
+        if (request()->expectsJson()) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
+        }
+        
+        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function view(Request $request, $id)
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block node viewing with 403 error
+        if (request()->expectsJson()) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
+        }
+        
+        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function create()
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
-    }
-
-    public function edit($id)
-    {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block node creation page
+        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # Modify NestsController.php
+    # Modify NestsController.php - BLOCK ACCESS
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
 <?php
 
@@ -348,6 +285,7 @@ namespace Pterodactyl\Http\Controllers\Admin;
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 use Prologue\Alerts\AlertsMessageBag;
+use Illuminate\Http\JsonResponse;
 
 class NestsController extends Controller
 {
@@ -360,17 +298,31 @@ class NestsController extends Controller
 
     public function index()
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block nest listing with 403 error
+        if (request()->expectsJson()) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
+        }
+        
+        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function view(Request $request, $id)
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block nest viewing with 403 error
+        if (request()->expectsJson()) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
+        }
+        
+        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # Modify LocationsController.php
+    # Modify LocationsController.php - BLOCK ACCESS
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
 <?php
 
@@ -379,6 +331,7 @@ namespace Pterodactyl\Http\Controllers\Admin;
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 use Prologue\Alerts\AlertsMessageBag;
+use Illuminate\Http\JsonResponse;
 
 class LocationsController extends Controller
 {
@@ -391,25 +344,34 @@ class LocationsController extends Controller
 
     public function index()
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block location listing with 403 error
+        if (request()->expectsJson()) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
+        }
+        
+        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function view(Request $request, $id)
     {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
-    }
-
-    public function create()
-    {
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Block location viewing with 403 error
+        if (request()->expectsJson()) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
+        }
+        
+        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # 3. Anti Akses Server Orang Lain dengan Error 500
+    # 3. Anti Akses Server Orang Lain - Protection untuk User Client
     echo -e "${BLUE}Menginstall Anti Akses Server Orang Lain...${NC}"
     
-    # Modify ServerController for client API - Allow access only to own servers
+    # Modify ServerController for client API - ALLOW OWN SERVER, BLOCK OTHERS
     cat > "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php" << 'EOF'
 <?php
 
@@ -424,39 +386,43 @@ class ServerController extends ClientApiController
 {
     public function index()
     {
-        // User can only see their own servers
-        $servers = Server::where('user_id', auth()->user()->id)->get();
-        
-        return response()->json([
-            'data' => $servers
-        ]);
+        // Allow user to see their own servers
+        return parent::index();
     }
 
-    public function view($server)
+    public function view(Server $server)
     {
-        // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
-            abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Check if user owns the server or is admin
+        if ($server->user_id !== $this->request->user()->id && !$this->request->user()->root_admin) {
+            // Block access to other people's servers with 403 error
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
         }
 
+        // Allow access to own server or if admin
         return parent::view($server);
     }
 
-    public function websocket($server)
+    public function websocket(Server $server)
     {
-        // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
-            abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Check if user owns the server or is admin
+        if ($server->user_id !== $this->request->user()->id && !$this->request->user()->root_admin) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
         }
 
         return parent::websocket($server);
     }
 
-    public function resources($server)
+    public function resources(Server $server)
     {
-        // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
-            abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        // Check if user owns the server or is admin
+        if ($server->user_id !== $this->request->user()->id && !$this->request->user()->root_admin) {
+            return new JsonResponse([
+                'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+            ], 403);
         }
 
         return parent::resources($server);
@@ -464,31 +430,41 @@ class ServerController extends ClientApiController
 }
 EOF
 
-    # 4. Enhanced Middleware Protection
+    # 4. Enhanced Middleware Protection for Server Access
     echo -e "${BLUE}Menginstall Enhanced Middleware Protection...${NC}"
     
-    # Modify AdminAuthenticate middleware
-    cat > "$PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php" << 'EOF'
+    # Modify AuthenticateServerAccess middleware
+    mkdir -p "$PANEL_PATH/app/Http/Middleware/Api/Client/Server"
+    cat > "$PANEL_PATH/app/Http/Middleware/Api/Client/Server/AuthenticateServerAccess.php" << 'EOF'
 <?php
 
-namespace Pterodactyl\Http\Middleware;
+namespace Pterodactyl\Http\Middleware\Api\Client\Server;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Pterodactyl\Models\Server;
 
-class AdminAuthenticate
+class AuthenticateServerAccess
 {
     public function handle(Request $request, Closure $next)
     {
-        if (!$request->user() || !$request->user()->root_admin) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
-                ], 403);
-            }
+        $server = $request->route()->parameter('server');
 
-            // Return custom error page for web requests
-            return response()->view('errors.custom-403', [], 403);
+        if ($server instanceof Server) {
+            $user = $request->user();
+            
+            // Check if user owns the server or is admin
+            if ($server->user_id !== $user->id && !$user->root_admin) {
+                // Block access with custom error message
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+                    ], 403);
+                }
+                
+                throw new AccessDeniedHttpException('hayoloh mau ngapainnn? - by @ginaabaikhati');
+            }
         }
 
         return $next($request);
@@ -496,7 +472,7 @@ class AdminAuthenticate
 }
 EOF
 
-    # 5. Custom Error Handler dengan Error 500
+    # 5. Custom Error Handler for 403 Errors
     echo -e "${BLUE}Menginstall Custom Error Handler...${NC}"
     
     # Modify Exception Handler
@@ -511,50 +487,43 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Prologue\Alerts\AlertsMessageBag;
 
 class Handler extends ExceptionHandler
 {
+    protected $alerts;
+
+    public function __construct(AlertsMessageBag $alerts)
+    {
+        $this->alerts = $alerts;
+    }
+
     public function render($request, Exception $exception)
     {
-        // Handle 500 errors
-        if ($exception instanceof \Symfony\Component\HttpKernel\Exception\HttpException && 
-            $exception->getStatusCode() === 500) {
+        // Handle 403 Forbidden errors with custom message
+        if ($exception instanceof \Illuminate\Auth\Access\AuthorizationException || 
+            $exception instanceof \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException) {
             
             if ($request->expectsJson()) {
-                return response()->json([
+                return new JsonResponse([
                     'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
-                ], 500);
-            }
-            
-            return response()->view('errors.500', [
-                'message' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
-            ], 500);
-        }
-
-        // Handle 403 errors
-        if ($exception instanceof \Illuminate\Auth\Access\AuthorizationException) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
                 ], 403);
             }
             
+            // For web requests, show error page but don't crash the site
             return response()->view('errors.403', [
-                'message' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
+                'message' => 'hayoloh mau ngapainnn? - by @ginaabaikhati',
+                'exception' => $exception
             ], 403);
         }
 
-        // Handle 404 errors
+        // For 404 Not Found errors
         if ($exception instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException) {
             if ($request->expectsJson()) {
-                return response()->json([
-                    'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
+                return new JsonResponse([
+                    'error' => 'Resource tidak ditemukan'
                 ], 404);
             }
-            
-            return response()->view('errors.404', [
-                'message' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
-            ], 404);
         }
 
         return parent::render($request, $exception);
@@ -562,27 +531,59 @@ class Handler extends ExceptionHandler
 }
 EOF
 
-    # 6. Create custom error views
-    echo -e "${BLUE}Membuat custom error views...${NC}"
-    
-    # Create custom error directory if not exists
+    # Create custom 403 error view if not exists
     mkdir -p "$PANEL_PATH/resources/views/errors"
-    
-    # Create custom 500 error view
-    create_error_response "500" "hayoloh mau ngapainnn? - by @ginaabaikhati" > "$PANEL_PATH/resources/views/errors/500.blade.php"
-    
-    # Create custom 403 error view
-    create_error_response "403" "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati" > "$PANEL_PATH/resources/views/errors/403.blade.php"
-    
-    # Create custom 404 error view  
-    create_error_response "404" "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati" > "$PANEL_PATH/resources/views/errors/404.blade.php"
-
-    # 7. Add custom routes protection
-    echo -e "${BLUE}Menambahkan route protection...${NC}"
-    
-    # Backup original routes
-    cp "$PANEL_PATH/routes/web.php" "$SECURITY_BACKUP/web_original.php"
-    cp "$PANEL_PATH/routes/api.php" "$SECURITY_BACKUP/api_original.php"
+    cat > "$PANEL_PATH/resources/views/errors/403.blade.php" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>403 Forbidden</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .signature {
+            margin-top: 20px;
+            font-style: italic;
+            color: #ffeb3b;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>403</h1>
+        <p>Forbidden</p>
+        <p>{{ $message ?? 'hayoloh mau ngapainnn?' }}</p>
+        <div class="signature">- by @ginaabaikhati</div>
+    </div>
+</body>
+</html>
+EOF
 
     # Run panel optimizations
     echo -e "${YELLOW}Menjalankan optimasi panel...${NC}"
@@ -608,52 +609,74 @@ EOF
     echo -e "${GREEN}Security protection berhasil diinstall!${NC}"
     echo -e "${CYAN}Fitur yang aktif:${NC}"
     echo -e "✓ Anti Delete Server & User"
-    echo -e "✓ Anti Intip Location, Nodes, Nest (Error 500)"
-    echo -e "✓ Anti Akses Server Orang Lain (Error 500)" 
-    echo -e "✓ Custom Error Messages"
-    echo -e "✓ User bisa akses server sendiri"
-    echo -e "✓ Admin tetap bisa lihat list servers/users"
+    echo -e "✓ Anti Intip Nodes, Nests, Locations (Error 403)"
+    echo -e "✓ Anti Akses Server Orang Lain" 
+    echo -e "✓ Custom Error Message"
+    echo -e "✓ Protection untuk Admin & User"
 }
 
 # Function to change error texts
 change_error_texts() {
     echo -e "${YELLOW}Mengganti teks error...${NC}"
     
-    # Update error views dengan teks baru
-    create_error_response "500" "hayoloh mau ngapainnn? - by @ginaabaikhati" > "$PANEL_PATH/resources/views/errors/500.blade.php"
-    create_error_response "403" "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati" > "$PANEL_PATH/resources/views/errors/403.blade.php"
-    create_error_response "404" "Ngapain sih? mau nyolong sc org? - By @ginaabaikhati" > "$PANEL_PATH/resources/views/errors/404.blade.php"
+    # Update all files with new error message
+    local files=(
+        "app/Http/Controllers/Admin/ServersController.php"
+        "app/Http/Controllers/Admin/UsersController.php"
+        "app/Http/Controllers/Admin/NodesController.php"
+        "app/Http/Controllers/Admin/NestsController.php"
+        "app/Http/Controllers/Admin/LocationsController.php"
+        "app/Http/Controllers/Api/Client/Servers/ServerController.php"
+        "app/Http/Middleware/Api/Client/Server/AuthenticateServerAccess.php"
+        "app/Exceptions/Handler.php"
+    )
     
-    # Update exception handler
-    sed -i "s|'error' => '.*'|'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'|g" "$PANEL_PATH/app/Exceptions/Handler.php"
-    sed -i "s|'error' => '.*'|'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'|g" "$PANEL_PATH/app/Exceptions/Handler.php"
+    for file in "${files[@]}"; do
+        if [ -f "$PANEL_PATH/$file" ]; then
+            sed -i 's/hayoloh mau ngapainnn? - by @ginaabaikhati/hayoloh mau ngapainnn? - by @ginaabaikhati/g' "$PANEL_PATH/$file"
+            echo -e "${GREEN}✓ Updated $file${NC}"
+        fi
+    done
+    
+    # Update error view
+    if [ -f "$PANEL_PATH/resources/views/errors/403.blade.php" ]; then
+        sed -i 's/hayoloh mau ngapainnn? - by @ginaabaikhati/hayoloh mau ngapainnn? - by @ginaabaikhati/g' "$PANEL_PATH/resources/views/errors/403.blade.php"
+        echo -e "${GREEN}✓ Updated error view${NC}"
+    fi
     
     echo -e "${GREEN}Teks error berhasil diganti!${NC}"
-    echo -e "${BLUE}Error 500: 'hayoloh mau ngapainnn? - by @ginaabaikhati'${NC}"
-    echo -e "${BLUE}Error 403/404: 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'${NC}"
 }
 
 # Function to uninstall security
 uninstall_security() {
     echo -e "${YELLOW}Memulai uninstall security protection...${NC}"
     
-    if [ ! -d "$SECURITY_BACKUP" ]; then
-        echo -e "${RED}Backup tidak ditemukan! Tidak bisa melakukan uninstall.${NC}"
+    echo -e "${CYAN}Available backups:${NC}"
+    local backups=($(find /root/pterodactyl_backup -name "security_backup_*" -type d 2>/dev/null | sort -r))
+    
+    if [ ${#backups[@]} -eq 0 ]; then
+        echo -e "${RED}Tidak ada backup yang ditemukan!${NC}"
         return 1
     fi
     
-    # Restore from backup
-    restore_backup
+    for i in "${!backups[@]}"; do
+        echo -e "${YELLOW}$((i+1)). ${backups[$i]}${NC}"
+    done
     
-    # Remove custom error views
-    rm -f "$PANEL_PATH/resources/views/errors/500.blade.php"
-    rm -f "$PANEL_PATH/resources/views/errors/403.blade.php" 
-    rm -f "$PANEL_PATH/resources/views/errors/404.blade.php"
+    read -p "Pilih backup untuk restore [1-${#backups[@]}]: " backup_choice
+    local selected_backup="${backups[$((backup_choice-1))]}"
+    
+    if [ -z "$selected_backup" ]; then
+        echo -e "${RED}Pilihan backup tidak valid!${NC}"
+        return 1
+    fi
+    
+    # Restore from selected backup
+    restore_backup "$selected_backup"
     
     # Run panel optimizations
     echo -e "${YELLOW}Menjalankan optimasi panel...${NC}"
     cd "$PANEL_PATH" || exit 1
-    
     php artisan config:clear
     php artisan view:clear
     php artisan route:clear
@@ -670,39 +693,39 @@ uninstall_security() {
 check_status() {
     echo -e "${YELLOW}Memeriksa status security...${NC}"
     
-    if [ -d "$SECURITY_BACKUP" ]; then
+    local backups=($(find /root/pterodactyl_backup -name "security_backup_*" -type d 2>/dev/null))
+    if [ ${#backups[@]} -gt 0 ]; then
         echo -e "${GREEN}✓ Security protection terdeteksi terinstall${NC}"
-        echo -e "${BLUE}  Backup files tersedia di: $SECURITY_BACKUP${NC}"
+        echo -e "${CYAN}Backups tersedia:${NC}"
+        for backup in "${backups[@]}"; do
+            echo -e "  - $backup"
+        done
     else
         echo -e "${RED}✗ Security protection tidak terdeteksi${NC}"
     fi
     
-    # Check specific security features
-    local features=(
-        "Anti Delete Server:app/Http/Controllers/Admin/ServersController.php"
-        "Anti Intip Nodes:app/Http/Controllers/Admin/NodesController.php"
-        "Anti Intip Nests:app/Http/Controllers/Admin/NestsController.php"
-        "Anti Intip Locations:app/Http/Controllers/Admin/LocationsController.php"
-        "Client Server Protection:app/Http/Controllers/Api/Client/Servers/ServerController.php"
-        "Custom Error Handler:app/Exceptions/Handler.php"
-    )
+    # Check security features
+    echo -e "${CYAN}Status Fitur Security:${NC}"
     
-    for feature in "${features[@]}"; do
-        name="${feature%%:*}"
-        file="${feature##*:}"
-        
-        if grep -q "ginaabaikhati\|hayoloh" "$PANEL_PATH/$file" 2>/dev/null; then
-            echo -e "${GREEN}✓ $name aktif${NC}"
-        else
-            echo -e "${RED}✗ $name tidak aktif${NC}"
-        fi
-    done
-    
-    # Check error views
-    if [ -f "$PANEL_PATH/resources/views/errors/500.blade.php" ]; then
-        echo -e "${GREEN}✓ Custom error views aktif${NC}"
+    # Check Anti Delete
+    if grep -q "hayoloh mau ngapainnn?" "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" 2>/dev/null; then
+        echo -e "${GREEN}✓ Anti Delete Server aktif${NC}"
     else
-        echo -e "${RED}✗ Custom error views tidak aktif${NC}"
+        echo -e "${RED}✗ Anti Delete Server tidak aktif${NC}"
+    fi
+    
+    # Check Anti Intip Nodes
+    if grep -q "hayoloh mau ngapainnn?" "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" 2>/dev/null; then
+        echo -e "${GREEN}✓ Anti Intip Nodes aktif${NC}"
+    else
+        echo -e "${RED}✗ Anti Intip Nodes tidak aktif${NC}"
+    fi
+    
+    # Check Anti Access Server
+    if grep -q "hayoloh mau ngapainnn?" "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php" 2>/dev/null; then
+        echo -e "${GREEN}✓ Anti Akses Server Orang Lain aktif${NC}"
+    else
+        echo -e "${RED}✗ Anti Akses Server Orang Lain tidak aktif${NC}"
     fi
 }
 
