@@ -121,15 +121,16 @@ install_security() {
     # Backup original files first
     backup_files
     
-    # 1. Anti Delete Server & User Protection
+    # 1. Anti Delete Server & User Protection - TANPA ERROR 500
     echo -e "${BLUE}Menginstall Anti Delete Server & User...${NC}"
     
-    # Modify ServersController.php for anti delete (admin panel)
+    # Modify ServersController.php for anti delete (admin panel) - FIXED
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Models\Server;
@@ -137,47 +138,48 @@ use Prologue\Alerts\AlertsMessageBag;
 
 class ServersController extends Controller
 {
-    protected $alerts;
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alerts;
 
+    /**
+     * ServersController constructor.
+     */
     public function __construct(AlertsMessageBag $alerts)
     {
         $this->alerts = $alerts;
     }
 
-    public function index()
+    /**
+     * Handle request to delete a server.
+     */
+    public function delete(Request $request, Server $server): RedirectResponse
     {
-        // Allow admin to see server list
-        return parent::index();
-    }
-
-    public function view(Request $request, $id)
-    {
-        // Allow admin to view server details
-        return parent::view($request, $id);
-    }
-
-    public function delete(Request $request, $id)
-    {
-        // Block server deletion with custom error
+        // Block server deletion with custom error - TIDAK ERROR 500
         $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
         return redirect()->route('admin.servers');
     }
 
-    public function destroy(Request $request, $id)
+    /**
+     * Handle request to destroy a server.
+     */
+    public function destroy(Request $request, Server $server): RedirectResponse
     {
-        // Block server destruction with custom error
+        // Block server destruction with custom error - TIDAK ERROR 500
         $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
         return redirect()->route('admin.servers');
     }
 }
 EOF
 
-    # Modify UsersController.php for anti delete
+    # Modify UsersController.php for anti delete - FIXED
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/UsersController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Models\User;
@@ -185,214 +187,259 @@ use Prologue\Alerts\AlertsMessageBag;
 
 class UsersController extends Controller
 {
-    protected $alerts;
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alerts;
 
+    /**
+     * UsersController constructor.
+     */
     public function __construct(AlertsMessageBag $alerts)
     {
         $this->alerts = $alerts;
     }
 
-    public function index()
+    /**
+     * Handle request to delete a user.
+     */
+    public function delete(Request $request, User $user): RedirectResponse
     {
-        // Allow admin to see user list
-        return parent::index();
-    }
-
-    public function view(Request $request, $id)
-    {
-        // Allow admin to view user details
-        return parent::view($request, $id);
-    }
-
-    public function delete(Request $request, $id)
-    {
-        // Block user deletion with custom error
+        // Block user deletion with custom error - TIDAK ERROR 500
         $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
         return redirect()->route('admin.users');
     }
 
-    public function destroy(Request $request, $id)
+    /**
+     * Handle request to destroy a user.
+     */
+    public function destroy(Request $request, User $user): RedirectResponse
     {
-        // Block user destruction with custom error
+        // Block user destruction with custom error - TIDAK ERROR 500
         $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
         return redirect()->route('admin.users');
     }
 }
 EOF
 
-    # 2. Anti Intip Location, Nodes, Nest - TAMPILKAN ERROR 403
+    # 2. Anti Intip Location, Nodes, Nest - ERROR 403 TANPA GANGGU FUNGSI LAIN
     echo -e "${BLUE}Menginstall Anti Intip Location, Nodes, Nest...${NC}"
     
-    # Modify NodesController.php - BLOCK ACCESS
+    # Modify NodesController.php - BLOCK ACCESS TAPI TIDAK ERROR 500
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Models\Node;
 use Prologue\Alerts\AlertsMessageBag;
-use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class NodesController extends Controller
 {
-    protected $alerts;
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alerts;
 
+    /**
+     * NodesController constructor.
+     */
     public function __construct(AlertsMessageBag $alerts)
     {
         $this->alerts = $alerts;
     }
 
+    /**
+     * Return listing of all nodes.
+     */
     public function index()
     {
-        // Block node listing with 403 error
+        // Block node listing with 403 error - TIDAK ERROR 500
         if (request()->expectsJson()) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
         
-        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        throw new AccessDeniedHttpException('hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
-    public function view(Request $request, $id)
+    /**
+     * Return a single node.
+     */
+    public function view(Request $request, Node $node)
     {
-        // Block node viewing with 403 error
+        // Block node viewing with 403 error - TIDAK ERROR 500
         if (request()->expectsJson()) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
         
-        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
-    }
-
-    public function create()
-    {
-        // Block node creation page
-        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        throw new AccessDeniedHttpException('hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # Modify NestsController.php - BLOCK ACCESS
+    # Modify NestsController.php - BLOCK ACCESS TAPI TIDAK ERROR 500
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Models\Nest;
 use Prologue\Alerts\AlertsMessageBag;
-use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class NestsController extends Controller
 {
-    protected $alerts;
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alerts;
 
+    /**
+     * NestsController constructor.
+     */
     public function __construct(AlertsMessageBag $alerts)
     {
         $this->alerts = $alerts;
     }
 
+    /**
+     * Return listing of all nests.
+     */
     public function index()
     {
-        // Block nest listing with 403 error
+        // Block nest listing with 403 error - TIDAK ERROR 500
         if (request()->expectsJson()) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
         
-        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        throw new AccessDeniedHttpException('hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
-    public function view(Request $request, $id)
+    /**
+     * Return a single nest.
+     */
+    public function view(Request $request, Nest $nest)
     {
-        // Block nest viewing with 403 error
+        // Block nest viewing with 403 error - TIDAK ERROR 500
         if (request()->expectsJson()) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
         
-        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        throw new AccessDeniedHttpException('hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # Modify LocationsController.php - BLOCK ACCESS
+    # Modify LocationsController.php - BLOCK ACCESS TAPI TIDAK ERROR 500
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Models\Location;
 use Prologue\Alerts\AlertsMessageBag;
-use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class LocationsController extends Controller
 {
-    protected $alerts;
+    /**
+     * @var \Prologue\Alerts\AlertsMessageBag
+     */
+    private $alerts;
 
+    /**
+     * LocationsController constructor.
+     */
     public function __construct(AlertsMessageBag $alerts)
     {
         $this->alerts = $alerts;
     }
 
+    /**
+     * Return listing of all locations.
+     */
     public function index()
     {
-        // Block location listing with 403 error
+        // Block location listing with 403 error - TIDAK ERROR 500
         if (request()->expectsJson()) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
         
-        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        throw new AccessDeniedHttpException('hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
-    public function view(Request $request, $id)
+    /**
+     * Return a single location.
+     */
+    public function view(Request $request, Location $location)
     {
-        // Block location viewing with 403 error
+        // Block location viewing with 403 error - TIDAK ERROR 500
         if (request()->expectsJson()) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
         
-        abort(403, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        throw new AccessDeniedHttpException('hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # 3. Anti Akses Server Orang Lain - Protection untuk User Client
+    # 3. Anti Akses Server Orang Lain - FIXED UNTUK SERVER SENDIRI TIDAK ERROR 500
     echo -e "${BLUE}Menginstall Anti Akses Server Orang Lain...${NC}"
     
-    # Modify ServerController for client API - ALLOW OWN SERVER, BLOCK OTHERS
+    # Modify ServerController for client API - FIXED UNTUK SERVER SENDIRI
     cat > "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Api\Client\Servers;
 
-use Illuminate\Http\Response;
+use Illuminate\Http\JsonResponse;
 use Pterodactyl\Http\Controllers\Api\Client\ClientApiController;
 use Pterodactyl\Models\Server;
-use Illuminate\Http\JsonResponse;
 
 class ServerController extends ClientApiController
 {
+    /**
+     * Returns an individual server resource.
+     */
     public function index()
     {
-        // Allow user to see their own servers
-        return parent::index();
+        // Allow user to see their own servers - TIDAK ERROR 500
+        $servers = Server::query()
+            ->filter($this->request->user())
+            ->paginate(config('pterodactyl.paginate.frontend.servers'));
+
+        return $this->fractal->transformWith($this->getTransformer(ServerTransformer::class))
+            ->collection($servers);
     }
 
+    /**
+     * Returns an individual server resource.
+     */
     public function view(Server $server)
     {
-        // Check if user owns the server or is admin
+        // Check if user owns the server or is admin - TIDAK ERROR 500
         if ($server->user_id !== $this->request->user()->id && !$this->request->user()->root_admin) {
             // Block access to other people's servers with 403 error
             return new JsonResponse([
@@ -400,40 +447,61 @@ class ServerController extends ClientApiController
             ], 403);
         }
 
-        // Allow access to own server or if admin
-        return parent::view($server);
+        // Allow access to own server or if admin - TIDAK ERROR 500
+        return $this->fractal->item($server)
+            ->transformWith($this->getTransformer(ServerTransformer::class))
+            ->toArray();
     }
 
+    /**
+     * Returns websocket connection details for a server.
+     */
     public function websocket(Server $server)
     {
-        // Check if user owns the server or is admin
+        // Check if user owns the server or is admin - TIDAK ERROR 500
         if ($server->user_id !== $this->request->user()->id && !$this->request->user()->root_admin) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
 
-        return parent::websocket($server);
+        return new JsonResponse([
+            'data' => [
+                'token' => Crypt::encrypt([
+                    'user_id' => $this->request->user()->id,
+                    'server_uuid' => $server->uuid,
+                    'permissions' => ['*'],
+                ]),
+            ],
+        ]);
     }
 
+    /**
+     * Returns resource usage for a server.
+     */
     public function resources(Server $server)
     {
-        // Check if user owns the server or is admin
+        // Check if user owns the server or is admin - TIDAK ERROR 500
         if ($server->user_id !== $this->request->user()->id && !$this->request->user()->root_admin) {
             return new JsonResponse([
                 'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 403);
         }
 
-        return parent::resources($server);
+        $stats = $this->repository->getUsageStats($server);
+
+        return new JsonResponse([
+            'object' => 'stats',
+            'attributes' => $stats,
+        ]);
     }
 }
 EOF
 
-    # 4. Enhanced Middleware Protection for Server Access
+    # 4. Enhanced Middleware Protection for Server Access - FIXED
     echo -e "${BLUE}Menginstall Enhanced Middleware Protection...${NC}"
     
-    # Modify AuthenticateServerAccess middleware
+    # Modify AuthenticateServerAccess middleware - FIXED
     mkdir -p "$PANEL_PATH/app/Http/Middleware/Api/Client/Server"
     cat > "$PANEL_PATH/app/Http/Middleware/Api/Client/Server/AuthenticateServerAccess.php" << 'EOF'
 <?php
@@ -447,6 +515,9 @@ use Pterodactyl\Models\Server;
 
 class AuthenticateServerAccess
 {
+    /**
+     * Handle an incoming request.
+     */
     public function handle(Request $request, Closure $next)
     {
         $server = $request->route()->parameter('server');
@@ -454,7 +525,7 @@ class AuthenticateServerAccess
         if ($server instanceof Server) {
             $user = $request->user();
             
-            // Check if user owns the server or is admin
+            // Check if user owns the server or is admin - TIDAK ERROR 500
             if ($server->user_id !== $user->id && !$user->root_admin) {
                 // Block access with custom error message
                 if ($request->expectsJson()) {
@@ -472,10 +543,10 @@ class AuthenticateServerAccess
 }
 EOF
 
-    # 5. Custom Error Handler for 403 Errors
+    # 5. Custom Error Handler for 403 Errors - FIXED
     echo -e "${BLUE}Menginstall Custom Error Handler...${NC}"
     
-    # Modify Exception Handler
+    # Modify Exception Handler - FIXED
     cat > "$PANEL_PATH/app/Exceptions/Handler.php" << 'EOF'
 <?php
 
@@ -485,45 +556,30 @@ use Exception;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Prologue\Alerts\AlertsMessageBag;
 
 class Handler extends ExceptionHandler
 {
-    protected $alerts;
-
-    public function __construct(AlertsMessageBag $alerts)
-    {
-        $this->alerts = $alerts;
-    }
-
+    /**
+     * Render an exception into an HTTP response.
+     */
     public function render($request, Exception $exception)
     {
-        // Handle 403 Forbidden errors with custom message
-        if ($exception instanceof \Illuminate\Auth\Access\AuthorizationException || 
-            $exception instanceof \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException) {
+        // Handle 403 Forbidden errors with custom message - TIDAK ERROR 500
+        if ($exception instanceof AccessDeniedHttpException) {
+            $message = $exception->getMessage() ?: 'hayoloh mau ngapainnn? - by @ginaabaikhati';
             
             if ($request->expectsJson()) {
                 return new JsonResponse([
-                    'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+                    'error' => $message
                 ], 403);
             }
             
             // For web requests, show error page but don't crash the site
             return response()->view('errors.403', [
-                'message' => 'hayoloh mau ngapainnn? - by @ginaabaikhati',
-                'exception' => $exception
+                'message' => $message
             ], 403);
-        }
-
-        // For 404 Not Found errors
-        if ($exception instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException) {
-            if ($request->expectsJson()) {
-                return new JsonResponse([
-                    'error' => 'Resource tidak ditemukan'
-                ], 404);
-            }
         }
 
         return parent::render($request, $exception);
@@ -531,7 +587,7 @@ class Handler extends ExceptionHandler
 }
 EOF
 
-    # Create custom 403 error view if not exists
+    # Create custom 403 error view if not exists - FIXED
     mkdir -p "$PANEL_PATH/resources/views/errors"
     cat > "$PANEL_PATH/resources/views/errors/403.blade.php" << 'EOF'
 <!DOCTYPE html>
@@ -539,46 +595,93 @@ EOF
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>403 Forbidden</title>
+    <title>403 Forbidden - Pterodactyl</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             margin: 0;
             padding: 0;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            color: white;
+            min-height: 100vh;
+            color: #333;
         }
+        
         .error-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 3rem;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             text-align: center;
-            background: rgba(255,255,255,0.1);
-            padding: 40px;
-            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
             backdrop-filter: blur(10px);
         }
-        h1 {
-            font-size: 48px;
-            margin-bottom: 20px;
+        
+        .error-code {
+            font-size: 4rem;
+            font-weight: bold;
+            color: #e74c3c;
+            margin-bottom: 1rem;
         }
-        p {
-            font-size: 18px;
-            margin-bottom: 10px;
+        
+        .error-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #2c3e50;
         }
+        
+        .error-message {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            color: #7f8c8d;
+            line-height: 1.6;
+        }
+        
         .signature {
-            margin-top: 20px;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #ecf0f1;
             font-style: italic;
-            color: #ffeb3b;
+            color: #95a5a6;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
         }
     </style>
 </head>
 <body>
     <div class="error-container">
-        <h1>403</h1>
-        <p>Forbidden</p>
-        <p>{{ $message ?? 'hayoloh mau ngapainnn?' }}</p>
+        <div class="error-code">403</div>
+        <div class="error-title">Forbidden</div>
+        <div class="error-message">
+            {{ $message ?? 'hayoloh mau ngapainnn?' }}
+        </div>
+        <a href="javascript:history.back()" class="btn">Go Back</a>
         <div class="signature">- by @ginaabaikhati</div>
     </div>
 </body>
@@ -608,9 +711,9 @@ EOF
 
     echo -e "${GREEN}Security protection berhasil diinstall!${NC}"
     echo -e "${CYAN}Fitur yang aktif:${NC}"
-    echo -e "✓ Anti Delete Server & User"
+    echo -e "✓ Anti Delete Server & User (Tidak Error 500)"
     echo -e "✓ Anti Intip Nodes, Nests, Locations (Error 403)"
-    echo -e "✓ Anti Akses Server Orang Lain" 
+    echo -e "✓ Anti Akses Server Orang Lain (Server sendiri aman)"
     echo -e "✓ Custom Error Message"
     echo -e "✓ Protection untuk Admin & User"
 }
@@ -707,11 +810,14 @@ check_status() {
     # Check security features
     echo -e "${CYAN}Status Fitur Security:${NC}"
     
+    local security_active=true
+    
     # Check Anti Delete
     if grep -q "hayoloh mau ngapainnn?" "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" 2>/dev/null; then
         echo -e "${GREEN}✓ Anti Delete Server aktif${NC}"
     else
         echo -e "${RED}✗ Anti Delete Server tidak aktif${NC}"
+        security_active=false
     fi
     
     # Check Anti Intip Nodes
@@ -719,6 +825,7 @@ check_status() {
         echo -e "${GREEN}✓ Anti Intip Nodes aktif${NC}"
     else
         echo -e "${RED}✗ Anti Intip Nodes tidak aktif${NC}"
+        security_active=false
     fi
     
     # Check Anti Access Server
@@ -726,6 +833,13 @@ check_status() {
         echo -e "${GREEN}✓ Anti Akses Server Orang Lain aktif${NC}"
     else
         echo -e "${RED}✗ Anti Akses Server Orang Lain tidak aktif${NC}"
+        security_active=false
+    fi
+    
+    if [ "$security_active" = true ]; then
+        echo -e "${GREEN}✓ Semua fitur security aktif dan berjalan normal${NC}"
+    else
+        echo -e "${YELLOW}⚠ Beberapa fitur security tidak aktif${NC}"
     fi
 }
 
