@@ -82,10 +82,10 @@ install_security() {
     # Backup original files first
     backup_files
     
-    # 1. Anti Delete Server & User Protection (Admin masih bisa akses)
+    # 1. Anti Delete Server & User Protection
     echo -e "${BLUE}Menginstall Anti Delete Server & User...${NC}"
     
-    # Modify ServersController.php for anti delete (non-admin)
+    # Modify ServersController.php for anti delete
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
 <?php
 
@@ -108,60 +108,55 @@ class ServersController extends Controller
     public function delete(Request $request, $id)
     {
         // Allow admin to delete servers
-        if ($request->user() && $request->user()->root_admin) {
+        if (auth()->check() && auth()->user()->root_admin) {
+            // Admin can delete servers, proceed with original logic
             $server = Server::findOrFail($id);
-            $server->delete();
-            
-            $this->alerts->success('Server berhasil dihapus.')->flash();
-            return redirect()->route('admin.servers');
+            return parent::delete($request, $id);
         }
-        
-        // Non-admin trying to delete
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+
+        // Non-admin users get error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.servers');
     }
 
     public function destroy(Request $request, $id)
     {
         // Allow admin to destroy servers
-        if ($request->user() && $request->user()->root_admin) {
-            $server = Server::findOrFail($id);
-            $server->forceDelete();
-            
-            $this->alerts->success('Server berhasil dihapus permanen.')->flash();
-            return redirect()->route('admin.servers');
+        if (auth()->check() && auth()->user()->root_admin) {
+            // Admin can destroy servers, proceed with original logic
+            return parent::destroy($request, $id);
         }
-        
-        // Non-admin trying to destroy
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+
+        // Non-admin users get error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.servers');
     }
 
     public function view(Request $request, $id)
     {
-        // Allow admin to view servers
-        if ($request->user() && $request->user()->root_admin) {
-            $server = Server::findOrFail($id);
-            return view('admin.servers.view', ['server' => $server]);
+        // Allow admin to view all servers
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::view($request, $id);
         }
-        
-        // Non-admin trying to view
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function index()
     {
         // Allow admin to view server list
-        if (request()->user() && request()->user()->root_admin) {
-            $servers = Server::all();
-            return view('admin.servers.index', ['servers' => $servers]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::index();
         }
-        
-        // Non-admin trying to access
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # Modify UsersController.php for anti delete (non-admin)
+    # Modify UsersController.php for anti delete
     cat > "$PANEL_PATH/app/Http/Controllers/Admin/UsersController.php" << 'EOF'
 <?php
 
@@ -184,72 +179,54 @@ class UsersController extends Controller
     public function delete(Request $request, $id)
     {
         // Allow admin to delete users
-        if ($request->user() && $request->user()->root_admin) {
-            $user = User::findOrFail($id);
-            
-            // Prevent admin from deleting themselves
-            if ($user->id === $request->user()->id) {
-                $this->alerts->danger('Tidak bisa menghapus akun sendiri.')->flash();
-                return redirect()->route('admin.users');
-            }
-            
-            $user->delete();
-            $this->alerts->success('User berhasil dihapus.')->flash();
-            return redirect()->route('admin.users');
+        if (auth()->check() && auth()->user()->root_admin) {
+            // Admin can delete users, proceed with original logic
+            return parent::delete($request, $id);
         }
-        
-        // Non-admin trying to delete users
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+
+        // Non-admin users get error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.users');
     }
 
     public function destroy(Request $request, $id)
     {
-        // Allow admin to destroy users permanently
-        if ($request->user() && $request->user()->root_admin) {
-            $user = User::findOrFail($id);
-            
-            // Prevent admin from destroying themselves
-            if ($user->id === $request->user()->id) {
-                $this->alerts->danger('Tidak bisa menghapus akun sendiri.')->flash();
-                return redirect()->route('admin.users');
-            }
-            
-            $user->forceDelete();
-            $this->alerts->success('User berhasil dihapus permanen.')->flash();
-            return redirect()->route('admin.users');
+        // Allow admin to destroy users
+        if (auth()->check() && auth()->user()->root_admin) {
+            // Admin can destroy users, proceed with original logic
+            return parent::destroy($request, $id);
         }
-        
-        // Non-admin trying to destroy users
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+
+        // Non-admin users get error
+        $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+        return redirect()->route('admin.users');
     }
 
     public function view(Request $request, $id)
     {
-        // Allow admin to view users
-        if ($request->user() && $request->user()->root_admin) {
-            $user = User::findOrFail($id);
-            return view('admin.users.view', ['user' => $user]);
+        // Allow admin to view all users
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::view($request, $id);
         }
-        
-        // Non-admin trying to view users
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function index()
     {
         // Allow admin to view user list
-        if (request()->user() && request()->user()->root_admin) {
-            $users = User::all();
-            return view('admin.users.index', ['users' => $users]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::index();
         }
-        
-        // Non-admin trying to access user list
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # 2. Anti Intip Location, Nodes, Nest (Error 500 untuk non-admin)
+    # 2. Anti Intip Location, Nodes, Nest dengan Error 500
     echo -e "${BLUE}Menginstall Anti Intip Location, Nodes, Nest...${NC}"
     
     # Modify NodesController.php
@@ -275,35 +252,33 @@ class NodesController extends Controller
     public function view(Request $request, $id)
     {
         // Allow admin to view nodes
-        if ($request->user() && $request->user()->root_admin) {
-            $node = Node::findOrFail($id);
-            return view('admin.nodes.view', ['node' => $node]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::view($request, $id);
         }
-        
-        // Non-admin trying to view nodes
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function index()
     {
         // Allow admin to view node list
-        if (request()->user() && request()->user()->root_admin) {
-            $nodes = Node::all();
-            return view('admin.nodes.index', ['nodes' => $nodes]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::index();
         }
-        
-        // Non-admin trying to access node list
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function create()
     {
         // Allow admin to create nodes
-        if (request()->user() && request()->user()->root_admin) {
-            return view('admin.nodes.create');
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::create();
         }
-        
-        // Non-admin trying to create nodes
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
@@ -317,7 +292,6 @@ namespace Pterodactyl\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Models\Nest;
 use Prologue\Alerts\AlertsMessageBag;
 
 class NestsController extends Controller
@@ -332,24 +306,22 @@ class NestsController extends Controller
     public function view(Request $request, $id)
     {
         // Allow admin to view nests
-        if ($request->user() && $request->user()->root_admin) {
-            $nest = Nest::findOrFail($id);
-            return view('admin.nests.view', ['nest' => $nest]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::view($request, $id);
         }
-        
-        // Non-admin trying to view nests
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function index()
     {
         // Allow admin to view nest list
-        if (request()->user() && request()->user()->root_admin) {
-            $nests = Nest::all();
-            return view('admin.nests.index', ['nests' => $nests]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::index();
         }
-        
-        // Non-admin trying to access nest list
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
@@ -363,7 +335,6 @@ namespace Pterodactyl\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Models\Location;
 use Prologue\Alerts\AlertsMessageBag;
 
 class LocationsController extends Controller
@@ -378,41 +349,28 @@ class LocationsController extends Controller
     public function view(Request $request, $id)
     {
         // Allow admin to view locations
-        if ($request->user() && $request->user()->root_admin) {
-            $location = Location::findOrFail($id);
-            return view('admin.locations.view', ['location' => $location]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::view($request, $id);
         }
-        
-        // Non-admin trying to view locations
+
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 
     public function index()
     {
         // Allow admin to view location list
-        if (request()->user() && request()->user()->root_admin) {
-            $locations = Location::all();
-            return view('admin.locations.index', ['locations' => $locations]);
+        if (auth()->check() && auth()->user()->root_admin) {
+            return parent::index();
         }
-        
-        // Non-admin trying to access location list
-        abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
-    }
 
-    public function create()
-    {
-        // Allow admin to create locations
-        if (request()->user() && request()->user()->root_admin) {
-            return view('admin.locations.create');
-        }
-        
-        // Non-admin trying to create locations
+        // Non-admin users get error 500
         abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
     }
 }
 EOF
 
-    # 3. Anti Akses Server Orang Lain (Client API Protection)
+    # 3. Anti Akses Server Orang Lain dengan Validasi Kepemilikan
     echo -e "${BLUE}Menginstall Anti Akses Server Orang Lain...${NC}"
     
     # Modify ServerController for client API
@@ -424,38 +382,28 @@ namespace Pterodactyl\Http\Controllers\Api\Client\Servers;
 use Illuminate\Http\Response;
 use Pterodactyl\Http\Controllers\Api\Client\ClientApiController;
 use Pterodactyl\Models\Server;
-use Pterodactyl\Repositories\Wings\DaemonServerRepository;
+use Prologue\Alerts\AlertsMessageBag;
 
 class ServerController extends ClientApiController
 {
-    protected $daemonServerRepository;
+    protected $alerts;
 
-    public function __construct(DaemonServerRepository $daemonServerRepository)
+    public function __construct(AlertsMessageBag $alerts)
     {
-        $this->daemonServerRepository = $daemonServerRepository;
+        $this->alerts = $alerts;
     }
 
     public function index()
     {
-        // User can only see their own servers
-        $user = auth()->user();
-        $servers = Server::where('user_id', $user->id)->get();
-        
-        return response()->json([
-            'data' => $servers->map(function ($server) {
-                return [
-                    'id' => $server->id,
-                    'name' => $server->name,
-                    'status' => $server->status,
-                ];
-            })
-        ]);
+        // Users can see their own servers
+        return parent::index();
     }
 
     public function view($server)
     {
-        // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
+        // Check if user owns the server or is admin
+        if ($server->user_id !== auth()->user()->id && !auth()->user()->root_admin) {
+            // Return error 500 for unauthorized access
             abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
         }
 
@@ -464,8 +412,8 @@ class ServerController extends ClientApiController
 
     public function websocket($server)
     {
-        // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
+        // Check if user owns the server or is admin
+        if ($server->user_id !== auth()->user()->id && !auth()->user()->root_admin) {
             abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
         }
 
@@ -474,27 +422,17 @@ class ServerController extends ClientApiController
 
     public function resources($server)
     {
-        // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
+        // Check if user owns the server or is admin
+        if ($server->user_id !== auth()->user()->id && !auth()->user()->root_admin) {
             abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
         }
 
         return parent::resources($server);
     }
-
-    public function command($server)
-    {
-        // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
-            abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
-        }
-
-        return parent::command($server);
-    }
 }
 EOF
 
-    # 4. Enhanced Middleware Protection dengan Error 500
+    # 4. Enhanced Middleware Protection dengan Admin Access
     echo -e "${BLUE}Menginstall Enhanced Middleware Protection...${NC}"
     
     # Modify AdminAuthenticate middleware
@@ -511,12 +449,41 @@ class AdminAuthenticate
     public function handle(Request $request, Closure $next)
     {
         if (!$request->user() || !$request->user()->root_admin) {
-            // Non-admin trying to access admin area
             if ($request->expectsJson()) {
-                abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+                return response()->json([
+                    'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+                ], 500);
             }
 
             abort(500, 'hayoloh mau ngapainnn? - by @ginaabaikhati');
+        }
+
+        return $next($request);
+    }
+}
+EOF
+
+    # Modify ClientAuthenticate middleware
+    cat > "$PANEL_PATH/app/Http/Middleware/ClientAuthenticate.php" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+
+class ClientAuthenticate
+{
+    public function handle(Request $request, Closure $next)
+    {
+        if (!$request->user()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+                ], 401);
+            }
+
+            abort(401, 'Unauthorized');
         }
 
         return $next($request);
@@ -537,13 +504,21 @@ use Exception;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Http\Response;
+use Prologue\Alerts\AlertsMessageBag;
 
 class Handler extends ExceptionHandler
 {
+    protected $alerts;
+
+    public function __construct(AlertsMessageBag $alerts)
+    {
+        $this->alerts = $alerts;
+    }
+
     public function render($request, Exception $exception)
     {
-        // Custom 500 error for security violations
+        // For 403 Forbidden errors - show custom message but don't break the site
         if ($exception instanceof \Illuminate\Auth\Access\AuthorizationException) {
             if ($request->expectsJson()) {
                 return response()->json([
@@ -551,36 +526,32 @@ class Handler extends ExceptionHandler
                 ], 500);
             }
             
-            // Return 500 error page with custom message
-            return response()->view('errors.500', [
-                'message' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
-            ], 500);
+            $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+            return redirect()->back();
         }
 
-        // For 404 errors, show normal 404 page but with custom message if unauthorized
+        // For 404 Not Found errors - don't break the site
         if ($exception instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException) {
-            // Check if it's an unauthorized access attempt
-            $referer = $request->header('referer');
-            if (str_contains($request->url(), ['/admin/', '/api/']) && !$request->user()?->root_admin) {
-                if ($request->expectsJson()) {
-                    return response()->json([
-                        'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
-                    ], 500);
-                }
-                return response()->view('errors.500', [
-                    'message' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
-                ], 500);
-            }
-        }
-
-        // Handle other 403 Forbidden errors
-        if ($exception instanceof HttpException && $exception->getStatusCode() === 403) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
                 ], 500);
             }
             
+            // Return to home instead of showing 500 error for 404
+            $this->alerts->danger('hayoloh mau ngapainnn? - by @ginaabaikhati')->flash();
+            return redirect()->route('index');
+        }
+
+        // For custom security violations - return 500 error
+        if (strpos($exception->getMessage(), 'hayoloh mau ngapainnn?') !== false) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'error' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
+                ], 500);
+            }
+
+            // Show error page but don't break the entire site
             return response()->view('errors.500', [
                 'message' => 'hayoloh mau ngapainnn? - by @ginaabaikhati'
             ], 500);
@@ -590,57 +561,6 @@ class Handler extends ExceptionHandler
     }
 }
 EOF
-
-    # Create custom 500 error page if not exists
-    if [ ! -f "$PANEL_PATH/resources/views/errors/500.blade.php" ]; then
-        mkdir -p "$PANEL_PATH/resources/views/errors"
-        cat > "$PANEL_PATH/resources/views/errors/500.blade.php" << 'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>500 Internal Server Error</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f8f9fa;
-            color: #333;
-            text-align: center;
-            padding: 50px;
-        }
-        .error-container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        .error-code {
-            font-size: 48px;
-            font-weight: bold;
-            color: #dc3545;
-        }
-        .error-message {
-            font-size: 18px;
-            margin: 20px 0;
-            color: #666;
-        }
-    </style>
-</head>
-<body>
-    <div class="error-container">
-        <div class="error-code">500</div>
-        <div class="error-message">
-            {{ $message ?? 'hayoloh mau ngapainnn? - by @ginaabaikhati' }}
-        </div>
-        <a href="{{ url('/') }}">Kembali ke Home</a>
-    </div>
-</body>
-</html>
-EOF
-    fi
 
     # Run panel optimizations
     echo -e "${YELLOW}Menjalankan optimasi panel...${NC}"
@@ -657,24 +577,19 @@ EOF
 
     echo -e "${GREEN}Security protection berhasil diinstall!${NC}"
     echo -e "${YELLOW}Fiturnya:${NC}"
-    echo -e "  ✓ Admin bisa akses semua fitur"
-    echo -e "  ✓ User hanya bisa akses server sendiri"
-    echo -e "  ✓ Non-admin yang intip nodes/nests/locations kena error 500"
-    echo -e "  ✓ Anti akses server orang lain"
-    echo -e "  ✓ Custom error message 'hayoloh mau ngapainnn? - by @ginaabaikhati'"
+    echo -e "  ${GREEN}✓ Anti Delete Server & User (Admin bisa, user tidak)${NC}"
+    echo -e "  ${GREEN}✓ Anti Intip Location, Nodes, Nest (Error 500 untuk non-admin)${NC}"
+    echo -e "  ${GREEN}✓ Anti Akses Server Orang Lain (Error 500)${NC}"
+    echo -e "  ${GREEN}✓ User bisa akses server sendiri${NC}"
+    echo -e "  ${GREEN}✓ Admin bisa akses semua${NC}"
 }
 
 # Function to change error texts
 change_error_texts() {
     echo -e "${YELLOW}Mengganti teks error...${NC}"
     
-    # Update all files with new error message
+    # Replace all existing error messages with new one
     find "$PANEL_PATH" -name "*.php" -type f -exec sed -i 's/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/hayoloh mau ngapainnn? - by @ginaabaikhati/g' {} \;
-    
-    # Update the custom 500 error page
-    if [ -f "$PANEL_PATH/resources/views/errors/500.blade.php" ]; then
-        sed -i 's/Ngapain sih? mau nyolong sc org? - By @ginaabaikhati/hayoloh mau ngapainnn? - by @ginaabaikhati/g' "$PANEL_PATH/resources/views/errors/500.blade.php"
-    fi
     
     echo -e "${GREEN}Teks error berhasil diganti!${NC}"
     echo -e "${BLUE}Custom message: 'hayoloh mau ngapainnn? - by @ginaabaikhati'${NC}"
@@ -719,22 +634,16 @@ check_status() {
     fi
     
     # Check if modified files exist
-    if grep -q "hayoloh mau ngapainnn" "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" 2>/dev/null; then
+    if grep -q "ginaabaikhati" "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" 2>/dev/null; then
         echo -e "${GREEN}✓ Anti Delete Server aktif${NC}"
     else
         echo -e "${RED}✗ Anti Delete Server tidak aktif${NC}"
     fi
     
-    if grep -q "hayoloh mau ngapainnn" "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" 2>/dev/null; then
+    if grep -q "ginaabaikhati" "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" 2>/dev/null; then
         echo -e "${GREEN}✓ Anti Intip Nodes aktif${NC}"
     else
         echo -e "${RED}✗ Anti Intip Nodes tidak aktif${NC}"
-    fi
-
-    if grep -q "hayoloh mau ngapainnn" "$PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php" 2>/dev/null; then
-        echo -e "${GREEN}✓ Anti Intip Locations aktif${NC}"
-    else
-        echo -e "${RED}✗ Anti Intip Locations tidak aktif${NC}"
     fi
 }
 
