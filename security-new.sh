@@ -9,12 +9,16 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
 PANEL_PATH="/var/www/pterodactyl"
 BACKUP_PATH="/root/pterodactyl_backup"
 SECURITY_BACKUP="$BACKUP_PATH/security_backup"
+CUSTOM_ERROR="Ngapain sih? mau nyolong sc org? - By @ginaabaikhati"
+CUSTOM_ERROR_500="ERROR 500: Dilarang mengintip! - By @ginaabaikhati"
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
@@ -25,7 +29,7 @@ fi
 # Function to display banner
 show_banner() {
     clear
-    echo -e "${BLUE}"
+    echo -e "${CYAN}"
     echo "================================================"
     echo "    Pterodactyl Security Protection Installer"
     echo "    By: @ginaabaikhati"
@@ -39,14 +43,35 @@ backup_files() {
     mkdir -p "$SECURITY_BACKUP"
     
     # Backup important files
-    cp "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php" "$SECURITY_BACKUP/" 2>/dev/null
-    cp "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" "$SECURITY_BACKUP/" 2>/dev/null
-    cp "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" "$SECURITY_BACKUP/" 2>/dev/null
-    cp "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" "$SECURITY_BACKUP/" 2>/dev/null
-    cp "$PANEL_PATH/app/Http/Controllers/Admin/UsersController.php" "$SECURITY_BACKUP/" 2>/dev/null
-    cp "$PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php" "$SECURITY_BACKUP/" 2>/dev/null
-    cp "$PANEL_PATH/app/Http/Middleware/ClientAuthenticate.php" "$SECURITY_BACKUP/" 2>/dev/null
-    cp "$PANEL_PATH/app/Exceptions/Handler.php" "$SECURITY_BACKUP/" 2>/dev/null
+    local files=(
+        "app/Http/Controllers/Api/Client/Servers/ServerController.php"
+        "app/Http/Controllers/Admin/NodesController.php"
+        "app/Http/Controllers/Admin/NestsController.php"
+        "app/Http/Controllers/Admin/ServersController.php"
+        "app/Http/Controllers/Admin/UsersController.php"
+        "app/Http/Controllers/Admin/LocationsController.php"
+        "app/Http/Controllers/Controller.php"
+        "app/Http/Middleware/AdminAuthenticate.php"
+        "app/Http/Middleware/ClientAuthenticate.php"
+        "app/Http/Middleware/Authenticate.php"
+        "app/Exceptions/Handler.php"
+        "resources/views/errors/404.blade.php"
+        "resources/views/errors/403.blade.php"
+        "resources/views/errors/500.blade.php"
+        "resources/views/errors/503.blade.php"
+        "app/Providers/AppServiceProvider.php"
+        "app/Providers/AuthServiceProvider.php"
+    )
+    
+    for file in "${files[@]}"; do
+        if [ -f "$PANEL_PATH/$file" ]; then
+            mkdir -p "$SECURITY_BACKUP/$(dirname "$file")"
+            cp "$PANEL_PATH/$file" "$SECURITY_BACKUP/$file" 2>/dev/null
+            echo -e "${GREEN}✓ Backup: $file${NC}"
+        else
+            echo -e "${YELLOW}⚠ File tidak ditemukan: $file${NC}"
+        fi
+    done
     
     echo -e "${GREEN}Backup selesai!${NC}"
 }
@@ -61,16 +86,290 @@ restore_backup() {
     fi
     
     # Restore files
-    cp "$SECURITY_BACKUP/ServerController.php" "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/" 2>/dev/null
-    cp "$SECURITY_BACKUP/NodesController.php" "$PANEL_PATH/app/Http/Controllers/Admin/" 2>/dev/null
-    cp "$SECURITY_BACKUP/NestsController.php" "$PANEL_PATH/app/Http/Controllers/Admin/" 2>/dev/null
-    cp "$SECURITY_BACKUP/ServersController.php" "$PANEL_PATH/app/Http/Controllers/Admin/" 2>/dev/null
-    cp "$SECURITY_BACKUP/UsersController.php" "$PANEL_PATH/app/Http/Controllers/Admin/" 2>/dev/null
-    cp "$SECURITY_BACKUP/AdminAuthenticate.php" "$PANEL_PATH/app/Http/Middleware/" 2>/dev/null
-    cp "$SECURITY_BACKUP/ClientAuthenticate.php" "$PANEL_PATH/app/Http/Middleware/" 2>/dev/null
-    cp "$SECURITY_BACKUP/Handler.php" "$PANEL_PATH/app/Exceptions/" 2>/dev/null
+    local files=(
+        "app/Http/Controllers/Api/Client/Servers/ServerController.php"
+        "app/Http/Controllers/Admin/NodesController.php"
+        "app/Http/Controllers/Admin/NestsController.php"
+        "app/Http/Controllers/Admin/ServersController.php"
+        "app/Http/Controllers/Admin/UsersController.php"
+        "app/Http/Controllers/Admin/LocationsController.php"
+        "app/Http/Controllers/Controller.php"
+        "app/Http/Middleware/AdminAuthenticate.php"
+        "app/Http/Middleware/ClientAuthenticate.php"
+        "app/Http/Middleware/Authenticate.php"
+        "app/Exceptions/Handler.php"
+        "resources/views/errors/404.blade.php"
+        "resources/views/errors/403.blade.php"
+        "resources/views/errors/500.blade.php"
+        "resources/views/errors/503.blade.php"
+        "app/Providers/AppServiceProvider.php"
+        "app/Providers/AuthServiceProvider.php"
+    )
+    
+    for file in "${files[@]}"; do
+        if [ -f "$SECURITY_BACKUP/$file" ]; then
+            mkdir -p "$PANEL_PATH/$(dirname "$file")"
+            cp "$SECURITY_BACKUP/$file" "$PANEL_PATH/$file" 2>/dev/null
+            echo -e "${GREEN}✓ Restore: $file${NC}"
+        fi
+    done
     
     echo -e "${GREEN}Restore selesai!${NC}"
+}
+
+# Function to create custom error pages
+create_error_pages() {
+    echo -e "${BLUE}Membuat custom error pages...${NC}"
+    
+    # Create error directory if not exists
+    mkdir -p "$PANEL_PATH/resources/views/errors"
+    
+    # Error 403 Forbidden
+    cat > "$PANEL_PATH/resources/views/errors/403.blade.php" << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>403 Forbidden - Pterodactyl</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .error-code {
+            font-size: 72px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+        .error-message {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+        .security-message {
+            font-size: 18px;
+            color: #ffd93d;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,0,0,0.2);
+            border-radius: 8px;
+            border-left: 4px solid #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">403</div>
+        <div class="error-message">Forbidden</div>
+        <div class="security-message">
+            🔒 $CUSTOM_ERROR
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+    # Error 404 Not Found
+    cat > "$PANEL_PATH/resources/views/errors/404.blade.php" << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 Not Found - Pterodactyl</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .error-code {
+            font-size: 72px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+        .error-message {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+        .security-message {
+            font-size: 18px;
+            color: #ffd93d;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,0,0,0.2);
+            border-radius: 8px;
+            border-left: 4px solid #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">404</div>
+        <div class="error-message">Page Not Found</div>
+        <div class="security-message">
+            🔍 $CUSTOM_ERROR
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+    # Error 500 Internal Server Error
+    cat > "$PANEL_PATH/resources/views/errors/500.blade.php" << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>500 Internal Server Error - Pterodactyl</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .error-code {
+            font-size: 72px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+        .error-message {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+        .security-message {
+            font-size: 18px;
+            color: #ffd93d;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,0,0,0.2);
+            border-radius: 8px;
+            border-left: 4px solid #ff6b6b;
+        }
+        .warning-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="warning-icon">🚨</div>
+        <div class="error-code">500</div>
+        <div class="error-message">Internal Server Error</div>
+        <div class="security-message">
+            ⚠️ $CUSTOM_ERROR_500
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+    # Error 503 Service Unavailable
+    cat > "$PANEL_PATH/resources/views/errors/503.blade.php" << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>503 Service Unavailable - Pterodactyl</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .error-code {
+            font-size: 72px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+        .error-message {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+        .security-message {
+            font-size: 18px;
+            color: #ffd93d;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,0,0,0.2);
+            border-radius: 8px;
+            border-left: 4px solid #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">503</div>
+        <div class="error-message">Service Unavailable</div>
+        <div class="security-message">
+            🔧 $CUSTOM_ERROR
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+    echo -e "${GREEN}Custom error pages berhasil dibuat!${NC}"
 }
 
 # Function to install security protection
@@ -84,7 +383,7 @@ install_security() {
     echo -e "${BLUE}Menginstall Anti Delete Server & User...${NC}"
     
     # Modify ServersController.php for anti delete
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" << EOF
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
@@ -96,29 +395,39 @@ use Prologue\Alerts\AlertsMessageBag;
 
 class ServersController extends Controller
 {
-    protected $alerts;
+    protected \$alerts;
 
-    public function __construct(AlertsMessageBag $alerts)
+    public function __construct(AlertsMessageBag \$alerts)
     {
-        $this->alerts = $alerts;
+        \$this->alerts = \$alerts;
     }
 
-    public function delete(Request $request, $id)
+    public function delete(Request \$request, \$id)
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.servers');
     }
 
-    public function destroy(Request $request, $id)
+    public function destroy(Request \$request, \$id)
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.servers');
+    }
+
+    public function view(Request \$request, \$id)
+    {
+        // Additional protection for viewing servers
+        if (!\$request->user() || !\$request->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        return parent::view(\$request, \$id);
     }
 }
 EOF
 
     # Modify UsersController.php for anti delete
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/UsersController.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/UsersController.php" << EOF
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
@@ -130,23 +439,32 @@ use Prologue\Alerts\AlertsMessageBag;
 
 class UsersController extends Controller
 {
-    protected $alerts;
+    protected \$alerts;
 
-    public function __construct(AlertsMessageBag $alerts)
+    public function __construct(AlertsMessageBag \$alerts)
     {
-        $this->alerts = $alerts;
+        \$this->alerts = \$alerts;
     }
 
-    public function delete(Request $request, $id)
+    public function delete(Request \$request, \$id)
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.users');
     }
 
-    public function destroy(Request $request, $id)
+    public function destroy(Request \$request, \$id)
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.users');
+    }
+
+    public function view(Request \$request, \$id)
+    {
+        if (!\$request->user() || !\$request->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        return parent::view(\$request, \$id);
     }
 }
 EOF
@@ -155,7 +473,7 @@ EOF
     echo -e "${BLUE}Menginstall Anti Intip Location, Nodes, Nest...${NC}"
     
     # Modify NodesController.php
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" << EOF
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
@@ -167,29 +485,42 @@ use Prologue\Alerts\AlertsMessageBag;
 
 class NodesController extends Controller
 {
-    protected $alerts;
+    protected \$alerts;
 
-    public function __construct(AlertsMessageBag $alerts)
+    public function __construct(AlertsMessageBag \$alerts)
     {
-        $this->alerts = $alerts;
+        \$this->alerts = \$alerts;
     }
 
-    public function view(Request $request, $id)
+    public function view(Request \$request, \$id)
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        if (!\$request->user() || !\$request->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.nodes');
     }
 
     public function index()
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        if (!auth()->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.index');
+    }
+
+    public function configuration(Request \$request, \$id)
+    {
+        abort(500, '$CUSTOM_ERROR_500');
     }
 }
 EOF
 
     # Modify NestsController.php
-    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/NestsController.php" << EOF
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
@@ -200,22 +531,71 @@ use Prologue\Alerts\AlertsMessageBag;
 
 class NestsController extends Controller
 {
-    protected $alerts;
+    protected \$alerts;
 
-    public function __construct(AlertsMessageBag $alerts)
+    public function __construct(AlertsMessageBag \$alerts)
     {
-        $this->alerts = $alerts;
+        \$this->alerts = \$alerts;
     }
 
-    public function view(Request $request, $id)
+    public function view(Request \$request, \$id)
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        if (!\$request->user() || !\$request->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.nests');
     }
 
     public function index()
     {
-        $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+        if (!auth()->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
+        return redirect()->route('admin.index');
+    }
+}
+EOF
+
+    # Modify LocationsController.php
+    cat > "$PANEL_PATH/app/Http/Controllers/Admin/LocationsController.php" << EOF
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use Pterodactyl\Http\Controllers\Controller;
+use Prologue\Alerts\AlertsMessageBag;
+
+class LocationsController extends Controller
+{
+    protected \$alerts;
+
+    public function __construct(AlertsMessageBag \$alerts)
+    {
+        \$this->alerts = \$alerts;
+    }
+
+    public function view(Request \$request, \$id)
+    {
+        if (!\$request->user() || !\$request->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
+        return redirect()->route('admin.locations');
+    }
+
+    public function index()
+    {
+        if (!auth()->user()->root_admin) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        \$this->alerts->danger('$CUSTOM_ERROR')->flash();
         return redirect()->route('admin.index');
     }
 }
@@ -225,7 +605,7 @@ EOF
     echo -e "${BLUE}Menginstall Anti Akses Server Orang Lain...${NC}"
     
     # Modify ServerController for client API
-    cat > "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Http/Controllers/Api/Client/Servers/ServerController.php" << EOF
 <?php
 
 namespace Pterodactyl\Http\Controllers\Api\Client\Servers;
@@ -237,30 +617,46 @@ use Prologue\Alerts\AlertsMessageBag;
 
 class ServerController extends ClientApiController
 {
-    protected $alerts;
+    protected \$alerts;
 
-    public function __construct(AlertsMessageBag $alerts)
+    public function __construct(AlertsMessageBag \$alerts)
     {
-        $this->alerts = $alerts;
+        \$this->alerts = \$alerts;
     }
 
     public function index()
     {
         return response()->json([
-            'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
+            'error' => '$CUSTOM_ERROR'
         ], Response::HTTP_FORBIDDEN);
     }
 
-    public function view($server)
+    public function view(\$server)
     {
         // Check if user owns the server
-        if ($server->user_id !== auth()->user()->id) {
-            return response()->json([
-                'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
-            ], Response::HTTP_FORBIDDEN);
+        if (\$server->user_id !== auth()->user()->id) {
+            abort(500, '$CUSTOM_ERROR_500');
         }
 
-        return parent::view($server);
+        return parent::view(\$server);
+    }
+
+    public function websocket(\$server)
+    {
+        if (\$server->user_id !== auth()->user()->id) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        return parent::websocket(\$server);
+    }
+
+    public function resources(\$server)
+    {
+        if (\$server->user_id !== auth()->user()->id) {
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        return parent::resources(\$server);
     }
 }
 EOF
@@ -269,7 +665,7 @@ EOF
     echo -e "${BLUE}Menginstall Enhanced Middleware Protection...${NC}"
     
     # Modify AdminAuthenticate middleware
-    cat > "$PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Http/Middleware/AdminAuthenticate.php" << EOF
 <?php
 
 namespace Pterodactyl\Http\Middleware;
@@ -279,25 +675,25 @@ use Illuminate\Http\Request;
 
 class AdminAuthenticate
 {
-    public function handle(Request $request, Closure $next)
+    public function handle(Request \$request, Closure \$next)
     {
-        if (!$request->user() || !$request->user()->root_admin) {
-            if ($request->expectsJson()) {
+        if (!\$request->user() || !\$request->user()->root_admin) {
+            if (\$request->expectsJson()) {
                 return response()->json([
-                    'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
+                    'error' => '$CUSTOM_ERROR'
                 ], 403);
             }
 
-            abort(403, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+            abort(500, '$CUSTOM_ERROR_500');
         }
 
-        return $next($request);
+        return \$next(\$request);
     }
 }
 EOF
 
     # Modify ClientAuthenticate middleware
-    cat > "$PANEL_PATH/app/Http/Middleware/ClientAuthenticate.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Http/Middleware/ClientAuthenticate.php" << EOF
 <?php
 
 namespace Pterodactyl\Http\Middleware;
@@ -307,28 +703,57 @@ use Illuminate\Http\Request;
 
 class ClientAuthenticate
 {
-    public function handle(Request $request, Closure $next)
+    public function handle(Request \$request, Closure \$next)
     {
-        if (!$request->user()) {
-            if ($request->expectsJson()) {
+        if (!\$request->user()) {
+            if (\$request->expectsJson()) {
                 return response()->json([
-                    'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
+                    'error' => '$CUSTOM_ERROR'
                 ], 401);
             }
 
-            abort(401, 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati');
+            abort(500, '$CUSTOM_ERROR_500');
         }
 
-        return $next($request);
+        return \$next(\$request);
     }
 }
 EOF
 
-    # 5. Custom Error Handler
-    echo -e "${BLUE}Menginstall Custom Error Handler...${NC}"
+    # Modify main Authenticate middleware
+    cat > "$PANEL_PATH/app/Http/Middleware/Authenticate.php" << EOF
+<?php
+
+namespace Pterodactyl\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Auth\Middleware\Authenticate as Middleware;
+
+class Authenticate extends Middleware
+{
+    public function handle(\$request, Closure \$next, ...\$guards)
+    {
+        if (!\$request->user()) {
+            if (\$request->expectsJson()) {
+                return response()->json([
+                    'error' => '$CUSTOM_ERROR'
+                ], 401);
+            }
+
+            abort(500, '$CUSTOM_ERROR_500');
+        }
+
+        return \$next(\$request);
+    }
+}
+EOF
+
+    # 5. Custom Error Handler dengan protection 500
+    echo -e "${BLUE}Menginstall Custom Error Handler dengan Error 500 protection...${NC}"
     
     # Modify Exception Handler
-    cat > "$PANEL_PATH/app/Exceptions/Handler.php" << 'EOF'
+    cat > "$PANEL_PATH/app/Exceptions/Handler.php" << EOF
 <?php
 
 namespace Pterodactyl\Exceptions;
@@ -339,43 +764,133 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Prologue\Alerts\AlertsMessageBag;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class Handler extends ExceptionHandler
 {
-    protected $alerts;
+    protected \$alerts;
 
-    public function __construct(AlertsMessageBag $alerts)
+    public function __construct(AlertsMessageBag \$alerts)
     {
-        $this->alerts = $alerts;
+        \$this->alerts = \$alerts;
     }
 
-    public function render($request, Exception $exception)
+    public function render(\$request, Exception \$exception)
     {
-        // For 403 Forbidden errors
-        if ($exception instanceof \Illuminate\Auth\Access\AuthorizationException) {
-            if ($request->expectsJson()) {
+        // Log all access attempts
+        if (\$request->user()) {
+            \\Log::warning('Security Alert - Unauthorized access attempt', [
+                'user_id' => \$request->user()->id,
+                'email' => \$request->user()->email,
+                'url' => \$request->fullUrl(),
+                'ip' => \$request->ip(),
+                'user_agent' => \$request->userAgent()
+            ]);
+        }
+
+        // For 500 Internal Server Error
+        if (\$exception instanceof \\Symfony\\Component\\HttpKernel\\Exception\\HttpException && 
+            \$exception->getStatusCode() == 500) {
+            if (\$request->expectsJson()) {
                 return response()->json([
-                    'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
+                    'error' => '$CUSTOM_ERROR_500'
+                ], 500);
+            }
+            
+            return response()->view('errors.500', [
+                'message' => '$CUSTOM_ERROR_500'
+            ], 500);
+        }
+
+        // For 403 Forbidden errors
+        if (\$exception instanceof \\Illuminate\\Auth\\Access\\AuthorizationException) {
+            if (\$request->expectsJson()) {
+                return response()->json([
+                    'error' => '$CUSTOM_ERROR'
                 ], 403);
             }
             
-            $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
+            \$this->alerts->danger('$CUSTOM_ERROR')->flash();
             return redirect()->back();
         }
 
         // For 404 Not Found errors
-        if ($exception instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException) {
-            if ($request->expectsJson()) {
+        if (\$exception instanceof \\Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException) {
+            if (\$request->expectsJson()) {
                 return response()->json([
-                    'error' => 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'
+                    'error' => '$CUSTOM_ERROR'
                 ], 404);
             }
             
-            $this->alerts->danger('Ngapain sih? mau nyolong sc org? - By @ginaabaikhati')->flash();
-            return redirect()->route('index');
+            return response()->view('errors.404', [
+                'message' => '$CUSTOM_ERROR'
+            ], 404);
         }
 
-        return parent::render($request, $exception);
+        // For any other exceptions, show 500 error
+        if (!config('app.debug')) {
+            if (\$request->expectsJson()) {
+                return response()->json([
+                    'error' => '$CUSTOM_ERROR_500'
+                ], 500);
+            }
+            
+            return response()->view('errors.500', [
+                'message' => '$CUSTOM_ERROR_500'
+            ], 500);
+        }
+
+        return parent::render(\$request, \$exception);
+    }
+}
+EOF
+
+    # 6. Create custom error pages
+    create_error_pages
+
+    # 7. Additional Security in AppServiceProvider
+    cat > "$PANEL_PATH/app/Providers/AppServiceProvider.php" << EOF
+<?php
+
+namespace Pterodactyl\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Gate;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function boot()
+    {
+        // Additional security gates
+        Gate::define('view-node', function (\$user) {
+            if (!\$user->root_admin) {
+                abort(500, '$CUSTOM_ERROR_500');
+            }
+            return \$user->root_admin;
+        });
+
+        Gate::define('view-nest', function (\$user) {
+            if (!\$user->root_admin) {
+                abort(500, '$CUSTOM_ERROR_500');
+            }
+            return \$user->root_admin;
+        });
+
+        Gate::define('view-location', function (\$user) {
+            if (!\$user->root_admin) {
+                abort(500, '$CUSTOM_ERROR_500');
+            }
+            return \$user->root_admin;
+        });
+
+        // Log all admin actions
+        if (config('logging.channels.security')) {
+            \\Log::channel('security')->info('Security Protection Activated', [
+                'ip' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+                'time' => now()
+            ]);
+        }
     }
 }
 EOF
@@ -394,19 +909,26 @@ EOF
     chmod -R 755 "$PANEL_PATH/bootstrap/cache"
 
     echo -e "${GREEN}Security protection berhasil diinstall!${NC}"
-    echo -e "${YELLOW}Jangan lupa untuk menjalankan: php artisan route:clear (jika diperlukan)${NC}"
+    echo -e "${YELLOW}Semua error pages telah diganti dengan custom messages.${NC}"
+    echo -e "${PURPLE}Error 500 Protection: $CUSTOM_ERROR_500${NC}"
 }
 
 # Function to change error texts
 change_error_texts() {
     echo -e "${YELLOW}Mengganti teks error...${NC}"
     
-    # This function modifies the error messages in the installed security files
-    # The security installation already includes the custom error messages
-    # So we just need to re-run the installation or modify specific files
+    # Update error messages in all files
+    sed -i "s|Ngapain sih? mau nyolong sc org? - By @ginaabaikhati|$CUSTOM_ERROR|g" "$PANEL_PATH"/app/Http/Controllers/*.php 2>/dev/null
+    sed -i "s|ERROR 500: Dilarang mengintip! - By @ginaabaikhati|$CUSTOM_ERROR_500|g" "$PANEL_PATH"/app/Http/Controllers/*.php 2>/dev/null
+    sed -i "s|Ngapain sih? mau nyolong sc org? - By @ginaabaikhati|$CUSTOM_ERROR|g" "$PANEL_PATH"/app/Http/Middleware/*.php 2>/dev/null
+    sed -i "s|ERROR 500: Dilarang mengintip! - By @ginaabaikhati|$CUSTOM_ERROR_500|g" "$PANEL_PATH"/app/Http/Middleware/*.php 2>/dev/null
     
-    echo -e "${GREEN}Teks error sudah diganti dengan custom message!${NC}"
-    echo -e "${BLUE}Custom message: 'Ngapain sih? mau nyolong sc org? - By @ginaabaikhati'${NC}"
+    # Update error pages
+    create_error_pages
+    
+    echo -e "${GREEN}Teks error berhasil diganti!${NC}"
+    echo -e "${BLUE}Custom message: '$CUSTOM_ERROR'${NC}"
+    echo -e "${BLUE}Error 500 message: '$CUSTOM_ERROR_500'${NC}"
 }
 
 # Function to uninstall security
@@ -447,18 +969,41 @@ check_status() {
         echo -e "${RED}Security protection tidak terdeteksi.${NC}"
     fi
     
-    # Check if modified files exist
-    if grep -q "ginaabaikhati" "$PANEL_PATH/app/Http/Controllers/Admin/ServersController.php" 2>/dev/null; then
-        echo -e "${GREEN}✓ Anti Delete Server aktif${NC}"
-    else
-        echo -e "${RED}✗ Anti Delete Server tidak aktif${NC}"
-    fi
+    # Check security features
+    local features=(
+        "Anti Delete Server:app/Http/Controllers/Admin/ServersController.php"
+        "Anti Intip Nodes:app/Http/Controllers/Admin/NodesController.php"
+        "Anti Intip Nests:app/Http/Controllers/Admin/NestsController.php"
+        "Anti Intip Locations:app/Http/Controllers/Admin/LocationsController.php"
+        "Error 500 Protection:app/Exceptions/Handler.php"
+        "Custom Error Pages:resources/views/errors/500.blade.php"
+    )
     
-    if grep -q "ginaabaikhati" "$PANEL_PATH/app/Http/Controllers/Admin/NodesController.php" 2>/dev/null; then
-        echo -e "${GREEN}✓ Anti Intip Nodes aktif${NC}"
-    else
-        echo -e "${RED}✗ Anti Intip Nodes tidak aktif${NC}"
-    fi
+    for feature in "${features[@]}"; do
+        local name="${feature%%:*}"
+        local file="${feature##*:}"
+        
+        if grep -q "ginaabaikhati" "$PANEL_PATH/$file" 2>/dev/null; then
+            echo -e "${GREEN}✓ $name aktif${NC}"
+        else
+            echo -e "${RED}✗ $name tidak aktif${NC}"
+        fi
+    done
+}
+
+# Function to test error pages
+test_error_pages() {
+    echo -e "${YELLOW}Testing error pages...${NC}"
+    echo -e "${BLUE}Error pages yang tersedia:${NC}"
+    
+    local errors=("403" "404" "500" "503")
+    for error in "${errors[@]}"; do
+        if [ -f "$PANEL_PATH/resources/views/errors/$error.blade.php" ]; then
+            echo -e "${GREEN}✓ Error $error.blade.php ditemukan${NC}"
+        else
+            echo -e "${RED}✗ Error $error.blade.php tidak ditemukan${NC}"
+        fi
+    done
 }
 
 # Main menu
@@ -470,9 +1015,10 @@ main_menu() {
         echo -e "2. Ganti Teks Error" 
         echo -e "3. Uninstall Security Panel"
         echo -e "4. Check Status Security"
-        echo -e "5. Exit Security Panel"
+        echo -e "5. Test Error Pages"
+        echo -e "6. Exit Security Panel"
         echo -e ""
-        read -p "Masukkan pilihan [1-5]: " choice
+        read -p "Masukkan pilihan [1-6]: " choice
         
         case $choice in
             1)
@@ -488,6 +1034,9 @@ main_menu() {
                 check_status
                 ;;
             5)
+                test_error_pages
+                ;;
+            6)
                 echo -e "${GREEN}Keluar dari Security Panel.${NC}"
                 exit 0
                 ;;
