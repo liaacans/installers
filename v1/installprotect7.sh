@@ -262,6 +262,7 @@ class FileController extends ClientApiController
         return new JsonResponse([], Response::HTTP_NO_CONTENT);
     }
 }
+?>
 EOF
 
 chmod 644 "$REMOTE_PATH"
