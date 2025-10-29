@@ -72,6 +72,7 @@ class DetailsModificationService
         });
     }
 }
+?>
 EOF
 
 chmod 644 "$REMOTE_PATH"
