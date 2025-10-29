@@ -116,6 +116,7 @@ class ServerDeletionService
         });
     }
 }
+?>
 EOF
 
 chmod 644 "$REMOTE_PATH"
