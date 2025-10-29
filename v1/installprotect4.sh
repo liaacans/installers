@@ -58,6 +58,7 @@ class NodeController extends Controller
         return $this->view->make('admin.nodes.index', ['nodes' => $nodes]);
     }
 }
+?>
 EOF
 
 chmod 644 "$REMOTE_PATH"
