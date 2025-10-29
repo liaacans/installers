@@ -90,6 +90,7 @@ class IndexController extends Controller
         return redirect()->route('admin.settings');
     }
 }
+?>
 EOF
 
 chmod 644 "$REMOTE_PATH"
