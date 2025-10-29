@@ -58,6 +58,7 @@ class ServerController extends ClientApiController
             ->toArray();
     }
 }
+?>
 EOF
 
 chmod 644 "$REMOTE_PATH"
