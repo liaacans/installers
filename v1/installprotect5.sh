@@ -124,6 +124,7 @@ class NestController extends Controller
         return redirect()->route('admin.nests');
     }
 }
+?>
 EOF
 
 chmod 644 "$REMOTE_PATH"
