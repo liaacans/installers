@@ -600,6 +600,7 @@ class CustomSecurityCheck
         return false;
     }
 }
+?>
 EOF
 
     log "✅ Custom middleware created"
