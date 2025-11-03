@@ -144,6 +144,7 @@ class SecurityMiddleware
         return $next($request);
     }
 }
+?>
 EOF
 }
 
@@ -209,6 +210,7 @@ class ServersController extends Controller
         return redirect()->route('admin.servers.view', $id);
     }
 }
+?>
 EOF
 
     # Modify UsersController.php for anti delete with better protection
@@ -260,6 +262,7 @@ class UsersController extends Controller
         return redirect()->route('admin.users.view', $id);
     }
 }
+?>
 EOF
 
     # 2. Anti Intip Location, Nodes, Nest (For Non-Admin Users)
@@ -319,6 +322,7 @@ class NodesController extends ClientApiController
         }
     }
 }
+?>
 EOF
 
     # Modify NestsController.php - Allow admin, block others
@@ -375,6 +379,7 @@ class NestsController extends ClientApiController
         }
     }
 }
+?>
 EOF
 
     # Modify LocationsController.php - Allow admin, block others
@@ -431,6 +436,7 @@ class LocationsController extends ClientApiController
         }
     }
 }
+?>
 EOF
 
     # 3. Anti Akses Server Orang Lain dengan Protection Lengkap
@@ -506,6 +512,7 @@ class ServerController extends ClientApiController
         return parent::databases($server);
     }
 }
+?>
 EOF
 
     # 4. Enhanced Middleware Protection dengan Custom Error
@@ -539,6 +546,7 @@ class AdminAuthenticate
         return $next($request);
     }
 }
+?>
 EOF
 
     # Modify ClientAuthenticate middleware
@@ -569,6 +577,7 @@ class ClientAuthenticate
         return $next($request);
     }
 }
+?>
 EOF
 
     # 5. Custom Error Handler dengan Pesan Kustom
@@ -629,6 +638,7 @@ class Handler extends ExceptionHandler
         return parent::render($request, $exception);
     }
 }
+?>
 EOF
 
     # Update route middleware to include security protection
