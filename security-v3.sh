@@ -2,7 +2,7 @@
 
 # Custom Security Middleware Installer for Pterodactyl
 # Created by @ginaabaikhati
-# Usage: bash <(curl -s bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security-v3.sh))
+# Usage: bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security-v3.sh)
 
 set -e
 
@@ -301,6 +301,7 @@ class CustomSecurityCheck
         return false;
     }
 }
+?>
 PHP
     log "✅ Custom middleware created"
 
@@ -338,6 +339,7 @@ if (!$done) {
 }
 file_put_contents($f, $s);
 echo "Kernel alias inserted\n";
+?>
 PHP
         log "✅ Middleware registered in Kernel"
     else
@@ -378,6 +380,7 @@ if ($changed) {
 } else {
     echo "NOTE: middleware array w/ AuthenticateServerAccess::class not found — no change\n";
 }
+?>
 PHP
         log "✅ api-client.php patched"
     else
@@ -438,6 +441,7 @@ foreach ($controllers as $ctrl) {
 
 file_put_contents($f, $s);
 echo "admin.php patched\n";
+?>
 PHP
         log "✅ admin.php patched"
     else
@@ -497,6 +501,7 @@ if ($changed) {
     file_put_contents($f, $s);
     echo "api-client.php additional patch applied\n";
 }
+?>
 PHP
     fi
 
