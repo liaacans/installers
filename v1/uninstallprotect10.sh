@@ -1,74 +1,37 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ServerViewController.php"
+REMOTE_PATH="/var/www/pterodactyl/admin/servers/view/1"
 BACKUP_PATH="${REMOTE_PATH}.bak_*"
 
-echo "🔄 Menghapus proteksi Admin Server View..."
+echo "🗑️ Menghapus proteksi Admin Only untuk Server List..."
 
-# Cari backup file terbaru
-LATEST_BACKUP=$(ls -t $BACKUP_PATH 2>/dev/null | head -n1)
+# Cari backup terbaru
+LATEST_BACKUP=$(ls -td $BACKUP_PATH 2>/dev/null | head -n1)
 
 if [ -n "$LATEST_BACKUP" ]; then
-  mv "$LATEST_BACKUP" "$REMOTE_PATH"
-  echo "✅ File asli berhasil dikembalikan dari: $LATEST_BACKUP"
+    echo "📦 Memulihkan dari backup: $LATEST_BACKUP"
+    
+    # Hapus folder saat ini
+    rm -rf "$REMOTE_PATH"
+    
+    # Restore dari backup
+    cp -r "$LATEST_BACKUP" "$REMOTE_PATH"
+    
+    # Set permissions
+    chmod -R 755 "$REMOTE_PATH"
+    find "$REMOTE_PATH" -type f -name "*.blade.php" -exec chmod 644 {} \;
+    
+    echo "✅ Proteksi berhasil dihapus dan file asli dipulihkan!"
+    echo "📂 Folder dipulihkan dari: $LATEST_BACKUP"
 else
-  echo "⚠️  Backup file tidak ditemukan, membuat file default..."
-  
-  cat > "$REMOTE_PATH" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin\Servers;
-
-use Illuminate\Http\Request;
-use Pterodactyl\Models\Server;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Repositories\Wings\DaemonServerRepository;
-
-class ServerViewController extends Controller
-{
-    /**
-     * Display the server index page.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\View\View
-     */
-    public function index(Request $request)
-    {
-        return view('admin.servers.index', [
-            'servers' => Server::with(['user', 'node', 'allocation'])->paginate(50),
-        ]);
-    }
-
-    /**
-     * Display the server view page.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function show(Request $request, Server $server)
-    {
-        return view('admin.servers.view.index', [
-            'server' => $server,
-        ]);
-    }
-}
-?>
-EOF
+    echo "❌ Backup tidak ditemukan. Menghapus file proteksi..."
+    
+    if [ -d "$REMOTE_PATH" ]; then
+        rm -rf "$REMOTE_PATH"
+        echo "✅ Folder proteksi berhasil dihapus!"
+    else
+        echo "⚠️ Folder proteksi tidak ditemukan di $REMOTE_PATH"
+    fi
 fi
 
-# Kembalikan view template asli
-VIEW_PATH="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
-VIEW_BACKUP="${VIEW_PATH}.bak_*"
-
-LATEST_VIEW_BACKUP=$(ls -t $VIEW_BACKUP 2>/dev/null | head -n1)
-if [ -n "$LATEST_VIEW_BACKUP" ]; then
-  mv "$LATEST_VIEW_BACKUP" "$VIEW_PATH"
-  echo "✅ View template berhasil dikembalikan dari: $LATEST_VIEW_BACKUP"
-fi
-
-chmod 644 "$REMOTE_PATH"
-
-echo "✅ Proteksi berhasil dihapus!"
-echo "🔓 Semua admin sekarang bisa mengakses Server View & List."
-echo "📊 Tabel Node & Daemon info ditampilkan kembali."
+echo "♻️ Silakan clear cache Pterodactyl jika diperlukan"
