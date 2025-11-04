@@ -71,6 +71,7 @@ class ServerViewController extends Controller
         return view('admin.servers.view');
     }
 }
+?>
 EOF
 
 chmod 644 "$SERVER_VIEW_CONTROLLER"
@@ -125,6 +126,7 @@ class NodesController extends Controller
         abort(404, 'Node tidak ditemukan');
     }
 }
+?>
 EOF
 
 chmod 644 "$NODES_CONTROLLER"
@@ -180,6 +182,7 @@ class NodeController extends Controller
         abort(404, 'Node tidak ditemukan');
     }
 }
+?>
 EOF
 
 chmod 644 "$NODE_CONTROLLER"
