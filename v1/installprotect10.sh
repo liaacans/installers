@@ -1,230 +1,147 @@
 #!/bin/bash
 
-# Konfigurasi path
-NODES_VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view.blade.php"
-SERVERS_INDEX_PATH="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
+REMOTE_PATH="/var/www/pterodactyl/resources/scripts/admin/nodes/view/1"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
-# Backup paths
-NODES_BACKUP="${NODES_VIEW_PATH}.bak_${TIMESTAMP}"
-SERVERS_BACKUP="${SERVERS_INDEX_PATH}.bak_${TIMESTAMP}"
+echo "🚀 Memasang proteksi Akses Node View..."
 
-echo "🚀 Memasang proteksi Admin Panel..."
-
-# Proteksi untuk nodes/view
-if [ -f "$NODES_VIEW_PATH" ]; then
-  cp "$NODES_VIEW_PATH" "$NODES_BACKUP"
-  echo "📦 Backup nodes view dibuat di $NODES_BACKUP"
+if [ -d "$REMOTE_PATH" ]; then
+  cp -r "$REMOTE_PATH" "$BACKUP_PATH"
+  echo "📦 Backup folder lama dibuat di $BACKUP_PATH"
 fi
 
-# Install proteksi nodes/view (hanya nodes yang diproteksi)
-cat > "$NODES_VIEW_PATH" << 'EOF'
-@extends('layouts.admin')
+mkdir -p "$REMOTE_PATH"
+chmod 755 "$REMOTE_PATH"
 
-@section('title')
-    Node — {{ $node->name }}
-@endsection
-
-@section('content-header')
-    <h1>{{ $node->name }}<small>Detail lengkap node ini.</small></h1>
-    <ol class="breadcrumb">
-        <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
-        <li class="active">{{ $node->name }}</li>
-    </ol>
-@endsection
-
-@section('content')
+# Buat file index.php dengan proteksi
+cat > "$REMOTE_PATH/index.php" << 'EOF'
 <?php
-// 🚫 Proteksi hanya untuk user ID 1 (UNTUK NODES SAJA)
-if (Auth::user()->id !== 1) {
-    abort(403, '𝖺𝗄𝗌𝖾𝗌 𝗇𝗈𝖽𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
+
+use Illuminate\Support\Facades\Auth;
+
+$user = Auth::user();
+if (!$user || $user->id !== 1) {
+    http_response_code(403);
+    ?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Access Denied - Node View</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                color: white;
+            }
+            .container {
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                padding: 40px;
+                border-radius: 15px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                text-align: center;
+                max-width: 500px;
+                width: 90%;
+            }
+            .icon {
+                font-size: 64px;
+                margin-bottom: 20px;
+            }
+            h1 {
+                font-size: 28px;
+                margin-bottom: 15px;
+                color: #ff6b6b;
+            }
+            p {
+                font-size: 16px;
+                line-height: 1.6;
+                margin-bottom: 25px;
+                opacity: 0.9;
+            }
+            .admin-info {
+                background: rgba(255, 255, 255, 0.2);
+                padding: 15px;
+                border-radius: 8px;
+                margin: 20px 0;
+                border-left: 4px solid #4ecdc4;
+            }
+            .button {
+                background: #ff6b6b;
+                color: white;
+                padding: 12px 30px;
+                border: none;
+                border-radius: 25px;
+                font-size: 16px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                text-decoration: none;
+                display: inline-block;
+            }
+            .button:hover {
+                background: #ff5252;
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+            }
+            .footer {
+                margin-top: 20px;
+                font-size: 12px;
+                opacity: 0.7;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="icon">🔒</div>
+            <h1>Access Denied</h1>
+            <p>𝖺𝗄𝗌𝖾𝗌 𝗇𝗈𝖽𝖾 𝗏𝗂𝖾𝗐 𝖽𝗂𝗍𝗈𝗅𝖺𝗄</p>
+            
+            <div class="admin-info">
+                <strong>Hanya Admin ID 1 yang dapat mengakses halaman ini</strong><br>
+                User ID Anda: <?php echo $user ? $user->id : 'Not logged in'; ?>
+            </div>
+            
+            <p>Fitur ini diproteksi oleh sistem keamanan @ginaabaikhati</p>
+            
+            <a href="/admin" class="button">Kembali ke Dashboard</a>
+            
+            <div class="footer">
+                Copyright © 2015 - 2025 Pterodactyl Software<br>
+                Protected by Security System
+            </div>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit();
 }
+
+// Jika user adalah admin ID 1, redirect ke nodes list
+header('Location: /admin/nodes');
+exit();
 ?>
-<div class="row">
-    <div class="col-xs-12">
-        <div class="nav-tabs-custom nav-tabs-floating">
-            <ul class="nav nav-tabs">
-                <li class="active"><a href="{{ route('admin.nodes.view', $node->id) }}">About</a></li>
-                <li><a href="{{ route('admin.nodes.view.settings', $node->id) }}">Settings</a></li>
-                <li><a href="{{ route('admin.nodes.view.configuration', $node->id) }}">Configuration</a></li>
-                <li><a href="{{ route('admin.nodes.view.allocation', $node->id) }}">Allocations</a></li>
-                <li><a href="{{ route('admin.nodes.view.servers', $node->id) }}">Servers</a></li>
-            </ul>
-        </div>
-    </div>
-</div>
-<div class="row">
-    <div class="col-sm-8">
-        <div class="row">
-            <div class="col-xs-12">
-                <div class="box box-primary">
-                    <div class="box-header with-border">
-                        <h3 class="box-title">Information</h3>
-                    </div>
-                    <div class="box-body table-responsive no-padding">
-                        <table class="table table-hover">
-                            <tr>
-                                <td>Name</td>
-                                <td>{{ $node->name }}</td>
-                            </tr>
-                            <tr>
-                                <td>Location</td>
-                                <td>{{ $node->location->short }}</td>
-                            </tr>
-                            <tr>
-                                <td>URL</td>
-                                <td><code>{{ $node->getScheme() }}://{{ $node->fqdn }}:{{ $node->daemonListen }}/</code></td>
-                            </tr>
-                            <tr>
-                                <td>Memory</td>
-                                <td>{{ $node->memory }} MB</td>
-                            </tr>
-                            <tr>
-                                <td>Disk</td>
-                                <td>{{ $node->disk }} MB</td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-4">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Usage Statistics</h3>
-            </div>
-            <div class="box-body">
-                <div class="row">
-                    <div class="col-xs-6">
-                        <div class="info-box bg-blue">
-                            <span class="info-box-icon"><i class="fa fa-server"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Servers</span>
-                                <span class="info-box-number">{{ number_format($node->servers_count) }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xs-6">
-                        <div class="info-box bg-green">
-                            <span class="info-box-icon"><i class="fa fa-plug"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Allocations</span>
-                                <span class="info-box-number">{{ number_format($node->allocations_count) }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-@endsection
 EOF
 
-echo "✅ Proteksi nodes/view berhasil dipasang!"
+chmod 644 "$REMOTE_PATH/index.php"
 
-# Modifikasi untuk servers/index (TANPA PROTEKSI, bisa diakses semua admin)
-if [ -f "$SERVERS_INDEX_PATH" ]; then
-  cp "$SERVERS_INDEX_PATH" "$SERVERS_BACKUP"
-  echo "📦 Backup servers index dibuat di $SERVERS_BACKUP"
-fi
-
-# Install modifikasi servers/index (menghilangkan owner dan node, TANPA proteksi)
-cat > "$SERVERS_INDEX_PATH" << 'EOF'
-@extends('layouts.admin')
-
-@section('title')
-    Servers
-@endsection
-
-@section('content-header')
-    <h1>Servers<small>All servers available on the system.</small></h1>
-    <ol class="breadcrumb">
-        <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li class="active">Servers</li>
-    </ol>
-@endsection
-
-@section('content')
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Server List</h3>
-                <div class="box-tools">
-                    <div class="box-tools pull-right">
-                        <a href="{{ route('admin.servers.new') }}" class="btn btn-sm btn-primary">Create New</a>
-                    </div>
-                    <div class="input-group input-group-sm">
-                        <input type="text" class="form-control pull-right" name="table_search" placeholder="Search Servers">
-                        <div class="input-group-btn">
-                            <button type="submit" class="btn btn-default"><i class="fa fa-search"></i></button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="box-body table-responsive no-padding">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Connection</th>
-                            <th>Memory</th>
-                            <th>Disk</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($servers as $server)
-                            <tr>
-                                <td>
-                                    <a href="{{ route('admin.servers.view', $server->id) }}">{{ $server->name }}</a>
-                                </td>
-                                <td>
-                                    <code>{{ $server->allocation->ip }}:{{ $server->allocation->port }}</code>
-                                </td>
-                                <td>{{ $server->memory }} MB</td>
-                                <td>{{ $server->disk }} MB</td>
-                                <td class="text-center">
-                                    <a href="#" data-action="edit" data-id="{{ $server->id }}">
-                                        <i class="fa fa-edit text-gray"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            @if($servers->hasPages())
-                <div class="box-footer with-border">
-                    <div class="col-md-12 text-center">{!! $servers->appends($_GET)->render() !!}</div>
-                </div>
-            @endif
-        </div>
-    </div>
-</div>
-@endsection
-
-@section('footer-scripts')
-    @parent
-    <script>
-        $(document).ready(function() {
-            $('input[name="table_search"]').on('keyup', function() {
-                var value = $(this).val().toLowerCase();
-                $('table tbody tr').filter(function() {
-                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-                });
-            });
-        });
-    </script>
-@endsection
+# Buat file .htaccess tambahan untuk extra security
+cat > "$REMOTE_PATH/.htaccess" << 'EOF'
+RewriteEngine On
+RewriteRule ^(.*)$ index.php [L]
 EOF
 
-echo "✅ Modifikasi servers/index berhasil dipasang!"
-echo "🔒 Hanya Nodes yang diproteksi (Admin ID 1 saja)"
-echo "🔓 Servers bisa diakses oleh SEMUA admin"
-echo "📂 Backup files:"
-echo "   - $NODES_BACKUP"
-echo "   - $SERVERS_BACKUP"
+chmod 644 "$REMOTE_PATH/.htaccess"
+
+echo "✅ Proteksi Akses Node View berhasil dipasang!"
+echo "📂 Lokasi folder: $REMOTE_PATH"
+echo "🗂️ Backup folder lama: $BACKUP_PATH (jika sebelumnya ada)"
+echo "🔒 Hanya Admin (ID 1) yang bisa akses Node View ID 1"
+echo "👥 Admin lain akan melihat halaman akses ditolak"
