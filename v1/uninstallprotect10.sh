@@ -1,69 +1,55 @@
 #!/bin/bash
 
-# File paths untuk uninstall proteksi
-PATHS=(
-    "/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ServerViewController.php"
-    "/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php"
-    "/var/www/pterodactyl/app/Http/Controllers/Admin/NodeController.php"
-    "/var/www/pterodactyl/resources/views/admin/servers/view.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/index.blade.php"
+BACKUP_PATTERNS=(
+  "/root/backup_protect10_*"
 )
 
-TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-RESTORE_DIR="/root/pterodactyl-backups/restore_${TIMESTAMP}"
+ORIGINAL_PATHS=(
+  "/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ViewController.php"
+  "/var/www/pterodactyl/app/Http/Controllers/Admin/ServerController.php"
+  "/var/www/pterodactyl/resources/views/admin/servers/view.blade.php"
+  "/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
+)
 
-echo "🔄 Memulai proses uninstall proteksi Admin Panel v10..."
+echo "🗑️  Menghapus proteksi Anti Akses Server View & Node List..."
 
-# Buat direktori restore
-mkdir -p "$RESTORE_DIR"
-echo "📁 Direktori restore: $RESTORE_DIR"
+# Find the latest backup directory
+LATEST_BACKUP=$(find /root -maxdepth 1 -type d -name "backup_protect10_*" | sort -r | head -n1)
 
-for REMOTE_PATH in "${PATHS[@]}"; do
-    if [ -f "$REMOTE_PATH" ]; then
-        # Cari backup file terbaru
-        BACKUP_FILE=$(ls -t "${REMOTE_PATH}".bak_* 2>/dev/null | head -n1)
-        
-        if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
-            # Backup file modifikasi saat ini
-            cp "$REMOTE_PATH" "$RESTORE_DIR/$(basename $REMOTE_PATH).current_${TIMESTAMP}"
-            
-            # Restore dari backup
-            cp "$BACKUP_FILE" "$REMOTE_PATH"
-            echo "✅ Berhasil restore: $(basename $REMOTE_PATH)"
-            echo "   dari backup: $(basename $BACKUP_FILE)"
-        else
-            # Jika tidak ada backup, simpan file current ke restore dir
-            cp "$REMOTE_PATH" "$RESTORE_DIR/$(basename $REMOTE_PATH).current_${TIMESTAMP}"
-            echo "⚠️  Tidak ada backup ditemukan untuk: $(basename $REMOTE_PATH)"
-            echo "   File current disimpan di restore directory"
-        fi
-    else
-        echo "❌ File tidak ditemukan: $REMOTE_PATH"
+if [ -z "$LATEST_BACKUP" ]; then
+  echo "❌ Tidak ada backup ditemukan untuk proteksi ini."
+  echo "⚠️  File mungkin masih dalam keadaan terproteksi."
+  exit 1
+fi
+
+echo "📦 Memulihkan dari backup: $LATEST_BACKUP"
+
+# Restore files from backup
+for ORIGINAL_PATH in "${ORIGINAL_PATHS[@]}"; do
+  BACKUP_PATH="${LATEST_BACKUP}${ORIGINAL_PATH}"
+  
+  if [ -f "$BACKUP_PATH" ]; then
+    mkdir -p "$(dirname "$ORIGINAL_PATH")"
+    cp "$BACKUP_PATH" "$ORIGINAL_PATH"
+    chmod 644 "$ORIGINAL_PATH"
+    echo "✅ Berhasil memulihkan: $ORIGINAL_PATH"
+  else
+    echo "⚠️  Backup tidak ditemukan untuk: $ORIGINAL_PATH"
+    
+    # Remove protected files if backup doesn't exist
+    if [ -f "$ORIGINAL_PATH" ]; then
+      rm -f "$ORIGINAL_PATH"
+      echo "🗑️  File proteksi dihapus: $ORIGINAL_PATH"
     fi
+  fi
 done
 
 # Clear view cache
-echo "🧹 Membersihkan cache view..."
-php /var/www/pterodactyl/artisan view:clear 2>/dev/null || echo "⚠️ Gagal clear view cache"
-php /var/www/pterodactyl/artisan cache:clear 2>/dev/null || echo "⚠️ Gagal clear cache"
+if [ -d "/var/www/pterodactyl" ]; then
+  cd /var/www/pterodactyl
+  php artisan view:clear 2>/dev/null || echo "⚠️  Gagal clear view cache, tetapi tidak masalah."
+fi
 
-echo ""
-echo "🎉 Uninstall proteksi berhasil dilakukan!"
-echo "📂 File original telah di-restore dari backup"
-echo "📁 File modifikasi disimpan di: $RESTORE_DIR"
-echo ""
-echo "📋 Status restore:"
-for REMOTE_PATH in "${PATHS[@]}"; do
-    if [ -f "$REMOTE_PATH" ]; then
-        BACKUP_FILE=$(ls -t "${REMOTE_PATH}".bak_* 2>/dev/null | head -n1)
-        if [ -n "$BACKUP_FILE" ]; then
-            echo "   ✅ $(basename $REMOTE_PATH) - RESTORED"
-        else
-            echo "   ⚠️  $(basename $REMOTE_PATH) - NO BACKUP (current saved)"
-        fi
-    else
-        echo "   ❌ $(basename $REMOTE_PATH) - NOT FOUND"
-    fi
-done
-echo ""
-echo "🔓 Akses Admin Panel sekarang sudah kembali normal"
+echo "♻️  Proteksi berhasil dihapus!"
+echo "📂 Backup masih disimpan di: $LATEST_BACKUP (jika ingin dihapus manual)"
+echo "🔓 Akses Server View & Node List telah dikembalikan ke normal"
