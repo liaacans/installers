@@ -28,6 +28,7 @@ info() {
 show_menu() {
     clear
     cat <<'EOF'
+
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣦⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -58,13 +59,14 @@ show_menu() {
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+
 EOF
 
     echo
     echo "=========================================="
     echo "              SIMPLE OPTION               "
     echo "    CUSTOM SECURITY MIDDLEWARE INSTALLER  "
-    echo "                 @ginaabaikhati                 "
+    echo "                 @ginaabaikhati           "
     echo "=========================================="
     echo
     echo "Menu yang tersedia:"
@@ -256,9 +258,105 @@ custom_error_message() {
     log "🎉 Teks error berhasil diubah!"
 }
 
+# Fungsi untuk register middleware di Kernel tanpa PHP
+register_kernel_middleware() {
+    local KERNEL_FILE="$1"
+    local BACKUP_DIR="$2"
+    
+    log "📝 Registering middleware in Kernel using sed..."
+    
+    # Backup file
+    cp -a "$KERNEL_FILE" "$BACKUP_DIR/$(basename "$KERNEL_FILE").bak.$(date +%s)"
+    
+    # Cek apakah sudah ada
+    if grep -q "'custom.security'" "$KERNEL_FILE"; then
+        warn "⚠️ Middleware already registered in Kernel"
+        return 0
+    fi
+    
+    # Cari pattern middlewareAliases
+    if grep -q "\$middlewareAliases = \[" "$KERNEL_FILE"; then
+        # Tambah setelah middlewareAliases array
+        sed -i '/\$middlewareAliases = \[/a\
+        '\''custom.security'\'' => \\Pterodactyl\\Http\\Middleware\\CustomSecurityCheck::class,' "$KERNEL_FILE"
+        log "✅ Middleware registered in Kernel (middlewareAliases)"
+        return 0
+    fi
+    
+    # Cari pattern routeMiddleware (fallback)
+    if grep -q "\$routeMiddleware = \[" "$KERNEL_FILE"; then
+        # Tambah setelah routeMiddleware array
+        sed -i '/\$routeMiddleware = \[/a\
+        '\''custom.security'\'' => \\Pterodactyl\\Http\\Middleware\\CustomSecurityCheck::class,' "$KERNEL_FILE"
+        log "✅ Middleware registered in Kernel (routeMiddleware)"
+        return 0
+    fi
+    
+    error "❌ Cannot find middlewareAliases or routeMiddleware in Kernel.php"
+}
+
+# Fungsi untuk patch api-client.php tanpa PHP
+patch_api_client() {
+    local API_CLIENT_FILE="$1"
+    local BACKUP_DIR="$2"
+    
+    log "🔧 Patching api-client.php using sed..."
+    
+    # Backup file
+    cp -a "$API_CLIENT_FILE" "$BACKUP_DIR/$(basename "$API_CLIENT_FILE").bak.$(date +%s)"
+    
+    # Cek apakah sudah ada
+    if grep -q "custom.security" "$API_CLIENT_FILE"; then
+        warn "⚠️ api-client.php already has custom.security"
+        return 0
+    fi
+    
+    # Cari pattern middleware array yang mengandung AuthenticateServerAccess
+    if grep -q "AuthenticateServerAccess::class" "$API_CLIENT_FILE"; then
+        # Tambah custom.security ke middleware array
+        sed -i '/AuthenticateServerAccess::class/s/]/,\n        '\''custom.security'\''/' "$API_CLIENT_FILE"
+        log "✅ api-client.php patched"
+        return 0
+    fi
+    
+    warn "⚠️ Cannot find AuthenticateServerAccess in api-client.php - manual patching required"
+}
+
+# Fungsi untuk patch admin.php tanpa PHP
+patch_admin_routes() {
+    local ADMIN_FILE="$1"
+    local BACKUP_DIR="$2"
+    
+    log "🔧 Patching admin.php using sed..."
+    
+    # Backup file
+    cp -a "$ADMIN_FILE" "$BACKUP_DIR/$(basename "$ADMIN_FILE").bak.$(date +%s)"
+    
+    # Patch untuk groups: users, servers, nodes
+    for prefix in "'users'" "'servers'" "'nodes'"; do
+        if grep -q "prefix => $prefix" "$ADMIN_FILE"; then
+            # Tambah middleware ke route group
+            sed -i "/prefix => $prefix.*{/a\            'middleware' => ['custom.security']," "$ADMIN_FILE"
+            log "✅ Added middleware to $prefix group"
+        fi
+    done
+    
+    # Patch untuk node routes
+    if grep -q "Admin\\\\NodesController::class" "$ADMIN_FILE"; then
+        sed -i "/Admin\\\\NodesController::class.*\$/s/;/->middleware(['custom.security']);/" "$ADMIN_FILE"
+        log "✅ Added middleware to node routes"
+    fi
+    
+    # Patch untuk settings routes
+    if grep -q "admin/settings" "$ADMIN_FILE"; then
+        sed -i "/admin\/settings.*\$/s/;/->middleware(['custom.security']);/" "$ADMIN_FILE"
+        log "✅ Added middleware to settings routes"
+    fi
+}
+
 install_full_security_v3() {
     if [ "$EUID" -ne 0 ]; then
-        error "Please run as root: sudo bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security.sh)"
+        error "Please run as root: sudo bash $0"
     fi
 
     log "🚀 Starting Custom Security Middleware Full Installation v3..."
@@ -274,9 +372,6 @@ install_full_security_v3() {
     BACKUP_DIR="/root/pterodactyl-customsecurity-backup-$STAMP"
     mkdir -p "$BACKUP_DIR"
 
-    # Backup function
-    bk() { [ -f "$1" ] && cp -a "$1" "$BACKUP_DIR/$(basename "$1").bak.$STAMP" && echo "  backup: $1 -> $BACKUP_DIR"; }
-
     echo "== Custom Security: full installer v3 =="
     echo "App: $APP_DIR"
     echo "Backup: $BACKUP_DIR"
@@ -289,7 +384,14 @@ install_full_security_v3() {
     # --- 1) Create middleware file ---
     log "📝 Creating CustomSecurityCheck middleware..."
     mkdir -p "$(dirname "$MW_FILE")"
-    bk "$MW_FILE"
+    
+    # Backup jika file sudah ada
+    if [ -f "$MW_FILE" ]; then
+        cp -a "$MW_FILE" "$BACKUP_DIR/$(basename "$MW_FILE").bak.$STAMP"
+        log "✅ Backup middleware created"
+    fi
+    
+    # Buat middleware file
     cat >"$MW_FILE" <<'PHP'
 <?php
 
@@ -311,16 +413,6 @@ class CustomSecurityCheck
         $method = strtoupper($request->method());
         $server = $request->route('server');
         $node   = $request->route('node');
-
-        Log::debug('CustomSecurityCheck: incoming request', [
-            'user_id'     => $user->id ?? null,
-            'root_admin'  => $user->root_admin ?? false,
-            'path'        => $path,
-            'method'      => $method,
-            'server_id'   => $server instanceof Server ? $server->id : null,
-            'node_id'     => $node instanceof Node ? $node->id : null,
-            'auth_header' => $request->hasHeader('Authorization'),
-        ]);
 
         if (!$user) {
             return $next($request);
@@ -355,7 +447,6 @@ class CustomSecurityCheck
 
         if ($server instanceof Server) {
             if ($user->id === $server->owner_id) {
-                Log::info('Owner bypass', ['user_id' => $user->id, 'server_id' => $server->id]);
                 return $next($request);
             }
 
@@ -561,163 +652,22 @@ PHP
     log "✅ Custom middleware created"
 
     # --- 2) Register middleware in Kernel ---
-    log "📝 Registering middleware in Kernel..."
     if [ -f "$KERNEL" ]; then
-        bk "$KERNEL"
-        php <<'PHP'
-<?php
-$f = '/var/www/pterodactyl/app/Http/Kernel.php';
-$s = file_get_contents($f);
-$alias = "'custom.security' => \\Pterodactyl\\Http\\Middleware\\CustomSecurityCheck::class,";
-if (strpos($s, "'custom.security'") !== false) { 
-    echo "Kernel alias already present\n"; 
-    exit; 
-}
-
-$patterns = [
-    '/(\$middlewareAliases\s*=\s*\[)([\s\S]*?)(\n\s*\];)/',
-    '/(\$routeMiddleware\s*=\s*\[)([\s\S]*?)(\n\s*\];)/',
-];
-$done = false;
-foreach ($patterns as $p) {
-    $s2 = preg_replace_callback($p, function($m) use ($alias){
-        $body = rtrim($m[2]);
-        if ($body !== '' && substr(trim($body), -1) !== ',') $body .= ',';
-        $body .= "\n        " . $alias;
-        return $m[1] . $body . $m[3];
-    }, $s, 1, $cnt);
-    if ($cnt > 0) { $s = $s2; $done = true; break; }
-}
-if (!$done) { 
-    fwrite(STDERR, "ERROR: \$middlewareAliases / \$routeMiddleware not found\n"); 
-    exit(1); 
-}
-file_put_contents($f, $s);
-echo "Kernel alias inserted\n";
-?>
-PHP
-        log "✅ Middleware registered in Kernel"
+        register_kernel_middleware "$KERNEL" "$BACKUP_DIR"
     else
         warn "⚠️ Kernel.php not found, skipped"
     fi
 
     # --- 3) Patch api-client.php ---
-    log "🔧 Patching api-client.php..."
     if [ -f "$API_CLIENT" ]; then
-        bk "$API_CLIENT"
-        php <<'PHP'
-<?php
-$f = '/var/www/pterodactyl/routes/api-client.php';
-$s = file_get_contents($f);
-if (stripos($s, "custom.security") !== false) { 
-    echo "api-client.php already has custom.security\n"; 
-    exit; 
-}
-
-$changed = false;
-$s = preg_replace_callback('/(middleware\s*=>\s*\[)([\s\S]*?)(\])/i', function($m) use (&$changed) {
-    $body = $m[2];
-    if (stripos($body, 'AuthenticateServerAccess::class') !== false) {
-        if (stripos($body, 'custom.security') === false) {
-            $b = rtrim($body);
-            if ($b !== '' && substr(trim($b), -1) !== ',') $b .= ',';
-            $b .= "\n        'custom.security'";
-            $changed = true;
-            return $m[1] . $b . $m[3];
-        }
-    }
-    return $m[0];
-}, $s, -1);
-
-if ($changed) {
-    file_put_contents($f, $s);
-    echo "api-client.php patched\n";
-} else {
-    echo "NOTE: middleware array w/ AuthenticateServerAccess::class not found — no change\n";
-}
-?>
-PHP
-        log "✅ api-client.php patched"
+        patch_api_client "$API_CLIENT" "$BACKUP_DIR"
     else
         warn "⚠️ api-client.php not found, skipped"
     fi
 
     # --- 4) Patch admin.php ---
-    log "🔧 Patching admin.php..."
     if [ -f "$ADMIN_ROUTES" ]; then
-        bk "$ADMIN_ROUTES"
-        php <<'PHP'
-<?php
-$f = '/var/www/pterodactyl/routes/admin.php';
-$s = file_get_contents($f);
-
-/* 4a) Group 'users' & 'servers' & 'nodes' */
-$prefixes = ["'users'", "'servers'", "'nodes'"];
-foreach ($prefixes as $pfx) {
-    $s = preg_replace_callback(
-        '/Route::group\s*\(\s*\[([^\]]*prefix\s*=>\s*'.$pfx.'[^\]]*)\]\s*,\s*function\s*\(\)\s*\{/is',
-        function($m){
-            $head = $m[1];
-            if (stripos($head, 'middleware') === false) {
-                return str_replace($m[1], $head . ", 'middleware' => ['custom.security']", $m[0]);
-            }
-            $head2 = preg_replace_callback('/(middleware\s*=>\s*\[)([\s\S]*?)(\])/i', function($mm){
-                if (stripos($mm[2], 'custom.security') !== false) return $mm[0];
-                $b = rtrim($mm[2]);
-                if ($b !== '' && substr(trim($b), -1) !== ',') $b .= ',';
-                $b .= "\n        'custom.security'";
-                return $mm[1] . $b . $mm[3];
-            }, $head, 1);
-            return str_replace($m[1], $head2, $m[0]);
-        },
-        $s
-    );
-}
-
-/* 4b) Node routes: tambah ->middleware(['custom.security']) kalau belum ada */
-$controllers = [
-    'Admin\\\\NodesController::class',
-    'Admin\\\\NodeAutoDeployController::class',
-];
-foreach ($controllers as $ctrl) {
-    $s = preg_replace_callback(
-        '/(Route::(post|patch|delete)\s*\([^;]*?\[\s*'.$ctrl.'[^\]]*\][^;]*)(;)/i',
-        function($m){
-            $chain = $m[1];
-            if (stripos($chain, '->middleware([') !== false) return $m[0];
-            // sisip sebelum ->name(...) jika ada, else sebelum ';'
-            if (preg_match('/(.*?)(->name\s*\([^)]+\))(.*)/', $chain, $mm)) {
-                $chain = $mm[1] . "->middleware(['custom.security'])" . $mm[2] . $mm[3];
-            } else {
-                $chain .= "->middleware(['custom.security'])";
-            }
-            return $chain . $m[3];
-        },
-        $s
-    );
-}
-
-/* 4c) Settings route: block admin/settings */
-$s = preg_replace_callback(
-    '/(Route::(get|post|patch|delete)\s*\([^;]*?[\'"]admin\/settings[^;]*)(;)/i',
-    function($m){
-        $chain = $m[1];
-        if (stripos($chain, '->middleware([') !== false) return $m[0];
-        if (preg_match('/(.*?)(->name\s*\([^)]+\))(.*)/', $chain, $mm)) {
-            $chain = $mm[1] . "->middleware(['custom.security'])" . $mm[2] . $mm[3];
-        } else {
-            $chain .= "->middleware(['custom.security'])";
-        }
-        return $chain . $m[3];
-    },
-    $s
-);
-
-file_put_contents($f, $s);
-echo "admin.php patched\n";
-?>
-PHP
-        log "✅ admin.php patched"
+        patch_admin_routes "$ADMIN_ROUTES" "$BACKUP_DIR"
     else
         warn "⚠️ admin.php not found, skipped"
     fi
