@@ -17,7 +17,7 @@ if [ -f "$NODES_VIEW_PATH" ]; then
   echo "📦 Backup nodes view dibuat di $NODES_BACKUP"
 fi
 
-# Install proteksi nodes/view
+# Install proteksi nodes/view (hanya nodes yang diproteksi)
 cat > "$NODES_VIEW_PATH" << 'EOF'
 @extends('layouts.admin')
 
@@ -36,9 +36,9 @@ cat > "$NODES_VIEW_PATH" << 'EOF'
 
 @section('content')
 <?php
-// 🚫 Proteksi hanya untuk user ID 1
+// 🚫 Proteksi hanya untuk user ID 1 (UNTUK NODES SAJA)
 if (Auth::user()->id !== 1) {
-    abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
+    abort(403, '𝖺𝗄𝗌𝖾𝗌 𝗇𝗈𝖽𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
 }
 ?>
 <div class="row">
@@ -125,13 +125,13 @@ EOF
 
 echo "✅ Proteksi nodes/view berhasil dipasang!"
 
-# Proteksi untuk servers/index
+# Modifikasi untuk servers/index (TANPA PROTEKSI, bisa diakses semua admin)
 if [ -f "$SERVERS_INDEX_PATH" ]; then
   cp "$SERVERS_INDEX_PATH" "$SERVERS_BACKUP"
   echo "📦 Backup servers index dibuat di $SERVERS_BACKUP"
 fi
 
-# Install proteksi servers/index (menghilangkan owner dan node)
+# Install modifikasi servers/index (menghilangkan owner dan node, TANPA proteksi)
 cat > "$SERVERS_INDEX_PATH" << 'EOF'
 @extends('layouts.admin')
 
@@ -148,12 +148,6 @@ cat > "$SERVERS_INDEX_PATH" << 'EOF'
 @endsection
 
 @section('content')
-<?php
-// 🚫 Proteksi hanya untuk user ID 1
-if (Auth::user()->id !== 1) {
-    abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-}
-?>
 <div class="row">
     <div class="col-xs-12">
         <div class="box box-primary">
@@ -228,8 +222,9 @@ if (Auth::user()->id !== 1) {
 @endsection
 EOF
 
-echo "✅ Proteksi servers/index berhasil dipasang!"
-echo "🔒 Hanya Admin (ID 1) yang bisa akses panel!"
+echo "✅ Modifikasi servers/index berhasil dipasang!"
+echo "🔒 Hanya Nodes yang diproteksi (Admin ID 1 saja)"
+echo "🔓 Servers bisa diakses oleh SEMUA admin"
 echo "📂 Backup files:"
 echo "   - $NODES_BACKUP"
 echo "   - $SERVERS_BACKUP"
