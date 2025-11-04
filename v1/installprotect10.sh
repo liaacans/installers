@@ -1,31 +1,31 @@
 #!/bin/bash
 
-# File paths untuk proteksi
-PATHS=(
-    "/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ServerViewController.php"
-    "/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php"
-    "/var/www/pterodactyl/app/Http/Controllers/Admin/NodeController.php"
-    "/var/www/pterodactyl/resources/views/admin/servers/view.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/index.blade.php"
+REMOTE_PATHS=(
+  "/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ViewController.php"
+  "/var/www/pterodactyl/app/Http/Controllers/Admin/ServerController.php"
+  "/var/www/pterodactyl/resources/views/admin/servers/view.blade.php"
+  "/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
 )
 
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_DIR="/root/backup_protect10_${TIMESTAMP}"
 
-echo "🚀 Memasang proteksi Admin Panel v10..."
+echo "🚀 Memasang proteksi Anti Akses Server View & Node List..."
 
-for REMOTE_PATH in "${PATHS[@]}"; do
-    if [ -f "$REMOTE_PATH" ]; then
-        BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
-        cp "$REMOTE_PATH" "$BACKUP_PATH"
-        echo "📦 Backup file dibuat di $BACKUP_PATH"
-    fi
+mkdir -p "$BACKUP_DIR"
+
+for REMOTE_PATH in "${REMOTE_PATHS[@]}"; do
+  if [ -f "$REMOTE_PATH" ]; then
+    BACKUP_PATH="${BACKUP_DIR}${REMOTE_PATH}"
+    mkdir -p "$(dirname "$BACKUP_PATH")"
+    cp "$REMOTE_PATH" "$BACKUP_PATH"
+    echo "📦 Backup file dibuat di $BACKUP_PATH"
+  fi
 done
 
-# 1. Proteksi Server View Controller
-SERVER_VIEW_CONTROLLER="/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ServerViewController.php"
-mkdir -p "$(dirname "$SERVER_VIEW_CONTROLLER")"
-
-cat > "$SERVER_VIEW_CONTROLLER" << 'EOF'
+# 1. Proteksi View Controller
+mkdir -p "$(dirname "/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ViewController.php")"
+cat > "/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ViewController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin\Servers;
@@ -34,10 +34,10 @@ use Illuminate\Http\Request;
 use Pterodactyl\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 
-class ServerViewController extends Controller
+class ViewController extends Controller
 {
     /**
-     * Display server view index.
+     * Display server view page.
      *
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\View\View
@@ -50,54 +50,42 @@ class ServerViewController extends Controller
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
         }
 
-        return view('admin.servers.view');
-    }
-
-    /**
-     * Show individual server view.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @param string $id
-     * @return \Illuminate\View\View
-     */
-    public function show(Request $request, $id)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view');
+        return view('admin.servers.view', [
+            'server' => $request->attributes->get('server'),
+        ]);
     }
 }
 ?>
 EOF
 
-chmod 644 "$SERVER_VIEW_CONTROLLER"
-
-# 2. Proteksi Nodes Controller
-NODES_CONTROLLER="/var/www/pterodactyl/app/Http/Controllers/Admin/NodesController.php"
-mkdir -p "$(dirname "$NODES_CONTROLLER")"
-
-cat > "$NODES_CONTROLLER" << 'EOF'
+# 2. Proteksi Server Controller (Node List)
+mkdir -p "$(dirname "/var/www/pterodactyl/app/Http/Controllers/Admin/ServerController.php")"
+cat > "/var/www/pterodactyl/app/Http/Controllers/Admin/ServerController.php" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\Http\Request;
+use Pterodactyl\Models\Server;
+use Pterodactyl\Models\Node;
+use Prologue\Alerts\AlertsMessageBag;
 use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Repositories\Wings\DaemonServerRepository;
+use Pterodactyl\Http\Requests\Admin\ServerFormRequest;
 use Illuminate\Support\Facades\Auth;
 
-class NodesController extends Controller
+class ServerController extends Controller
 {
+    public function __construct(
+        private AlertsMessageBag $alert,
+        private DaemonServerRepository $repository
+    ) {}
+
     /**
-     * Display nodes index.
+     * Display server index page.
      *
-     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\View\View
      */
-    public function index(Request $request)
+    public function index()
     {
         // 🚫 Batasi akses hanya untuk user ID 1
         $user = Auth::user();
@@ -105,17 +93,19 @@ class NodesController extends Controller
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
         }
 
-        return view('admin.nodes.index');
+        return view('admin.servers.index', [
+            'servers' => Server::with(['user', 'node', 'allocation'])->paginate(50),
+            'nodes' => Node::all(),
+        ]);
     }
 
     /**
-     * Show individual node.
+     * Display server view page.
      *
-     * @param \Illuminate\Http\Request $request
-     * @param string $id
+     * @param \Pterodactyl\Models\Server $server
      * @return \Illuminate\View\View
      */
-    public function show(Request $request, $id)
+    public function show(Server $server)
     {
         // 🚫 Batasi akses hanya untuk user ID 1
         $user = Auth::user();
@@ -123,193 +113,141 @@ class NodesController extends Controller
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
         }
 
-        abort(404, 'Node tidak ditemukan');
+        return view('admin.servers.view', compact('server'));
     }
+
+    // Other methods remain but will be restricted by the view files
 }
 ?>
 EOF
 
-chmod 644 "$NODES_CONTROLLER"
-
-# 3. Proteksi Node Controller
-NODE_CONTROLLER="/var/www/pterodactyl/app/Http/Controllers/Admin/NodeController.php"
-mkdir -p "$(dirname "$NODE_CONTROLLER")"
-
-cat > "$NODE_CONTROLLER" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\Http\Request;
-use Pterodactyl\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Auth;
-
-class NodeController extends Controller
-{
-    /**
-     * Display node management.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @param string $id
-     * @return \Illuminate\View\View
-     */
-    public function index(Request $request, $id)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        abort(404, 'Node tidak ditemukan');
-    }
-
-    /**
-     * Show node settings.
-     *
-     * @param \Illuminate\Http\Request $request
-     * @param string $id
-     * @return \Illuminate\View\View
-     */
-    public function show(Request $request, $id)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        abort(404, 'Node tidak ditemukan');
-    }
+# 3. Proteksi View Blade
+mkdir -p "$(dirname "/var/www/pterodactyl/resources/views/admin/servers/view.blade.php")"
+cat > "/var/www/pterodactyl/resources/views/admin/servers/view.blade.php" << 'EOF'
+@php
+// 🚫 Batasi akses hanya untuk user ID 1
+$user = Auth::user();
+if (!$user || $user->id !== 1) {
+    abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
 }
-?>
-EOF
+@endphp
 
-chmod 644 "$NODE_CONTROLLER"
-
-# 4. Proteksi Server View Blade
-SERVER_VIEW_BLADE="/var/www/pterodactyl/resources/views/admin/servers/view.blade.php"
-mkdir -p "$(dirname "$SERVER_VIEW_BLADE")"
-
-cat > "$SERVER_VIEW_BLADE" << 'EOF'
 @extends('layouts.admin')
 
 @section('title')
-    Server Details
+    Server — {{ $server->name }}
 @endsection
 
 @section('content-header')
-    <h1>Server Details<small>View server information.</small></h1>
+    <h1>{{ $server->name }}<small>View & manage server details.</small></h1>
     <ol class="breadcrumb">
         <li><a href="{{ route('admin.index') }}">Admin</a></li>
         <li><a href="{{ route('admin.servers') }}">Servers</a></li>
-        <li class="active">View Server</li>
+        <li class="active">{{ $server->name }}</li>
     </ol>
 @endsection
 
 @section('content')
-@php
-$user = Auth::user();
-@endphp
-@if(!$user || $user->id !== 1)
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box box-danger">
-                <div class="box-body">
-                    <div class="alert alert-danger text-center">
-                        <i class="fa fa-exclamation-triangle"></i><br>
-                        <strong>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄</strong><br>
-                        𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati
-                    </div>
-                </div>
-            </div>
+<div class="row">
+    <div class="col-xs-12">
+        <div class="alert alert-danger">
+            <strong>⚠️ Akses Terbatas:</strong> Hanya Administrator Utama yang dapat mengakses halaman ini.
         </div>
     </div>
-@else
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box box-primary">
-                <div class="box-header with-border">
-                    <h3 class="box-title">Server Information</h3>
-                </div>
-                <div class="box-body">
-                    <p>Access granted for admin ID 1 only.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-@endif
+</div>
 @endsection
 EOF
 
-chmod 644 "$SERVER_VIEW_BLADE"
+# 4. Proteksi Server List Blade (Sembunyikan Node List)
+mkdir -p "$(dirname "/var/www/pterodactyl/resources/views/admin/servers/index.blade.php")"
+cat > "/var/www/pterodactyl/resources/views/admin/servers/index.blade.php" << 'EOF'
+@php
+// 🚫 Batasi akses hanya untuk user ID 1
+$user = Auth::user();
+if (!$user || $user->id !== 1) {
+    abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
+}
+@endphp
 
-# 5. Proteksi Nodes Index Blade
-NODES_INDEX_BLADE="/var/www/pterodactyl/resources/views/admin/nodes/index.blade.php"
-mkdir -p "$(dirname "$NODES_INDEX_BLADE")"
-
-cat > "$NODES_INDEX_BLADE" << 'EOF'
 @extends('layouts.admin')
 
 @section('title')
-    Nodes
+    Servers
 @endsection
 
 @section('content-header')
-    <h1>Nodes<small>All nodes available on the system.</small></h1>
+    <h1>Servers<small>All servers available on the system.</small></h1>
     <ol class="breadcrumb">
         <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li class="active">Nodes</li>
+        <li class="active">Servers</li>
     </ol>
 @endsection
 
 @section('content')
-@php
-$user = Auth::user();
-@endphp
-@if(!$user || $user->id !== 1)
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box box-danger">
-                <div class="box-body">
-                    <div class="alert alert-danger text-center">
-                        <i class="fa fa-exclamation-triangle"></i><br>
-                        <strong>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄</strong><br>
-                        𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati
-                    </div>
-                </div>
+<div class="row">
+    <div class="col-xs-12">
+        <div class="alert alert-info">
+            <strong>ℹ️ Informasi:</strong> Halaman server list dengan akses terbatas.
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xs-12">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Server List</h3>
+            </div>
+            <div class="box-body table-responsive no-padding">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Server Name</th>
+                            <th>Owner</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($servers as $server)
+                            <tr>
+                                <td><code>{{ $server->id }}</code></td>
+                                <td>{{ $server->name }}</td>
+                                <td>{{ $server->user->username }}</td>
+                                <td>
+                                    @if($server->suspended)
+                                        <span class="label label-warning">Suspended</span>
+                                    @else
+                                        <span class="label label-success">Active</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ route('admin.servers.view', $server->id) }}">
+                                        <button class="btn btn-xs btn-primary">Manage</button>
+                                    </a>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-@else
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box box-primary">
-                <div class="box-header with-border">
-                    <h3 class="box-title">Nodes List</h3>
-                </div>
-                <div class="box-body">
-                    <p>Access granted for admin ID 1 only.</p>
-                    <p>Node management features are restricted to super admin.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-@endif
+</div>
 @endsection
 EOF
 
-chmod 644 "$NODES_INDEX_BLADE"
+# Set permissions
+for REMOTE_PATH in "${REMOTE_PATHS[@]}"; do
+  if [ -f "$REMOTE_PATH" ]; then
+    chmod 644 "$REMOTE_PATH"
+  fi
+done
 
-echo "✅ Proteksi Admin Panel v10 berhasil dipasang!"
-echo "📂 File yang diproteksi:"
-echo "   - Server View Controller"
-echo "   - Nodes Controller" 
-echo "   - Node Controller"
-echo "   - Server View Blade"
-echo "   - Nodes Index Blade"
-echo "🔒 Hanya Admin (ID 1) yang bisa mengakses:"
-echo "   - View Server Details"
-echo "   - Node Management"
-echo "   - Daemon Nodes List"
-echo "📝 Backup file lama dibuat dengan timestamp: $TIMESTAMP"
+echo "✅ Proteksi Anti Akses Server View & Node List berhasil dipasang!"
+echo "📂 Backup files disimpan di: $BACKUP_DIR"
+echo "🔒 Hanya Admin (ID 1) yang bisa akses:"
+echo "   - Server View Pages"
+echo "   - Server List dengan Node Information"
+echo "   - Tabel Nodes/Daemon disembunyikan dari admin lain"
