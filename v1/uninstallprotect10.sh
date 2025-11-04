@@ -1,37 +1,46 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ServerViewController.php"
-BACKUP_PATTERN="${REMOTE_PATH}.bak_*"
+# File paths
+MAIN_SERVICE_PATH="/var/www/pterodactyl/app/Services/Servers/DetailsModificationService.php"
+VIEW_PATH="/var/www/pterodactyl/resources/scripts/components/server/ServerConsoleContainer.tsx"
 
-echo "🔄 Memulai proses uninstall proteksi Server View..."
+# Backup patterns
+MAIN_BACKUP_PATTERN="${MAIN_SERVICE_PATH}.bak_*"
+VIEW_BACKUP_PATTERN="${VIEW_PATH}.bak_*"
 
-# Cari backup file terbaru
-LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
+echo "🗑️  Menghapus proteksi Anti Modifikasi Server v10..."
 
-if [ -n "$LATEST_BACKUP" ]; then
-    echo "📦 Menemukan backup file: $LATEST_BACKUP"
-    
-    # Restore backup
-    mv "$LATEST_BACKUP" "$REMOTE_PATH"
-    chmod 644 "$REMOTE_PATH"
-    
-    echo "✅ Proteksi berhasil diuninstall!"
-    echo "📂 File asli telah dikembalikan dari backup."
-    echo "🔓 Akses Server View sekarang terbuka untuk semua user."
+# Restore main service file
+LATEST_MAIN_BACKUP=$(ls -t $MAIN_BACKUP_PATTERN 2>/dev/null | head -1)
+if [ -n "$LATEST_MAIN_BACKUP" ]; then
+  cp "$LATEST_MAIN_BACKUP" "$MAIN_SERVICE_PATH"
+  chmod 644 "$MAIN_SERVICE_PATH"
+  echo "✅ File utama berhasil dikembalikan dari: $LATEST_MAIN_BACKUP"
 else
-    echo "⚠️  Tidak ditemukan backup file untuk direstore."
-    echo "🗑️  Menghapus file proteksi..."
-    
-    if [ -f "$REMOTE_PATH" ]; then
-        rm -f "$REMOTE_PATH"
-        echo "✅ File proteksi berhasil dihapus."
-        echo "🔓 Akses Server View sekarang terbuka untuk semua user."
-    else
-        echo "❌ File proteksi tidak ditemukan di $REMOTE_PATH"
-        echo "💡 Mungkin proteksi belum terinstall atau sudah diuninstall."
-    fi
+  echo "⚠️  Tidak ditemukan backup file utama. File akan dihapus."
+  if [ -f "$MAIN_SERVICE_PATH" ]; then
+    rm "$MAIN_SERVICE_PATH"
+    echo "✅ File utama berhasil dihapus."
+  fi
 fi
 
-echo "🎯 Jangan lupa clear cache Pterodactyl:"
-echo "   php artisan cache:clear"
-echo "   php artisan view:clear"
+# Restore view file
+LATEST_VIEW_BACKUP=$(ls -t $VIEW_BACKUP_PATTERN 2>/dev/null | head -1)
+if [ -n "$LATEST_VIEW_BACKUP" ]; then
+  cp "$LATEST_VIEW_BACKUP" "$VIEW_PATH"
+  echo "✅ File view berhasil dikembalikan dari: $LATEST_VIEW_BACKUP"
+else
+  echo "⚠️  Tidak ditemukan backup file view. Rebuild panel diperlukan."
+  if [ -f "$VIEW_PATH" ]; then
+    echo "📝 File view masih ada, rebuild panel diperlukan untuk mengembalikan tampilan normal."
+  fi
+fi
+
+# Clear compiled views
+echo "🔄 Membersihkan cache..."
+cd /var/www/pterodactyl
+php artisan view:clear
+php artisan cache:clear
+
+echo "🎉 Uninstall proteksi v10 selesai!"
+echo "📝 Jika tampilan tidak normal, jalankan: cd /var/www/pterodactyl && npm run build"
