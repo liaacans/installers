@@ -1,37 +1,37 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/admin/servers/view/1"
-BACKUP_PATH="${REMOTE_PATH}.bak_*"
+REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ServerViewController.php"
+BACKUP_PATTERN="${REMOTE_PATH}.bak_*"
 
-echo "🗑️ Menghapus proteksi Admin Only untuk Server List..."
+echo "🔄 Memulai proses uninstall proteksi Server View..."
 
-# Cari backup terbaru
-LATEST_BACKUP=$(ls -td $BACKUP_PATH 2>/dev/null | head -n1)
+# Cari backup file terbaru
+LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
 
 if [ -n "$LATEST_BACKUP" ]; then
-    echo "📦 Memulihkan dari backup: $LATEST_BACKUP"
+    echo "📦 Menemukan backup file: $LATEST_BACKUP"
     
-    # Hapus folder saat ini
-    rm -rf "$REMOTE_PATH"
+    # Restore backup
+    mv "$LATEST_BACKUP" "$REMOTE_PATH"
+    chmod 644 "$REMOTE_PATH"
     
-    # Restore dari backup
-    cp -r "$LATEST_BACKUP" "$REMOTE_PATH"
-    
-    # Set permissions
-    chmod -R 755 "$REMOTE_PATH"
-    find "$REMOTE_PATH" -type f -name "*.blade.php" -exec chmod 644 {} \;
-    
-    echo "✅ Proteksi berhasil dihapus dan file asli dipulihkan!"
-    echo "📂 Folder dipulihkan dari: $LATEST_BACKUP"
+    echo "✅ Proteksi berhasil diuninstall!"
+    echo "📂 File asli telah dikembalikan dari backup."
+    echo "🔓 Akses Server View sekarang terbuka untuk semua user."
 else
-    echo "❌ Backup tidak ditemukan. Menghapus file proteksi..."
+    echo "⚠️  Tidak ditemukan backup file untuk direstore."
+    echo "🗑️  Menghapus file proteksi..."
     
-    if [ -d "$REMOTE_PATH" ]; then
-        rm -rf "$REMOTE_PATH"
-        echo "✅ Folder proteksi berhasil dihapus!"
+    if [ -f "$REMOTE_PATH" ]; then
+        rm -f "$REMOTE_PATH"
+        echo "✅ File proteksi berhasil dihapus."
+        echo "🔓 Akses Server View sekarang terbuka untuk semua user."
     else
-        echo "⚠️ Folder proteksi tidak ditemukan di $REMOTE_PATH"
+        echo "❌ File proteksi tidak ditemukan di $REMOTE_PATH"
+        echo "💡 Mungkin proteksi belum terinstall atau sudah diuninstall."
     fi
 fi
 
-echo "♻️ Silakan clear cache Pterodactyl jika diperlukan"
+echo "🎯 Jangan lupa clear cache Pterodactyl:"
+echo "   php artisan cache:clear"
+echo "   php artisan view:clear"
