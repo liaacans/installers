@@ -1,257 +1,143 @@
 #!/bin/bash
 
-# Konfigurasi path
-NODES_VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view.blade.php"
-SERVERS_INDEX_PATH="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
-BACKUP_DIR="/var/www/pterodactyl/resources/views/admin/backups"
+REMOTE_PATH="/var/www/pterodactyl/resources/scripts/admin/nodes/view/1"
+TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_PATH="${REMOTE_PATH}.bak_uninstall_${TIMESTAMP}"
 
 echo "🔄 Memulai proses uninstall proteksi..."
 
-# Cek dan restore backup untuk nodes/view
-BACKUP_FILES_NODES=$(ls -t "${NODES_VIEW_PATH}.bak_"* 2>/dev/null | head -1)
-if [ -n "$BACKUP_FILES_NODES" ]; then
-    echo "📦 Menemukan backup nodes view: $BACKUP_FILES_NODES"
-    cp "$BACKUP_FILES_NODES" "$NODES_VIEW_PATH"
-    echo "✅ Nodes view berhasil dikembalikan ke versi original"
+if [ -d "$REMOTE_PATH" ]; then
+    # Buat backup sebelum uninstall
+    cp -r "$REMOTE_PATH" "$BACKUP_PATH"
+    echo "📦 Backup dibuat di: $BACKUP_PATH"
     
-    # Opsional: hapus file backup
-    read -p "🗑️ Hapus file backup? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm "$BACKUP_FILES_NODES"
-        echo "✅ Backup nodes view dihapus"
+    # Hapus file-file proteksi
+    rm -f "$REMOTE_PATH/index.php"
+    rm -f "$REMOTE_PATH/.htaccess"
+    
+    # Cek jika folder kosong, hapus folder
+    if [ -z "$(ls -A "$REMOTE_PATH")" ]; then
+        rmdir "$REMOTE_PATH"
+        echo "🗑️ Folder kosong berhasil dihapus"
     fi
-else
-    echo "⚠️ Tidak ditemukan backup untuk nodes view"
-    echo "📝 Membuat backup sebelum uninstall..."
-    TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-    cp "$NODES_VIEW_PATH" "${NODES_VIEW_PATH}.pre_uninstall_${TIMESTAMP}.bak"
     
-    # Reset ke template default nodes view
-    cat > "$NODES_VIEW_PATH" << 'EOF'
-@extends('layouts.admin')
-
-@section('title')
-    Node — {{ $node->name }}
-@endsection
-
-@section('content-header')
-    <h1>{{ $node->name }}<small>Detail lengkap node ini.</small></h1>
-    <ol class="breadcrumb">
-        <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
-        <li class="active">{{ $node->name }}</li>
-    </ol>
-@endsection
-
-@section('content')
-<div class="row">
-    <div class="col-xs-12">
-        <div class="nav-tabs-custom nav-tabs-floating">
-            <ul class="nav nav-tabs">
-                <li class="active"><a href="{{ route('admin.nodes.view', $node->id) }}">About</a></li>
-                <li><a href="{{ route('admin.nodes.view.settings', $node->id) }}">Settings</a></li>
-                <li><a href="{{ route('admin.nodes.view.configuration', $node->id) }}">Configuration</a></li>
-                <li><a href="{{ route('admin.nodes.view.allocation', $node->id) }}">Allocations</a></li>
-                <li><a href="{{ route('admin.nodes.view.servers', $node->id) }}">Servers</a></li>
-            </ul>
-        </div>
-    </div>
-</div>
-<div class="row">
-    <div class="col-sm-8">
-        <div class="row">
-            <div class="col-xs-12">
-                <div class="box box-primary">
-                    <div class="box-header with-border">
-                        <h3 class="box-title">Information</h3>
-                    </div>
-                    <div class="box-body table-responsive no-padding">
-                        <table class="table table-hover">
-                            <tr>
-                                <td>Name</td>
-                                <td>{{ $node->name }}</td>
-                            </tr>
-                            <tr>
-                                <td>Location</td>
-                                <td>{{ $node->location->short }}</td>
-                            </tr>
-                            <tr>
-                                <td>URL</td>
-                                <td><code>{{ $node->getScheme() }}://{{ $node->fqdn }}:{{ $node->daemonListen }}/</code></td>
-                            </tr>
-                            <tr>
-                                <td>Memory</td>
-                                <td>{{ $node->memory }} MB</td>
-                            </tr>
-                            <tr>
-                                <td>Disk</td>
-                                <td>{{ $node->disk }} MB</td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-4">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Usage Statistics</h3>
-            </div>
-            <div class="box-body">
-                <div class="row">
-                    <div class="col-xs-6">
-                        <div class="info-box bg-blue">
-                            <span class="info-box-icon"><i class="fa fa-server"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Servers</span>
-                                <span class="info-box-number">{{ number_format($node->servers_count) }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xs-6">
-                        <div class="info-box bg-green">
-                            <span class="info-box-icon"><i class="fa fa-plug"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Allocations</span>
-                                <span class="info-box-number">{{ number_format($node->allocations_count) }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-@endsection
-EOF
-    echo "✅ Nodes view berhasil direset ke default"
+    echo "✅ Proteksi berhasil diuninstall!"
+    echo "📂 Folder yang diuninstall: $REMOTE_PATH"
+    echo "🗂️ Backup tersedia di: $BACKUP_PATH"
+else
+    echo "❌ Folder proteksi tidak ditemukan di: $REMOTE_PATH"
+    echo "ℹ️  Mungkin proteksi sudah diuninstall sebelumnya"
 fi
 
-# Cek dan restore backup untuk servers/index
-BACKUP_FILES_SERVERS=$(ls -t "${SERVERS_INDEX_PATH}.bak_"* 2>/dev/null | head -1)
-if [ -n "$BACKUP_FILES_SERVERS" ]; then
-    echo "📦 Menemukan backup servers index: $BACKUP_FILES_SERVERS"
-    cp "$BACKUP_FILES_SERVERS" "$SERVERS_INDEX_PATH"
-    echo "✅ Servers index berhasil dikembalikan ke versi original"
-    
-    # Opsional: hapus file backup
-    read -p "🗑️ Hapus file backup? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm "$BACKUP_FILES_SERVERS"
-        echo "✅ Backup servers index dihapus"
-    fi
-else
-    echo "⚠️ Tidak ditemukan backup untuk servers index"
-    echo "📝 Membuat backup sebelum uninstall..."
-    TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-    cp "$SERVERS_INDEX_PATH" "${SERVERS_INDEX_PATH}.pre_uninstall_${TIMESTAMP}.bak"
-    
-    # Reset ke template default servers index
-    cat > "$SERVERS_INDEX_PATH" << 'EOF'
-@extends('layouts.admin')
+# Tampilkan konfirmasi HTML
+cat << 'EOF'
 
-@section('title')
-    Servers
-@endsection
-
-@section('content-header')
-    <h1>Servers<small>All servers available on the system.</small></h1>
-    <ol class="breadcrumb">
-        <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li class="active">Servers</li>
-    </ol>
-@endsection
-
-@section('content')
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Server List</h3>
-                <div class="box-tools">
-                    <div class="box-tools pull-right">
-                        <a href="{{ route('admin.servers.new') }}" class="btn btn-sm btn-primary">Create New</a>
-                    </div>
-                    <div class="input-group input-group-sm">
-                        <input type="text" class="form-control pull-right" name="table_search" placeholder="Search Servers">
-                        <div class="input-group-btn">
-                            <button type="submit" class="btn btn-default"><i class="fa fa-search"></i></button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="box-body table-responsive no-padding">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Owner</th>
-                            <th>Node</th>
-                            <th>Connection</th>
-                            <th>Memory</th>
-                            <th>Disk</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($servers as $server)
-                            <tr>
-                                <td>
-                                    <a href="{{ route('admin.servers.view', $server->id) }}">{{ $server->name }}</a>
-                                </td>
-                                <td>
-                                    <a href="{{ route('admin.users.view', $server->user->id) }}">{{ $server->user->username }}</a>
-                                </td>
-                                <td>
-                                    <a href="{{ route('admin.nodes.view', $server->node->id) }}">{{ $server->node->name }}</a>
-                                </td>
-                                <td>
-                                    <code>{{ $server->allocation->ip }}:{{ $server->allocation->port }}</code>
-                                </td>
-                                <td>{{ $server->memory }} MB</td>
-                                <td>{{ $server->disk }} MB</td>
-                                <td class="text-center">
-                                    <a href="#" data-action="edit" data-id="{{ $server->id }}">
-                                        <i class="fa fa-edit text-gray"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            @if($servers->hasPages())
-                <div class="box-footer with-border">
-                    <div class="col-md-12 text-center">{!! $servers->appends($_GET)->render() !!}</div>
-                </div>
-            @endif
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uninstall Complete - Node View Protection</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        .success {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #4ecdc4;
+        }
+        .button {
+            background: #4ecdc4;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #3dbab3;
+            transform: translateY(-2px);
+        }
+        .button.warning {
+            background: #ff6b6b;
+        }
+        .button.warning:hover {
+            background: #ff5252;
+        }
+        .info-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: left;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">✅</div>
+        <h1>Uninstall Complete</h1>
+        
+        <div class="success">
+            <strong>Proteksi Node View berhasil diuninstall!</strong>
+        </div>
+        
+        <div class="info-box">
+            <strong>Detail Uninstall:</strong><br>
+            • Folder: /admin/nodes/view/1<br>
+            • Backup dibuat: <?php echo $TIMESTAMP; ?><br>
+            • Status: Proteksi dihapus
+        </div>
+        
+        <p>Sekarang semua admin dapat mengakses halaman node view.</p>
+        
+        <div>
+            <a href="/admin" class="button">Kembali ke Dashboard</a>
+            <a href="installprotect10.sh" class="button warning">Install Kembali</a>
+        </div>
+        
+        <div style="margin-top: 20px; font-size: 12px; opacity: 0.7;">
+            Copyright © 2015 - 2025 Pterodactyl Software<br>
+            Security System by @ginaabaikhati
         </div>
     </div>
-</div>
-@endsection
+</body>
+</html>
 
-@section('footer-scripts')
-    @parent
-    <script>
-        $(document).ready(function() {
-            $('input[name="table_search"]').on('keyup', function() {
-                var value = $(this).val().toLowerCase();
-                $('table tbody tr').filter(function() {
-                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-                });
-            });
-        });
-    </script>
-@endsection
 EOF
-    echo "✅ Servers index berhasil direset ke default"
-fi
-
-echo "🎉 Uninstall proteksi berhasil!"
-echo "🔓 Panel sekarang dapat diakses oleh semua admin"
-echo "📂 File yang dipulihkan:"
-echo "   - $NODES_VIEW_PATH"
-echo "   - $SERVERS_INDEX_PATH"
