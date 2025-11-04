@@ -1,26 +1,20 @@
 #!/bin/bash
 
-# File paths
-MAIN_SERVICE_PATH="/var/www/pterodactyl/app/Services/Servers/DetailsModificationService.php"
-VIEW_PATH="/var/www/pterodactyl/resources/scripts/components/server/ServerConsoleContainer.tsx"
+REMOTE_PATH="/var/www/pterodactyl/app/Services/Servers/DetailsModificationService.php"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
-# Backup paths
-MAIN_BACKUP_PATH="${MAIN_SERVICE_PATH}.bak_${TIMESTAMP}"
-VIEW_BACKUP_PATH="${VIEW_PATH}.bak_${TIMESTAMP}"
+echo "🚀 Memasang proteksi Anti Modifikasi Server..."
 
-echo "🚀 Memasang proteksi Anti Modifikasi Server v10..."
-
-# Backup and replace main service file
-if [ -f "$MAIN_SERVICE_PATH" ]; then
-  cp "$MAIN_SERVICE_PATH" "$MAIN_BACKUP_PATH"
-  echo "📦 Backup file utama dibuat di $MAIN_BACKUP_PATH"
+if [ -f "$REMOTE_PATH" ]; then
+  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
 fi
 
-mkdir -p "$(dirname "$MAIN_SERVICE_PATH")"
-chmod 755 "$(dirname "$MAIN_SERVICE_PATH")"
+mkdir -p "$(dirname "$REMOTE_PATH")"
+chmod 755 "$(dirname "$REMOTE_PATH")"
 
-cat > "$MAIN_SERVICE_PATH" << 'EOF'
+cat > "$REMOTE_PATH" << 'EOF'
 <?php
 
 namespace Pterodactyl\Services\Servers;
@@ -52,6 +46,8 @@ class DetailsModificationService
         // 🚫 Batasi akses hanya untuk user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
+            // Tampilkan alert informasi
+            echo "<script>alert('⚠️ Hanya Super Admin yang dapat memodifikasi server!\\n\\nFitur ini diproteksi oleh @ginaabaikhati');</script>";
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
         }
 
@@ -81,72 +77,11 @@ class DetailsModificationService
 ?>
 EOF
 
-chmod 644 "$MAIN_SERVICE_PATH"
+chmod 644 "$REMOTE_PATH"
 
-# Backup and modify view file
-if [ -f "$VIEW_PATH" ]; then
-  cp "$VIEW_PATH" "$VIEW_BACKUP_PATH"
-  echo "📦 Backup file view dibuat di $VIEW_BACKUP_PATH"
-  
-  # Cari dan modifikasi bagian yang menampilkan server list
-  sed -i '/<Table\.Head>/,/<\/Table\.Head>/c\
-          <Table.Head>\
-            <Table.THeadCell>Name</Table.THeadCell>\
-            <Table.THeadCell>Status</Table.THeadCell>\
-            <Table.THeadCell align={"center"}>Actions</Table.THeadCell>\
-          </Table.Head>' "$VIEW_PATH"
-  
-  # Hapus kolom Owner, Node, dan Connection dari body table
-  sed -i '/{server.owner}/d' "$VIEW_PATH"
-  sed -i '/{server.node}/d' "$VIEW_PATH"
-  sed -i '/{server.connection}/d' "$VIEW_PATH"
-  
-  # Modifikasi body table untuk hanya menampilkan name, status, dan actions
-  sed -i '/<Table.TBody>/,/<\/Table.TBody>/c\
-        <Table.TBody>\
-          {servers.items.map((server: Server) => (\
-            <Table.TRow key={server.uuid}>\
-              <Table.TD>\
-                <Link to={`/server/${server.uuid}`}>\
-                  {server.name}\
-                </Link>\
-              </Table.TD>\
-              <Table.TD>\
-                <ServerStatusBadge server={server} />\
-              </Table.TD>\
-              <Table.TD align={"center"}>\
-                <Can action={[\\x27\\x27view\\x27\\x27]} on={server}>\
-                  <Link to={`/server/${server.uuid}`}>\
-                    <Button variant={ButtonVariants.Secondary}>Manage</Button>\
-                  </Link>\
-                </Can>\
-              </Table.TD>\
-            </Table.TRow>\
-          ))}\
-        </Table.TBody>' "$VIEW_PATH"
-  
-  # Tambahkan proteksi akses untuk non-admin
-  sed -i '1i\
-import { useStoreState } from "@/state/hooks";' "$VIEW_PATH"
-  
-  sed -i '/const servers = useServerSWR/a\
-  const user = useStoreState(state => state.user.data);\
-  if (!user || user.id !== 1) {\
-    return (\
-      <div className="flex justify-center items-center h-64">\
-        <div className="text-center">\
-          <p className="text-red-500 text-lg font-semibold">🚫 Akses Ditolak</p>\
-          <p className="text-gray-600">Hanya Admin yang dapat mengakses server list</p>\
-        </div>\
-      </div>\
-    );\
-  }' "$VIEW_PATH"
-fi
-
-echo "✅ Proteksi Anti Modifikasi Server v10 berhasil dipasang!"
-echo "📂 Lokasi file utama: $MAIN_SERVICE_PATH"
-echo "📂 Lokasi file view: $VIEW_PATH"
-echo "🗂️ Backup file utama: $MAIN_BACKUP_PATH"
-echo "🗂️ Backup file view: $VIEW_BACKUP_PATH"
-echo "🔒 Hanya Admin (ID 1) yang bisa Modifikasi Server dan melihat Server List."
-echo "📋 Tabel Server List disederhanakan (hanya Name, Status, Actions)"
+echo "✅ Proteksi Anti Modifikasi Server berhasil dipasang!"
+echo "📂 Lokasi file: $REMOTE_PATH"
+echo "🗂️ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
+echo "🔒 Hanya Super Admin (ID 1) yang bisa Modifikasi Server."
+echo "📝 Button 'Create New' tetap dapat diakses semua admin"
+echo "⚠️ Tabel Node dan Node Daemon tautannya dihilangkan"
