@@ -35,33 +35,71 @@ backup_file "$SERVER_LIST"
 
 # Hapus kolom node, connection, memory, disk dari tabel
 if [ -f "$SERVER_LIST" ]; then
-    # Temporary modification - remove specific table columns
-    perl -i -pe 's/\{header: \x27Node\x27, accessor: \x27node\x27\},?\s*//g' "$SERVER_LIST"
-    perl -i -pe 's/\{header: \x27Connection\x27, accessor: \x27connection\x27\},?\s*//g' "$SERVER_LIST"
-    perl -i -pe 's/\{header: \x27Memory\x27, accessor: \x27memory\x27\},?\s*//g' "$SERVER_LIST"
-    perl -i -pe 's/\{header: \x27Disk\x27, accessor: \x27disk\x27\},?\s*//g' "$SERVER_LIST"
+    # Method 1: Hapus dengan pattern matching
+    sed -i '/{header: .Node., accessor: .node.},/d' "$SERVER_LIST"
+    sed -i '/{header: .Connection., accessor: .connection.},/d' "$SERVER_LIST"
+    sed -i '/{header: .Memory., accessor: .memory.},/d' "$SERVER_LIST"
+    sed -i '/{header: .Disk., accessor: .disk.},/d' "$SERVER_LIST"
+    
+    # Method 2: Hapus dengan regex
+    perl -i -pe 's/\s*\{[^}]*header\s*:\s*["'"'"']Node["'"'"'][^}]*\},?\s*//g' "$SERVER_LIST"
+    perl -i -pe 's/\s*\{[^}]*header\s*:\s*["'"'"']Connection["'"'"'][^}]*\},?\s*//g' "$SERVER_LIST"
+    perl -i -pe 's/\s*\{[^}]*header\s*:\s*["'"'"']Memory["'"'"'][^}]*\},?\s*//g' "$SERVER_LIST"
+    perl -i -pe 's/\s*\{[^}]*header\s*:\s*["'"'"']Disk["'"'"'][^}]*\},?\s*//g' "$SERVER_LIST"
+    
     echo "✅ Kolom Node, Connection, Memory, Disk dihilangkan dari tabel"
 fi
 
-# 3. Modifikasi Sidebar Navigation
-echo "🔧 Memodifikasi Sidebar Navigation..."
+# 3. Modifikasi Sidebar Navigation - MENGHAPUS TOTAL MENU
+echo "🔧 Menghapus Menu Sidebar Navigation..."
 backup_file "$SIDEBAR_NAV"
 
-# Sembunyikan menu Nodes, Locations, Nests, Mounts, Databases
 if [ -f "$SIDEBAR_NAV" ]; then
-    # Comment out atau hapus menu yang tidak diinginkan
-    perl -i -pe 's/(<Can action=.?node\.read.?>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
-    perl -i -pe 's/(<Can action=.?location\.read.?>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
-    perl -i -pe 's/(<Can action=.?nest\.read.?>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
-    perl -i -pe 's/(<Can action=.?mount\.read.?>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
-    perl -i -pe 's/(<Can action=.?database\.read.?>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
-    echo "✅ Menu Nodes, Locations, Nests, Mounts, Databases disembunyikan"
+    # Method 1: Comment out seluruh section menu yang tidak diinginkan
+    perl -i -pe 's/(<Can action=.?database\.[^>]*>[\s\S]*?<\/Can>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
+    perl -i -pe 's/(<Can action=.?location\.[^>]*>[\s\S]*?<\/Can>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
+    perl -i -pe 's/(<Can action=.?node\.[^>]*>[\s\S]*?<\/Can>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
+    perl -i -pe 's/(<Can action=.?mount\.[^>]*>[\s\S]*?<\/Can>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
+    perl -i -pe 's/(<Can action=.?nest\.[^>]*>[\s\S]*?<\/Can>)/{\/* \$1 *\/}/g' "$SIDEBAR_NAV"
+    
+    # Method 2: Hapus langsung seluruh line yang mengandung menu tersebut
+    sed -i '/databases/Id' "$SIDEBAR_NAV"
+    sed -i '/locations/Id' "$SIDEBAR_NAV"
+    sed -i '/nodes/Id' "$SIDEBAR_NAV"
+    sed -i '/mounts/Id' "$SIDEBAR_NAV"
+    sed -i '/nests/Id' "$SIDEBAR_NAV"
+    
+    # Method 3: Hapus berdasarkan icon atau text
+    sed -i '/fa-database/Id' "$SIDEBAR_NAV"
+    sed -i '/fa-globe/Id' "$SIDEBAR_NAV"
+    sed -i '/fa-server/Id' "$SIDEBAR_NAV"
+    sed -i '/fa-hdd/Id' "$SIDEBAR_NAV"
+    sed -i '/fa-cube/Id' "$SIDEBAR_NAV"
+    
+    echo "✅ Menu Databases, Locations, Nodes, Mounts, Nests DIHAPUS TOTAL dari sidebar"
+fi
+
+# 4. Clear cache dan rebuild assets
+echo "🔄 Membersihkan cache dan rebuild assets..."
+cd /var/www/pterodactyl
+
+# Clear cache
+php artisan cache:clear
+php artisan view:clear
+
+# Build assets jika yarn tersedia
+if command -v yarn &> /dev/null; then
+    yarn build:production
+    echo "✅ Assets rebuilt dengan yarn"
+else
+    echo "⚠️  Yarn tidak tersedia, skip build assets"
 fi
 
 echo "✅ Security Panel Protection berhasil dipasang!"
 echo "📋 Fitur yang diaktifkan:"
 echo "   - Akses Console untuk semua admin"
 echo "   - Tabel server tanpa kolom Node, Connection, Memory, Disk"
-echo "   - Sidebar tanpa menu Nodes, Locations, Nests, Mounts, Databases"
+echo "   - Sidebar TANPA menu: Databases, Locations, Nodes, Mounts, Nests"
 echo "   - Tombol Create New dan Search tetap aktif"
 echo "   - Filter Active dan Public tetap aktif"
+echo "   - Cache cleared dan assets rebuilt"
