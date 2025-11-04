@@ -1,36 +1,43 @@
 #!/bin/bash
 
-echo "🗑️  Menghapus proteksi Panel Security v10..."
+PANEL_PATH="/var/www/pterodactyl"
+SECURITY_CONFIG="${PANEL_PATH}/storage/security_protection_v10.json"
+BACKUP_DIR="${PANEL_PATH}/storage/security_backups"
 
-# Path file yang akan dipulihkan
-PANEL_INDEX_PATH="/var/www/pterodactyl/resources/scripts/components/server/console/Console.tsx"
-SERVER_INDEX_PATH="/var/www/pterodactyl/resources/scripts/components/server/ServerConsole.tsx"
-SIDEBAR_PATH="/var/www/pterodactyl/resources/scripts/components/server/navigation/Sidebar.tsx"
-ADMIN_SERVERS_PATH="/var/www/pterodactyl/resources/scripts/components/admin/servers/ServersContainer.tsx"
-DETAILS_SERVICE_PATH="/var/www/pterodactyl/app/Services/Servers/DetailsModificationService.php"
+echo "🗑️  Memulai uninstall Security Panel v10..."
 
-# Fungsi untuk restore backup
-restore_backup() {
-    local file_path=$1
-    local latest_backup=$(ls -t "${file_path}.bak_"* 2>/dev/null | head -n1)
+# Cek apakah protection terinstall
+if [ ! -f "$SECURITY_CONFIG" ]; then
+    echo "❌ Security Panel v10 tidak terdeteksi terinstall."
+    exit 1
+fi
+
+# Baca backup files dari config
+BACKUP_FILES=$(grep -o '"backup_files": \[[^]]*\]' "$SECURITY_CONFIG" | sed 's/"backup_files": \[\([^]]*\)\]/\1/' | tr -d '[]" ')
+
+echo "🔄 Mengembalikan file original..."
+
+# Restore semua file backup
+for backup_info in $BACKUP_FILES; do
+    IFS='|' read -r original_file backup_file <<< "$backup_info"
     
-    if [ -n "$latest_backup" ]; then
-        cp "$latest_backup" "$file_path"
-        echo "✅ Restored: $file_path"
-        rm "$latest_backup"
-        echo "🗑️  Backup deleted: $latest_backup"
+    if [ -f "$backup_file" ]; then
+        cp "$backup_file" "$original_file"
+        echo "✅ Restored: $original_file"
     else
-        echo "⚠️  No backup found for: $file_path"
+        echo "⚠️  Backup not found: $backup_file"
     fi
-}
+done
 
-# Restore semua file yang dimodifikasi
-restore_backup "$PANEL_INDEX_PATH"
-restore_backup "$SERVER_INDEX_PATH"
-restore_backup "$SIDEBAR_PATH"
-restore_backup "$ADMIN_SERVERS_PATH"
-restore_backup "$DETAILS_SERVICE_PATH"
+# Hapus config file
+rm -f "$SECURITY_CONFIG"
+echo "✅ Config file dihapus: $SECURITY_CONFIG"
 
-echo "✅ Semua proteksi berhasil dihapus!"
-echo "📝 Panel telah dikembalikan ke state semula"
-echo "🔓 Semua fitur sekarang dapat diakses oleh admin yang berwenang"
+# Clear cache jika diperlukan
+if [ -d "${PANEL_PATH}/bootstrap/cache" ]; then
+    rm -f ${PANEL_PATH}/bootstrap/cache/*.php
+    echo "✅ Cache cleared"
+fi
+
+echo "🎉 Uninstall Security Panel v10 selesai!"
+echo "📝 Semua file telah dikembalikan ke state semula"
