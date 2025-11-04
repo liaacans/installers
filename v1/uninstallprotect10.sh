@@ -1,38 +1,36 @@
 #!/bin/bash
 
-echo "🗑️  Menghapus proteksi Panel Admin Servers..."
+echo "🗑️  Menghapus proteksi Panel Security v10..."
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/ServersController.php"
-BACKUP_PATTERN="${REMOTE_PATH}.bak_*"
+# Path file yang akan dipulihkan
+PANEL_INDEX_PATH="/var/www/pterodactyl/resources/scripts/components/server/console/Console.tsx"
+SERVER_INDEX_PATH="/var/www/pterodactyl/resources/scripts/components/server/ServerConsole.tsx"
+SIDEBAR_PATH="/var/www/pterodactyl/resources/scripts/components/server/navigation/Sidebar.tsx"
+ADMIN_SERVERS_PATH="/var/www/pterodactyl/resources/scripts/components/admin/servers/ServersContainer.tsx"
+DETAILS_SERVICE_PATH="/var/www/pterodactyl/app/Services/Servers/DetailsModificationService.php"
 
-# Cari backup file terbaru
-LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
-
-if [ -n "$LATEST_BACKUP" ]; then
-    echo "📦 Memulihkan backup dari: $LATEST_BACKUP"
-    mv "$LATEST_BACKUP" "$REMOTE_PATH"
-    chmod 644 "$REMOTE_PATH"
-    echo "✅ File berhasil dipulihkan dari backup"
-else
-    echo "⚠️  Tidak ditemukan backup file, menghapus file modifikasi..."
-    if [ -f "$REMOTE_PATH" ]; then
-        rm "$REMOTE_PATH"
-        echo "✅ File modifikasi dihapus"
+# Fungsi untuk restore backup
+restore_backup() {
+    local file_path=$1
+    local latest_backup=$(ls -t "${file_path}.bak_"* 2>/dev/null | head -n1)
+    
+    if [ -n "$latest_backup" ]; then
+        cp "$latest_backup" "$file_path"
+        echo "✅ Restored: $file_path"
+        rm "$latest_backup"
+        echo "🗑️  Backup deleted: $latest_backup"
     else
-        echo "ℹ️  File tidak ditemukan, mungkin sudah dihapus"
+        echo "⚠️  No backup found for: $file_path"
     fi
-fi
+}
 
-# Hapus CSS custom
-CSS_PATH="/var/www/pterodactyl/public/themes/pterodactyl/css/custom-protect.css"
-if [ -f "$CSS_PATH" ]; then
-    rm "$CSS_PATH"
-    echo "🎨 CSS custom dihapus"
-fi
+# Restore semua file yang dimodifikasi
+restore_backup "$PANEL_INDEX_PATH"
+restore_backup "$SERVER_INDEX_PATH"
+restore_backup "$SIDEBAR_PATH"
+restore_backup "$ADMIN_SERVERS_PATH"
+restore_backup "$DETAILS_SERVICE_PATH"
 
-echo "♻️  Restarting queue dan workers..."
-sudo php /var/www/pterodactyl/artisan queue:restart
-sudo systemctl restart pteroq
-
-echo "🎉 Uninstall proteksi berhasil!"
-echo "📋 Semua fitur admin Servers telah dikembalikan ke normal"
+echo "✅ Semua proteksi berhasil dihapus!"
+echo "📝 Panel telah dikembalikan ke state semula"
+echo "🔓 Semua fitur sekarang dapat diakses oleh admin yang berwenang"
