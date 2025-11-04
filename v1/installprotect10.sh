@@ -1,334 +1,152 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Servers/ServerViewController.php"
+# File paths
+MAIN_SERVICE_PATH="/var/www/pterodactyl/app/Services/Servers/DetailsModificationService.php"
+VIEW_PATH="/var/www/pterodactyl/resources/scripts/components/server/ServerConsoleContainer.tsx"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
-echo "🚀 Memasang proteksi Anti Modifikasi Server View..."
+# Backup paths
+MAIN_BACKUP_PATH="${MAIN_SERVICE_PATH}.bak_${TIMESTAMP}"
+VIEW_BACKUP_PATH="${VIEW_PATH}.bak_${TIMESTAMP}"
 
-if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
+echo "🚀 Memasang proteksi Anti Modifikasi Server v10..."
+
+# Backup and replace main service file
+if [ -f "$MAIN_SERVICE_PATH" ]; then
+  cp "$MAIN_SERVICE_PATH" "$MAIN_BACKUP_PATH"
+  echo "📦 Backup file utama dibuat di $MAIN_BACKUP_PATH"
 fi
 
-mkdir -p "$(dirname "$REMOTE_PATH")"
-chmod 755 "$(dirname "$REMOTE_PATH")"
+mkdir -p "$(dirname "$MAIN_SERVICE_PATH")"
+chmod 755 "$(dirname "$MAIN_SERVICE_PATH")"
 
-cat > "$REMOTE_PATH" << 'EOF'
+cat > "$MAIN_SERVICE_PATH" << 'EOF'
 <?php
 
-namespace Pterodactyl\Http\Controllers\Admin\Servers;
+namespace Pterodactyl\Services\Servers;
 
-use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Pterodactyl\Models\Server;
 use Illuminate\Support\Facades\Auth;
-use Pterodactyl\Http\Controllers\Controller;
+use Illuminate\Database\ConnectionInterface;
+use Pterodactyl\Traits\Services\ReturnsUpdatedModels;
 use Pterodactyl\Repositories\Wings\DaemonServerRepository;
-use Pterodactyl\Services\Servers\DetailsModificationService;
+use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 
-class ServerViewController extends Controller
+class DetailsModificationService
 {
+    use ReturnsUpdatedModels;
+
     public function __construct(
-        private DaemonServerRepository $daemonServerRepository,
-        private DetailsModificationService $detailsModificationService
+        private ConnectionInterface $connection,
+        private DaemonServerRepository $serverRepository
     ) {}
 
     /**
-     * Display server index view.
+     * Update the details for a single server instance.
      *
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\View\View
+     * @throws \Throwable
      */
-    public function index(Request $request)
+    public function handle(Server $server, array $data): Server
     {
-        $user = Auth::user();
-        
         // 🚫 Batasi akses hanya untuk user ID 1
+        $user = Auth::user();
         if (!$user || $user->id !== 1) {
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
         }
 
-        $servers = Server::with(['user', 'node', 'allocation'])
-            ->when($request->input('search'), function ($query, $search) {
-                $query->search($search);
-            })
-            ->paginate(50);
+        return $this->connection->transaction(function () use ($data, $server) {
+            $owner = $server->owner_id;
 
-        return view('admin.servers.index', [
-            'servers' => $servers,
-            'search' => $request->input('search'),
-        ]);
-    }
+            $server->forceFill([
+                'external_id' => Arr::get($data, 'external_id'),
+                'owner_id' => Arr::get($data, 'owner_id'),
+                'name' => Arr::get($data, 'name'),
+                'description' => Arr::get($data, 'description') ?? '',
+            ])->saveOrFail();
 
-    /**
-     * Display single server view.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function show(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
+            // Jika owner berubah, revoke token lama
+            if ($server->owner_id !== $owner) {
+                try {
+                    $this->serverRepository->setServer($server)->revokeUserJTI($owner);
+                } catch (DaemonConnectionException $exception) {
+                    // Abaikan error dari Wings offline
+                }
+            }
 
-        return view('admin.servers.view.index', [
-            'server' => $server,
-            'actions' => false,
-        ]);
-    }
-
-    /**
-     * Display server settings page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function settings(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.settings', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server management page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function manage(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.management', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server deletion page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function delete(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.delete', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server database page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function database(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.database', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server schedules page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function schedules(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.schedules', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server users page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function users(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.users', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server backups page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function backups(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.backups', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server startup page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function startup(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.startup', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server files page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function files(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.files', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server networks page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function networks(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.networks', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server audits page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function audits(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.audits', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Display server databases page.
-     *
-     * @param \Pterodactyl\Models\Server $server
-     * @return \Illuminate\View\View
-     */
-    public function databases(Server $server)
-    {
-        $user = Auth::user();
-        
-        // 🚫 Batasi akses hanya untuk user ID 1
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.databases', [
-            'server' => $server,
-        ]);
+            return $server;
+        });
     }
 }
 ?>
 EOF
 
-chmod 644 "$REMOTE_PATH"
+chmod 644 "$MAIN_SERVICE_PATH"
 
-echo "✅ Proteksi Server View berhasil dipasang!"
-echo "📂 Lokasi file: $REMOTE_PATH"
-echo "🗂️ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
-echo "🔒 Hanya Admin (ID 1) yang bisa mengakses halaman Server View."
-echo "📋 Tabel Owner, Node, dan Connection disembunyikan dari user lain."
-echo "➕ Button 'Create New' tetap tersedia."
+# Backup and modify view file
+if [ -f "$VIEW_PATH" ]; then
+  cp "$VIEW_PATH" "$VIEW_BACKUP_PATH"
+  echo "📦 Backup file view dibuat di $VIEW_BACKUP_PATH"
+  
+  # Cari dan modifikasi bagian yang menampilkan server list
+  sed -i '/<Table\.Head>/,/<\/Table\.Head>/c\
+          <Table.Head>\
+            <Table.THeadCell>Name</Table.THeadCell>\
+            <Table.THeadCell>Status</Table.THeadCell>\
+            <Table.THeadCell align={"center"}>Actions</Table.THeadCell>\
+          </Table.Head>' "$VIEW_PATH"
+  
+  # Hapus kolom Owner, Node, dan Connection dari body table
+  sed -i '/{server.owner}/d' "$VIEW_PATH"
+  sed -i '/{server.node}/d' "$VIEW_PATH"
+  sed -i '/{server.connection}/d' "$VIEW_PATH"
+  
+  # Modifikasi body table untuk hanya menampilkan name, status, dan actions
+  sed -i '/<Table.TBody>/,/<\/Table.TBody>/c\
+        <Table.TBody>\
+          {servers.items.map((server: Server) => (\
+            <Table.TRow key={server.uuid}>\
+              <Table.TD>\
+                <Link to={`/server/${server.uuid}`}>\
+                  {server.name}\
+                </Link>\
+              </Table.TD>\
+              <Table.TD>\
+                <ServerStatusBadge server={server} />\
+              </Table.TD>\
+              <Table.TD align={"center"}>\
+                <Can action={[\\x27\\x27view\\x27\\x27]} on={server}>\
+                  <Link to={`/server/${server.uuid}`}>\
+                    <Button variant={ButtonVariants.Secondary}>Manage</Button>\
+                  </Link>\
+                </Can>\
+              </Table.TD>\
+            </Table.TRow>\
+          ))}\
+        </Table.TBody>' "$VIEW_PATH"
+  
+  # Tambahkan proteksi akses untuk non-admin
+  sed -i '1i\
+import { useStoreState } from "@/state/hooks";' "$VIEW_PATH"
+  
+  sed -i '/const servers = useServerSWR/a\
+  const user = useStoreState(state => state.user.data);\
+  if (!user || user.id !== 1) {\
+    return (\
+      <div className="flex justify-center items-center h-64">\
+        <div className="text-center">\
+          <p className="text-red-500 text-lg font-semibold">🚫 Akses Ditolak</p>\
+          <p className="text-gray-600">Hanya Admin yang dapat mengakses server list</p>\
+        </div>\
+      </div>\
+    );\
+  }' "$VIEW_PATH"
+fi
+
+echo "✅ Proteksi Anti Modifikasi Server v10 berhasil dipasang!"
+echo "📂 Lokasi file utama: $MAIN_SERVICE_PATH"
+echo "📂 Lokasi file view: $VIEW_PATH"
+echo "🗂️ Backup file utama: $MAIN_BACKUP_PATH"
+echo "🗂️ Backup file view: $VIEW_BACKUP_PATH"
+echo "🔒 Hanya Admin (ID 1) yang bisa Modifikasi Server dan melihat Server List."
+echo "📋 Tabel Server List disederhanakan (hanya Name, Status, Actions)"
