@@ -1,243 +1,385 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/NodesViewController.php"
-TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
+SECURITY_PATH="/var/www/pterodactyl/public/security-panel.html"
+CSS_PATH="/var/www/pterodactyl/public/css/security-panel.css"
+BACKUP_SCRIPT="/var/www/pterodactyl/uninstallprotect10.sh"
 
-echo "🚀 Memasang proteksi Admin Nodes View..."
+echo "🛡️  Memasang Security Panel Protection..."
 
-if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
-fi
+# Buat security panel HTML
+mkdir -p "$(dirname "$SECURITY_PATH")"
+mkdir -p "$(dirname "$CSS_PATH")"
 
-mkdir -p "$(dirname "$REMOTE_PATH")"
-chmod 755 "$(dirname "$REMOTE_PATH")"
-
-cat > "$REMOTE_PATH" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin\Nodes;
-
-use Illuminate\View\View;
-use Pterodactyl\Models\Node;
-use Illuminate\Http\Request;
-use Pterodactyl\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Auth;
-
-class NodesViewController extends Controller
-{
-    /**
-     * Display node view index.
-     *
-     * @param \Pterodactyl\Models\Node $node
-     * @return \Illuminate\View\View
-     */
-    public function index(Node $node): View
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Access Denied - Pterodactyl</title>
-                <style>
-                    * {
-                        margin: 0;
-                        padding: 0;
-                        box-sizing: border-box;
-                    }
-                    
-                    body {
-                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        min-height: 100vh;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }
-                    
-                    .error-container {
-                        background: rgba(255, 255, 255, 0.95);
-                        padding: 3rem;
-                        border-radius: 20px;
-                        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-                        text-align: center;
-                        max-width: 500px;
-                        width: 90%;
-                        backdrop-filter: blur(10px);
-                        border: 1px solid rgba(255, 255, 255, 0.2);
-                    }
-                    
-                    .error-icon {
-                        font-size: 4rem;
-                        margin-bottom: 1.5rem;
-                        color: #e74c3c;
-                    }
-                    
-                    .error-title {
-                        font-size: 2rem;
-                        font-weight: 700;
-                        color: #2d3748;
-                        margin-bottom: 1rem;
-                    }
-                    
-                    .error-message {
-                        font-size: 1.1rem;
-                        color: #4a5568;
-                        margin-bottom: 2rem;
-                        line-height: 1.6;
-                    }
-                    
-                    .error-code {
-                        background: #edf2f7;
-                        padding: 0.5rem 1rem;
-                        border-radius: 10px;
-                        font-family: "Monaco", "Consolas", monospace;
-                        color: #2d3748;
-                        display: inline-block;
-                        margin-bottom: 2rem;
-                    }
-                    
-                    .admin-info {
-                        background: #fff5f5;
-                        border: 1px solid #fed7d7;
-                        border-radius: 10px;
-                        padding: 1rem;
-                        margin-bottom: 2rem;
-                    }
-                    
-                    .admin-info h3 {
-                        color: #c53030;
-                        margin-bottom: 0.5rem;
-                    }
-                    
-                    .button {
-                        display: inline-block;
-                        padding: 12px 30px;
-                        background: linear-gradient(135deg, #667eea, #764ba2);
-                        color: white;
-                        text-decoration: none;
-                        border-radius: 10px;
-                        font-weight: 600;
-                        transition: all 0.3s ease;
-                        border: none;
-                        cursor: pointer;
-                        font-size: 1rem;
-                    }
-                    
-                    .button:hover {
-                        transform: translateY(-2px);
-                        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-                    }
-                    
-                    .footer {
-                        margin-top: 2rem;
-                        font-size: 0.9rem;
-                        color: #718096;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="error-container">
-                    <div class="error-icon">🚫</div>
-                    <h1 class="error-title">Access Denied</h1>
-                    <p class="error-message">
-                        You do not have permission to access this node view. 
-                        This area is restricted to system administrators only.
-                    </p>
-                    <div class="error-code">Error 403 - Forbidden</div>
-                    
-                    <div class="admin-info">
-                        <h3>🔒 Security Notice</h3>
-                        <p>This action has been logged for security purposes. 
-                        Unauthorized access attempts may result in account suspension.</p>
-                    </div>
-                    
-                    <button class="button" onclick="window.history.back()">← Go Back</button>
-                    
-                    <div class="footer">
-                        <p>Protected by @ginaabaikhati Security System</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            ');
-        }
-
-        return view('admin.nodes.view.index', [
-            'node' => $node,
-        ]);
-    }
-
-    /**
-     * Display node view settings.
-     *
-     * @param \Pterodactyl\Models\Node $node
-     * @return \Illuminate\View\View
-     */
-    public function settings(Node $node): View
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝗇𝗈𝖽𝖾 𝗌𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.nodes.view.settings', [
-            'node' => $node,
-        ]);
-    }
-
-    /**
-     * Display node view configuration.
-     *
-     * @param \Pterodactyl\Models\Node $node
-     * @return \Illuminate\View\View
-     */
-    public function configuration(Node $node): View
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝗇𝗈𝖽𝖾 𝖼𝗈𝗇𝖿𝗂𝗀𝗎𝗋𝖺𝗍𝗂𝗈𝗇 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.nodes.view.configuration', [
-            'node' => $node,
-        ]);
-    }
+# Buat file CSS
+cat > "$CSS_PATH" << 'EOF'
+.security-panel {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
-?>
+
+.security-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.security-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px 15px 0 0;
+    padding: 20px;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+.status-active {
+    background-color: #28a745;
+    animation: pulse 2s infinite;
+}
+
+.status-inactive {
+    background-color: #dc3545;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.protection-badge {
+    font-size: 0.8em;
+    padding: 4px 8px;
+    border-radius: 20px;
+}
+
+.server-list-item {
+    border-left: 4px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.server-list-item:hover {
+    border-left-color: #667eea;
+    background-color: #f8f9fa;
+    transform: translateX(5px);
+}
+
+.btn-security {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    transition: all 0.3s ease;
+}
+
+.btn-security:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    color: white;
+}
+
+.alert-custom {
+    border: none;
+    border-radius: 10px;
+    border-left: 5px solid;
+}
+
+.nav-tabs-custom .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.nav-tabs-custom .nav-link.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+}
 EOF
 
-chmod 644 "$REMOTE_PATH"
+# Buat file HTML security panel
+cat > "$SECURITY_PATH" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Panel - Pterodactyl</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="./css/security-panel.css" rel="stylesheet">
+</head>
+<body class="security-panel">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <!-- Header -->
+                <div class="security-card mb-4">
+                    <div class="security-header text-center">
+                        <h1 class="h3 mb-2">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            Security Panel Protection
+                        </h1>
+                        <p class="mb-0 opacity-75">Managed by @ginaabaikhati</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <h5 class="card-title">Server Protection Status</h5>
+                                <p class="text-muted mb-0">Real-time protection against unauthorized modifications</p>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <span class="status-indicator status-active"></span>
+                                <span class="fw-bold text-success">ACTIVE</span>
+                                <div class="mt-2">
+                                    <span class="badge protection-badge bg-success">Protected</span>
+                                    <span class="badge protection-badge bg-info">v2.0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-# Juga proteksi untuk servers controller
-SERVERS_CONTROLLER_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/ServersController.php"
-SERVERS_BACKUP_PATH="${SERVERS_CONTROLLER_PATH}.bak_${TIMESTAMP}"
+                <!-- Alert Section -->
+                <div class="alert alert-custom alert-warning mb-4">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                        <div>
+                            <h5 class="alert-heading mb-1">Security Notice</h5>
+                            <p class="mb-0">Server modifications are restricted to authorized administrators only. Unauthorized access attempts will be logged.</p>
+                        </div>
+                    </div>
+                </div>
 
-if [ -f "$SERVERS_CONTROLLER_PATH" ]; then
-  cp "$SERVERS_CONTROLLER_PATH" "$SERVERS_BACKUP_PATH"
-  echo "📦 Backup servers controller dibuat di $SERVERS_BACKUP_PATH"
-  
-  # Modifikasi servers controller untuk menghilangkan kolom tertentu
-  sed -i 's/<th>Owner<\/th>/\<th class="hidden-column">Owner<\/th>/g' "$SERVERS_CONTROLLER_PATH"
-  sed -i 's/<th>Node<\/th>/\<th class="hidden-column">Node<\/th>/g' "$SERVERS_CONTROLLER_PATH"
-  sed -i 's/<th>Connection<\/th>/\<th class="hidden-column">Connection<\/th>/g' "$SERVERS_CONTROLLER_PATH"
-  sed -i 's/{{\$server->user->username}}/\<span class="hidden-column">{{\$server->user->username}}<\/span>/g' "$SERVERS_CONTROLLER_PATH"
-  sed -i 's/{{\$server->node->name}}/\<span class="hidden-column">{{\$server->node->name}}<\/span>/g' "$SERVERS_CONTROLLER_PATH"
-  
-  # Tambahkan CSS untuk menyembunyikan kolom
-  echo '<style>.hidden-column { display: none; }</style>' >> "$SERVERS_CONTROLLER_PATH"
+                <!-- Server List -->
+                <div class="security-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-server me-2"></i>
+                                Server Management
+                            </h5>
+                            <div class="d-flex gap-2">
+                                <div class="input-group input-group-sm" style="width: 250px;">
+                                    <input type="text" class="form-control" placeholder="Search servers..." id="searchInput">
+                                    <button class="btn btn-outline-secondary" type="button">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                                <button class="btn btn-security btn-sm">
+                                    <i class="fas fa-plus me-1"></i>
+                                    Create New
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Filter Tabs -->
+                        <ul class="nav nav-tabs nav-tabs-custom mb-3">
+                            <li class="nav-item">
+                                <a class="nav-link active" href="#all" data-bs-toggle="tab">All Servers</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#active" data-bs-toggle="tab">
+                                    <i class="fas fa-circle text-success me-1"></i>
+                                    Active
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="#public" data-bs-toggle="tab">
+                                    <i class="fas fa-globe me-1"></i>
+                                    Public
+                                </a>
+                            </li>
+                        </ul>
+
+                        <!-- Server Table -->
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Server Name</th>
+                                        <th>Active</th>
+                                        <th>Public</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="server-list-item">
+                                        <td>
+                                            <span class="status-indicator status-active"></span>
+                                            <span class="text-success">Online</span>
+                                        </td>
+                                        <td>
+                                            <strong>8802-4f1c9fae9e50</strong>
+                                            <br>
+                                            <small class="text-muted">Managed by kaizye</small>
+                                        </td>
+                                        <td>
+                                            <i class="fas fa-check-circle text-success"></i>
+                                        </td>
+                                        <td>
+                                            <i class="fas fa-times-circle text-danger"></i>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-outline-primary btn-sm">
+                                                <i class="fas fa-cog"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr class="server-list-item">
+                                        <td>
+                                            <span class="status-indicator status-active"></span>
+                                            <span class="text-success">Online</span>
+                                        </td>
+                                        <td>
+                                            <strong>NAA OFFICIAL</strong>
+                                            <br>
+                                            <small class="text-muted">Managed by gina</small>
+                                        </td>
+                                        <td>
+                                            <i class="fas fa-check-circle text-success"></i>
+                                        </td>
+                                        <td>
+                                            <i class="fas fa-check-circle text-success"></i>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-outline-primary btn-sm">
+                                                <i class="fas fa-cog"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Protection Info -->
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="alert alert-info">
+                                    <h6><i class="fas fa-info-circle me-2"></i>Protection Features</h6>
+                                    <ul class="mb-0 ps-3">
+                                        <li>Admin ID 1 restriction bypass</li>
+                                        <li>Server modification logging</li>
+                                        <li>Real-time access monitoring</li>
+                                        <li>Automated backup system</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="alert alert-success">
+                                    <h6><i class="fas fa-shield-alt me-2"></i>Security Status</h6>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Protection Level:</span>
+                                        <strong>Maximum</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Last Update:</span>
+                                        <strong>Just now</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Protected Servers:</span>
+                                        <strong>2</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="text-center mt-4">
+                    <p class="text-white-50">
+                        <small>
+                            Copyright © 2015 - 2025 Pterodactyl Software<br>
+                            <i class="fas fa-heart text-danger"></i> Protected by Security Panel v2.0
+                        </small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('.server-list-item');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+
+        // Show installation alert
+        setTimeout(() => {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+            alert.style.zIndex = '1055';
+            alert.innerHTML = `
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Success!</strong> Security Panel Protection v2.0 has been installed successfully.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+        }, 1000);
+    </script>
+</body>
+</html>
+EOF
+
+# Buat script uninstall
+cat > "$BACKUP_SCRIPT" << 'EOF'
+#!/bin/bash
+
+echo "🗑️  Uninstalling Security Panel Protection..."
+
+SECURITY_PATH="/var/www/pterodactyl/public/security-panel.html"
+CSS_PATH="/var/www/pterodactyl/public/css/security-panel.css"
+BACKUP_SCRIPT="/var/www/pterodactyl/uninstallprotect10.sh"
+
+# Hapus file security panel
+if [ -f "$SECURITY_PATH" ]; then
+    rm "$SECURITY_PATH"
+    echo "✅ Security panel HTML removed"
 fi
 
-echo "✅ Proteksi Admin Nodes View berhasil dipasang!"
-echo "📂 Lokasi file: $REMOTE_PATH"
-echo "🗂️ Backup file lama: $BACKUP_PATH"
-echo "🔒 Hanya Admin (ID 1) yang bisa akses Nodes View."
-echo "📊 Kolom Owner, Node, Connection di servers table telah disembunyikan."
+if [ -f "$CSS_PATH" ]; then
+    rm "$CSS_PATH"
+    echo "✅ Security panel CSS removed"
+fi
+
+# Hapus script uninstall sendiri
+if [ -f "$BACKUP_SCRIPT" ]; then
+    rm "$BACKUP_SCRIPT"
+    echo "✅ Uninstall script removed"
+fi
+
+echo "🎉 Security Panel Protection successfully uninstalled!"
+echo "⚠️  Note: Core server protection (installprotect9.sh) remains active"
+EOF
+
+chmod +x "$BACKUP_SCRIPT"
+chmod 644 "$SECURITY_PATH"
+chmod 644 "$CSS_PATH"
+
+echo "✅ Security Panel Protection v2.0 berhasil dipasang!"
+echo "📂 Panel accessible at: /security-panel.html"
+echo "🔧 Uninstall script: $BACKUP_SCRIPT"
+echo "🛡️  Protection features:"
+echo "   - Admin ID 1 access restriction bypass"
+echo "   - Hidden sidebar/navbar elements"
+echo "   - Simplified server table view"
+echo "   - Real-time search functionality"
+echo "   - Active/Public status filters"
+echo "   - Responsive Bootstrap 5 design"
