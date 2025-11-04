@@ -1,147 +1,184 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/resources/scripts/admin/nodes/view/1"
+REMOTE_PATH="/var/www/pterodactyl/resources/scripts/admin/nodes/view/1/index.blade.php"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
 BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
-echo "🚀 Memasang proteksi Akses Node View..."
+echo "🚀 Memasang proteksi Anti Akses Node View..."
 
-if [ -d "$REMOTE_PATH" ]; then
-  cp -r "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup folder lama dibuat di $BACKUP_PATH"
+if [ -f "$REMOTE_PATH" ]; then
+  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
 fi
 
-mkdir -p "$REMOTE_PATH"
-chmod 755 "$REMOTE_PATH"
+mkdir -p "$(dirname "$REMOTE_PATH")"
+chmod 755 "$(dirname "$REMOTE_PATH")"
 
-# Buat file index.php dengan proteksi
-cat > "$REMOTE_PATH/index.php" << 'EOF'
-<?php
+cat > "$REMOTE_PATH" << 'EOF'
+@extends('layouts.admin')
+@section('title')
+    Nodes &rarr; View &rarr; {{ $node->name }}
+@endsection
 
-use Illuminate\Support\Facades\Auth;
+@section('content-header')
+    <h1>{{ $node->name }}<small>Detailed overview of this node.</small></h1>
+    <ol class="breadcrumb">
+        <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
+        <li class="active">{{ $node->name }}</li>
+    </ol>
+@endsection
 
-$user = Auth::user();
-if (!$user || $user->id !== 1) {
-    http_response_code(403);
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Access Denied - Node View</title>
-        <style>
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                margin: 0;
-                padding: 0;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                color: white;
-            }
-            .container {
-                background: rgba(255, 255, 255, 0.1);
-                backdrop-filter: blur(10px);
-                padding: 40px;
-                border-radius: 15px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-                text-align: center;
-                max-width: 500px;
-                width: 90%;
-            }
-            .icon {
-                font-size: 64px;
-                margin-bottom: 20px;
-            }
-            h1 {
-                font-size: 28px;
-                margin-bottom: 15px;
-                color: #ff6b6b;
-            }
-            p {
-                font-size: 16px;
-                line-height: 1.6;
-                margin-bottom: 25px;
-                opacity: 0.9;
-            }
-            .admin-info {
-                background: rgba(255, 255, 255, 0.2);
-                padding: 15px;
-                border-radius: 8px;
-                margin: 20px 0;
-                border-left: 4px solid #4ecdc4;
-            }
-            .button {
-                background: #ff6b6b;
-                color: white;
-                padding: 12px 30px;
-                border: none;
-                border-radius: 25px;
-                font-size: 16px;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                text-decoration: none;
-                display: inline-block;
-            }
-            .button:hover {
-                background: #ff5252;
-                transform: translateY(-2px);
-                box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
-            }
-            .footer {
-                margin-top: 20px;
-                font-size: 12px;
-                opacity: 0.7;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="icon">🔒</div>
-            <h1>Access Denied</h1>
-            <p>𝖺𝗄𝗌𝖾𝗌 𝗇𝗈𝖽𝖾 𝗏𝗂𝖾𝗐 𝖽𝗂𝗍𝗈𝗅𝖺𝗄</p>
-            
-            <div class="admin-info">
-                <strong>Hanya Admin ID 1 yang dapat mengakses halaman ini</strong><br>
-                User ID Anda: <?php echo $user ? $user->id : 'Not logged in'; ?>
-            </div>
-            
-            <p>Fitur ini diproteksi oleh sistem keamanan @ginaabaikhati</p>
-            
-            <a href="/admin" class="button">Kembali ke Dashboard</a>
-            
-            <div class="footer">
-                Copyright © 2015 - 2025 Pterodactyl Software<br>
-                Protected by Security System
+@section('content')
+<style>
+.protection-banner {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #ff4757;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.protection-banner h4 {
+    margin: 0 0 5px 0;
+    font-weight: 600;
+}
+.protection-banner p {
+    margin: 0;
+    opacity: 0.9;
+}
+.access-denied {
+    text-align: center;
+    padding: 60px 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    margin: 20px 0;
+    border: 2px dashed #dee2e6;
+}
+.access-denied i {
+    font-size: 48px;
+    color: #ff4757;
+    margin-bottom: 20px;
+}
+.access-denied h3 {
+    color: #495057;
+    margin-bottom: 15px;
+}
+.access-denied p {
+    color: #6c757d;
+    max-width: 500px;
+    margin: 0 auto 20px;
+}
+</style>
+
+<div class="row">
+    <div class="col-xs-12">
+        <div class="protection-banner">
+            <h4>🚫 Protected Access - Node View</h4>
+            <p>This node view is protected by security measures. Only authorized administrators can access detailed node information.</p>
+        </div>
+    </div>
+</div>
+
+@php
+    $user = Auth::user();
+    $isAuthorized = $user && $user->id === 1;
+@endphp
+
+@if(!$isAuthorized)
+<div class="row">
+    <div class="col-xs-12">
+        <div class="access-denied">
+            <i class="fa fa-shield"></i>
+            <h3>Access Denied</h3>
+            <p>You do not have permission to view this node's detailed information. This area is restricted to authorized administrators only.</p>
+            <div class="alert alert-warning" style="max-width: 400px; margin: 0 auto;">
+                <i class="fa fa-exclamation-triangle"></i>
+                <strong>Protected by:</strong> @ginaabaikhati Security System
             </div>
         </div>
-    </body>
-    </html>
-    <?php
-    exit();
-}
+    </div>
+</div>
+@else
+<!-- Original Node View Content for Authorized Admin -->
+<div class="row">
+    <div class="col-xs-12">
+        <div class="nav-tabs-custom nav-tabs-floating">
+            <ul class="nav nav-tabs">
+                <li class="active"><a href="#overview" data-toggle="tab">Overview</a></li>
+                <li><a href="#settings" data-toggle="tab">Settings</a></li>
+                <li><a href="#configuration" data-toggle="tab">Configuration</a></li>
+                <li><a href="#allocation" data-toggle="tab">Allocation</a></li>
+                <li><a href="#servers" data-toggle="tab">Servers</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
 
-// Jika user adalah admin ID 1, redirect ke nodes list
-header('Location: /admin/nodes');
-exit();
-?>
+<div class="row">
+    <div class="col-sm-6">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Information</h3>
+            </div>
+            <div class="box-body">
+                <div class="row">
+                    <div class="col-xs-12">
+                        <div class="row">
+                            <div class="col-sm-6 text-center">
+                                <div class="info-box bg-blue">
+                                    <span class="info-box-icon"><i class="fa fa-server"></i></span>
+                                    <div class="info-box-content">
+                                        <span class="info-box-text">Total Servers</span>
+                                        <span class="info-box-number">{{ $node->servers_count }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-sm-6 text-center">
+                                <div class="info-box bg-green">
+                                    <span class="info-box-icon"><i class="fa fa-hdd-o"></i></span>
+                                    <div class="info-box-content">
+                                        <span class="info-box-text">Disk Usage</span>
+                                        <span class="info-box-number">{{ $node->getDiskUsage() }}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">System Information</h3>
+            </div>
+            <div class="box-body">
+                <dl>
+                    <dt>Node Name</dt>
+                    <dd>{{ $node->name }}</dd>
+                    <dt>Location</dt>
+                    <dd>{{ $node->location->short }}</dd>
+                    <dt>Connection</dt>
+                    <dd><code>{{ $node->scheme }}://{{ $node->fqdn }}:{{ $node->daemonListen }}}</code></dd>
+                    <dt>Memory</dt>
+                    <dd>{{ $node->memory }} MB</dd>
+                    <dt>Disk</dt>
+                    <dd>{{ $node->disk }} MB</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+@endsection
 EOF
 
-chmod 644 "$REMOTE_PATH/index.php"
+chmod 644 "$REMOTE_PATH"
 
-# Buat file .htaccess tambahan untuk extra security
-cat > "$REMOTE_PATH/.htaccess" << 'EOF'
-RewriteEngine On
-RewriteRule ^(.*)$ index.php [L]
-EOF
-
-chmod 644 "$REMOTE_PATH/.htaccess"
-
-echo "✅ Proteksi Akses Node View berhasil dipasang!"
-echo "📂 Lokasi folder: $REMOTE_PATH"
-echo "🗂️ Backup folder lama: $BACKUP_PATH (jika sebelumnya ada)"
-echo "🔒 Hanya Admin (ID 1) yang bisa akses Node View ID 1"
-echo "👥 Admin lain akan melihat halaman akses ditolak"
+echo "✅ Proteksi Anti Akses Node View berhasil dipasang!"
+echo "📂 Lokasi file: $REMOTE_PATH"
+echo "🗂️ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
+echo "🔒 Hanya Admin (ID 1) yang bisa akses Node View detail."
