@@ -24,22 +24,14 @@ use Pterodactyl\Models\Server;
 use Illuminate\Support\Facades\Auth;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Repositories\Wings\DaemonServerRepository;
-use Pterodactyl\Repositories\Eloquent\ServerRepository;
 
 class ServerViewController extends Controller
 {
     /**
-     * ServerViewController constructor.
-     */
-    public function __construct(
-        private ServerRepository $repository,
-        private DaemonServerRepository $daemonServerRepository
-    ) {}
-
-    /**
-     * Get the server index view.
+     * Display the server index page.
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\View\View
      */
     public function index(Request $request)
     {
@@ -49,21 +41,17 @@ class ServerViewController extends Controller
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
         }
 
-        $servers = $this->repository->setSearchTerm($request->input('query'))->getAllServersForAdmin(
-            $request->input('status'),
-            config('pterodactyl.paginate.admin.servers')
-        );
-
         return view('admin.servers.index', [
-            'servers' => $servers,
-            'status' => $request->input('status'),
+            'servers' => Server::with(['user', 'node', 'allocation'])->paginate(50),
         ]);
     }
 
     /**
-     * Get the server view page.
+     * Display the server view page.
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @param \Illuminate\Http\Request $request
+     * @param \Pterodactyl\Models\Server $server
+     * @return \Illuminate\View\View
      */
     public function show(Request $request, Server $server)
     {
@@ -73,296 +61,38 @@ class ServerViewController extends Controller
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
         }
 
-        $server->loadMissing(['allocations', 'egg', 'node']);
-
         return view('admin.servers.view.index', [
             'server' => $server,
-            'allocations' => $server->allocations->sortBy('port')->sortBy('ip'),
-            'egg' => $server->egg,
-            'node' => $server->node,
-        ]);
-    }
-
-    /**
-     * Get the server details page.
-     *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
-     */
-    public function details(Request $request, Server $server)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.details', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Get the server build configuration page.
-     *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
-     */
-    public function build(Request $request, Server $server)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        $allocations = $server->node->allocations->sortBy('ip')->sortBy('port');
-
-        return view('admin.servers.view.build', [
-            'server' => $server,
-            'allocations' => $allocations,
-        ]);
-    }
-
-    /**
-     * Get the server startup configuration page.
-     *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
-     */
-    public function startup(Request $request, Server $server)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.startup', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Get the server database management page.
-     *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
-     */
-    public function database(Request $request, Server $server)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.database', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Get the server management page.
-     *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
-     */
-    public function manage(Request $request, Server $server)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.manage', [
-            'server' => $server,
-        ]);
-    }
-
-    /**
-     * Get the server deletion page.
-     *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
-     */
-    public function delete(Request $request, Server $server)
-    {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati');
-        }
-
-        return view('admin.servers.view.delete', [
-            'server' => $server,
+            'actions' => false, // Hide action buttons for non-admin-1 users
         ]);
     }
 }
 ?>
 EOF
 
-# Juga proteksi file index view untuk menghilangkan tabel server list
-INDEX_VIEW_PATH="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
-INDEX_BACKUP_PATH="${INDEX_VIEW_PATH}.bak_${TIMESTAMP}"
+# Juga proteksi file view template untuk menyembunyikan node info
+VIEW_PATH="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
+VIEW_BACKUP="${VIEW_PATH}.bak_${TIMESTAMP}"
 
-if [ -f "$INDEX_VIEW_PATH" ]; then
-  mv "$INDEX_VIEW_PATH" "$INDEX_BACKUP_PATH"
-  echo "📦 Backup index view dibuat di $INDEX_BACKUP_PATH"
+if [ -f "$VIEW_PATH" ]; then
+  cp "$VIEW_PATH" "$VIEW_BACKUP"
+  echo "📦 Backup view template dibuat di $VIEW_BACKUP"
+  
+  # Modifikasi template untuk menyembunyikan node info dan menggunakan style bootstrap
+  sed -i '/<td class="text-center">{{ $server->node }}</td>/d' "$VIEW_PATH"
+  sed -i '/<th class="text-center">Node<\/th>/d' "$VIEW_PATH"
+  sed -i 's/<table class="table table-borderless table-hover">/<table class="table table-borderless table-hover table-striped">/g' "$VIEW_PATH"
+  sed -i 's/<div class="row">/<div class="row" style="margin: 20px 0;">/g' "$VIEW_PATH"
+  
+  # Tambahkan alert info untuk admin ID 1
+  sed -i '/<div class="row"/i @if(\\Auth::user()->id === 1)\n<div class="alert alert-info">\n    <i class="fa fa-info-circle"></i> Protected View - Only visible to Super Admin\n</div>\n@endif' "$VIEW_PATH"
 fi
 
-cat > "$INDEX_VIEW_PATH" << 'EOF'
-@extends('layouts.admin')
-
-@section('title')
-    Servers
-@endsection
-
-@section('content-header')
-    <h1>Servers<small>All servers available on the system.</small></h1>
-    <ol class="breadcrumb">
-        <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li class="active">Servers</li>
-    </ol>
-@endsection
-
-@section('content')
-@php
-    $user = Auth::user();
-@endphp
-
-@if(!$user || $user->id !== 1)
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="alert alert-danger">
-                <h4><i class="icon fa fa-ban"></i> Akses Ditolak</h4>
-                𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @ginaabaikhati
-            </div>
-        </div>
-    </div>
-@else
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Server List</h3>
-                <div class="box-tools">
-                    <a href="{{ route('admin.servers.new') }}" class="btn btn-sm btn-primary">Create New</a>
-                </div>
-            </div>
-            <div class="box-body table-responsive no-padding">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Server Name</th>
-                            <th>Owner</th>
-                            <th>Node</th>
-                            <th>Connection</th>
-                            <th>Status</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($servers as $server)
-                            <tr>
-                                <td class="middle"><code>{{ $server->id }}</code></td>
-                                <td class="middle">
-                                    <a href="{{ route('admin.servers.view', $server->id) }}">{{ $server->name }}</a>
-                                </td>
-                                <td class="middle">
-                                    <a href="{{ route('admin.users.view', $server->user->id) }}">{{ $server->user->username }}</a>
-                                </td>
-                                <td class="middle">
-                                    <a href="{{ route('admin.nodes.view', $server->node->id) }}">{{ $server->node->name }}</a>
-                                </td>
-                                <td class="middle">
-                                    <code>{{ $server->allocation->ip }}:{{ $server->allocation->port }}</code>
-                                </td>
-                                <td class="middle">
-                                    @if(! is_null($server->status))
-                                        @if($server->status === 'installing')
-                                            <span class="label label-warning">Installing</span>
-                                        @elseif($server->status === 'suspended')
-                                            <span class="label label-danger">Suspended</span>
-                                        @elseif($server->status === 'restoring_backup')
-                                            <span class="label label-warning">Restoring Backup</span>
-                                        @else
-                                            <span class="label label-success">Active</span>
-                                        @endif
-                                    @else
-                                        <span class="label label-default">Unknown</span>
-                                    @endif
-                                </td>
-                                <td class="text-center">
-                                    <a href="#" data-action="recovery" data-id="{{ $server->id }}">
-                                        <i class="fa fa-refresh text-info"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            @if($servers->hasPages())
-                <div class="box-footer with-border">
-                    <div class="col-md-12 text-center">
-                        {!! $servers->appends(['query' => Request::input('query')])->render() !!}
-                    </div>
-                </div>
-            @endif
-        </div>
-    </div>
-</div>
-@endif
-@endsection
-
-@section('footer-scripts')
-    @parent
-    <script>
-        $(document).ready(function() {
-            $('[data-action="recovery"]').click(function (event) {
-                event.preventDefault();
-                var self = $(this);
-                swal({
-                    type: 'warning',
-                    title: 'Recover Server',
-                    text: 'This will attempt to recover a server that is stuck in a bad state.',
-                    showCancelButton: true,
-                    allowOutsideClick: true,
-                    closeOnConfirm: false,
-                    confirmButtonText: 'Recover',
-                    confirmButtonColor: '#d9534f',
-                    showLoaderOnConfirm: true
-                }, function () {
-                    $.ajax({
-                        method: 'POST',
-                        url: '/admin/servers/view/' + self.data('id') + '/recover',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        }
-                    }).done(function () {
-                        swal({
-                            type: 'success',
-                            title: 'Success',
-                            text: 'Server has been queued for recovery.'
-                        });
-                    }).fail(function (jqXHR) {
-                        console.error(jqXHR);
-                        swal({
-                            type: 'error',
-                            title: 'Whoops!',
-                            text: 'An error occurred while attempting to recover this server.'
-                        });
-                    });
-                });
-            });
-        });
-    </script>
-@endsection
-EOF
-
 chmod 644 "$REMOTE_PATH"
-chmod 644 "$INDEX_VIEW_PATH"
 
 echo "✅ Proteksi Admin Server View berhasil dipasang!"
-echo "📂 Lokasi file controller: $REMOTE_PATH"
-echo "📂 Lokasi file view: $INDEX_VIEW_PATH"
-echo "🗂️ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
-echo "🔒 Hanya Admin (ID 1) yang bisa akses Server List dan View."
-echo "➕ Tombol 'Create New' tetap tersedia"
+echo "📂 Lokasi file: $REMOTE_PATH"
+echo "📂 View template dimodifikasi: $VIEW_PATH"
+echo "🗂️ Backup file: $BACKUP_PATH"
+echo "🔒 Hanya Admin (ID 1) yang bisa akses Server View & List."
+echo "📊 Tabel Node & Daemon info disembunyikan dari Server List."
