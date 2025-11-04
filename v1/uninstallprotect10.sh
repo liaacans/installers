@@ -16,7 +16,8 @@ restore_backup() {
     if [ -n "$latest_backup" ] && [ -f "$latest_backup" ]; then
         cp "$latest_backup" "$file_path"
         echo "✅ Restored: $file_path"
-        rm "$latest_backup"
+        # Optional: Hapus backup setelah restore
+        # rm "$latest_backup"
     else
         echo "⚠️  No backup found for: $file_path"
     fi
@@ -29,12 +30,18 @@ restore_backup "$SERVER_LIST"
 restore_backup "$SIDEBAR_NAV"
 restore_backup "$DETAILS_SERVICE"
 
-# Hapus juga backup dari installprotect9.sh jika ada
-if [ -f "${DETAILS_SERVICE}.bak_"* ]; then
-    rm -f "${DETAILS_SERVICE}.bak_"*
-    echo "✅ Backup installprotect9.sh dihapus"
+# Clear cache dan rebuild
+echo "🔄 Membersihkan cache..."
+cd /var/www/pterodactyl
+php artisan cache:clear
+php artisan view:clear
+
+if command -v yarn &> /dev/null; then
+    yarn build:production
+    echo "✅ Assets rebuilt"
 fi
 
 echo "🎉 Uninstall Security Panel Protection selesai!"
 echo "📝 Semua modifikasi telah dikembalikan ke state original"
 echo "🔓 Panel sekarang dalam mode normal tanpa proteksi"
+echo "📂 Backup files masih disimpan dengan ekstensi .bak_*"
