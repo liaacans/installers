@@ -115,4 +115,4 @@ php artisan cache:clear
 echo ""
 echo "🎉 Proteksi berhasil diimplementasi!"
 echo "🔗 Tombol Manage Server sekarang menjadi biasa dan tidak dapat diklik"
-EOF
+
