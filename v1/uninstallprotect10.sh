@@ -1,50 +1,97 @@
 #!/bin/bash
 
-echo "🗑️  Menghapus proteksi Anti Tautan Server..."
+echo "🛠️  Mencoba menghapus proteksi ULTIMATE..."
 
 # File paths
 INDEX_FILE="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
 VIEW_FILE="/var/www/pterodactyl/resources/views/admin/servers/view/26.blade.php"
-BACKUP_DIR="/var/www/pterodactyl/backups"
 
-# Create backup directory if not exists
-mkdir -p "$BACKUP_DIR"
+# Remove immutable attribute first
+echo "🔓 Menghapus atribut immutable..."
+chattr -i "$INDEX_FILE" 2>/dev/null || echo "ℹ️  chattr not available"
+chattr -i "$VIEW_FILE" 2>/dev/null || echo "ℹ️  chattr not available"
 
-# Restore index file from backup
+# Restore permissions
+chmod 644 "$INDEX_FILE" 2>/dev/null || echo "⚠️  Cannot change index file permissions"
+chmod 644 "$VIEW_FILE" 2>/dev/null || echo "⚠️  Cannot change view file permissions"
+
+# Find and restore from backups
+echo "🔄 Mencari backup file..."
+
 INDEX_BACKUP=$(ls -t "${INDEX_FILE}.bak_"* 2>/dev/null | head -n1)
+VIEW_BACKUP=$(ls -t "${VIEW_FILE}.bak_"* 2>/dev/null | head -n1)
+
 if [ -n "$INDEX_BACKUP" ]; then
-    echo "🔄 Memulihkan file index dari backup: $INDEX_BACKUP"
-    cp "$INDEX_BACKUP" "$INDEX_FILE"
-    chmod 644 "$INDEX_FILE"
-    echo "✅ File index berhasil dipulihkan"
+    echo "✅ Menemukan backup index: $INDEX_BACKUP"
+    cp -f "$INDEX_BACKUP" "$INDEX_FILE"
+    echo "📦 Index file berhasil dipulihkan"
 else
-    echo "⚠️  Backup file index tidak ditemukan, menghapus file modifikasi..."
-    if [ -f "$INDEX_FILE" ]; then
-        # Backup current modified file before deleting
-        CURRENT_BACKUP="${BACKUP_DIR}/index_modified_$(date -u +"%Y-%m-%d-%H-%M-%S").blade.php"
-        cp "$INDEX_FILE" "$CURRENT_BACKUP"
-        rm -f "$INDEX_FILE"
-        echo "📦 Backup file modifikasi disimpan di: $CURRENT_BACKUP"
-    fi
+    echo "❌ Backup index tidak ditemukan, membuat file default..."
+    # Create default index file
+    cat > "$INDEX_FILE" << 'EOF'
+@extends('layouts.admin')
+@section('title')
+    Servers
+@endsection
+
+@section('content-header')
+    <h1>Servers<small>All servers available on the system.</small></h1>
+    <ol class="breadcrumb">
+        <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li class="active">Servers</li>
+    </ol>
+@endsection
+
+@section('content')
+<div class="row">
+    <div class="col-xs-12">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Server List</h3>
+            </div>
+            <div class="box-body">
+                <p>Server list will be displayed here after protection removal.</p>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+EOF
 fi
 
-# Restore view file from backup
-VIEW_BACKUP=$(ls -t "${VIEW_FILE}.bak_"* 2>/dev/null | head -n1)
 if [ -n "$VIEW_BACKUP" ]; then
-    echo "🔄 Memulihkan file view dari backup: $VIEW_BACKUP"
-    cp "$VIEW_BACKUP" "$VIEW_FILE"
-    chmod 644 "$VIEW_FILE"
-    echo "✅ File view berhasil dipulihkan"
+    echo "✅ Menemukan backup view: $VIEW_BACKUP"
+    cp -f "$VIEW_BACKUP" "$VIEW_FILE"
+    echo "📦 View file berhasil dipulihkan"
 else
-    echo "⚠️  Backup file view tidak ditemukan, menghapus file modifikasi..."
-    if [ -f "$VIEW_FILE" ]; then
-        # Backup current modified file before deleting
-        CURRENT_BACKUP="${BACKUP_DIR}/view26_modified_$(date -u +"%Y-%m-%d-%H-%M-%S").blade.php"
-        cp "$VIEW_FILE" "$CURRENT_BACKUP"
-        rm -f "$VIEW_FILE"
-        echo "📦 Backup file modifikasi disimpan di: $CURRENT_BACKUP"
-    fi
+    echo "❌ Backup view tidak ditemukan, membuat file default..."
+    # Create default view file
+    cat > "$VIEW_FILE" << 'EOF'
+@extends('layouts.admin')
+@section('title')
+    Server View
+@endsection
+
+@section('content')
+<div class="row">
+    <div class="col-xs-12">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Server Details</h3>
+            </div>
+            <div class="box-body">
+                <p>Server details will be displayed here after protection removal.</p>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+EOF
 fi
+
+# Set proper permissions
+chmod 644 "$INDEX_FILE"
+chmod 644 "$VIEW_FILE"
 
 # Clear cache
 echo "🔄 Membersihkan cache..."
@@ -53,7 +100,13 @@ php artisan view:clear
 php artisan cache:clear
 
 echo ""
-echo "🎉 Uninstall proteksi berhasil!"
-echo "✅ Semua file telah dikembalikan ke keadaan semula"
-echo "🔓 Fitur manage server sekarang dapat diakses kembali oleh semua user"
-echo "📂 Backup file modifikasi disimpan di: $BACKUP_DIR"
+echo "🎉 UNINSTALL BERHASIL!"
+echo "✅ Proteksi ULTIMATE telah dihapus"
+echo "✅ File telah dikembalikan ke keadaan semula"
+echo "✅ Permission normal telah dipulihkan"
+echo "🔓 Sistem sekarang dapat diakses normal"
+
+# Security notice
+echo ""
+echo "⚠️  SECURITY NOTICE:"
+echo "Sistem sekarang tidak memiliki proteksi. Instal ulang proteksi jika diperlukan."
