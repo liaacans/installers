@@ -13,7 +13,7 @@ if [ -f "$INDEX_FILE" ]; then
   echo "📦 Backup index file dibuat: ${INDEX_FILE}.bak_${TIMESTAMP}"
 fi
 
-# 1. Update Index File - Hanya admin ID 1 yang bisa manage
+# 1. Update Index File - Hanya admin ID 1 yang bisa manage, tapi Create New bisa untuk semua admin
 cat > "$INDEX_FILE" << 'EOF'
 @extends('layouts.admin')
 @section('title')
@@ -40,11 +40,8 @@ cat > "$INDEX_FILE" << 'EOF'
                             <input type="text" name="query" class="form-control pull-right" value="{{ request()->input('query') }}" placeholder="Search Servers">
                             <div class="input-group-btn">
                                 <button type="submit" class="btn btn-default"><i class="fa fa-search"></i></button>
-                                @if(auth()->user()->id === 1)
-                                    <a href="{{ route('admin.servers.new') }}"><button type="button" class="btn btn-sm btn-primary" style="border-radius:0 3px 3px 0;margin-left:2px;">Create New</button></a>
-                                @else
-                                    <button type="button" class="btn btn-sm btn-default" style="border-radius:0 3px 3px 0;margin-left:2px; cursor: not-allowed;" disabled>Create New</button>
-                                @endif
+                                <!-- CREATE NEW BISA DIKLIK OLEH SEMUA ADMIN -->
+                                <a href="{{ route('admin.servers.new') }}"><button type="button" class="btn btn-sm btn-primary" style="border-radius:0 3px 3px 0;margin-left:2px;">Create New</button></a>
                             </div>
                         </div>
                     </form>
@@ -95,7 +92,7 @@ cat > "$INDEX_FILE" << 'EOF'
                                             <i class="fa fa-wrench"></i> Manage
                                         </a>
                                     @else
-                                        <!-- Admin lain tidak bisa akses -->
+                                        <!-- Admin lain tidak bisa akses manage server existing -->
                                         <span class="label label-warning" data-toggle="tooltip" title="Hanya Root Admin yang bisa mengakses">
                                             <i class="fa fa-shield"></i> Protected
                                         </span>
@@ -121,9 +118,11 @@ cat > "$INDEX_FILE" << 'EOF'
             </h4>
             <p style="margin-bottom: 5px;">
                 <strong>🔒 Server Management Restricted:</strong> 
-                Hanya <strong>Root Administrator (ID: 1)</strong> yang dapat mengelola server.
+                Hanya <strong>Root Administrator (ID: 1)</strong> yang dapat mengelola server existing.
             </p>
             <p style="margin-bottom: 0; font-size: 12px;">
+                <strong>✅ Create New Server:</strong> Available for all administrators<br>
+                <strong>🚫 Manage Existing:</strong> Root Admin only<br>
                 <i class="fa fa-info-circle"></i> 
                 Protected by: 
                 <span class="label label-primary">@ginaabaikhati</span>
@@ -156,7 +155,7 @@ cat > "$INDEX_FILE" << 'EOF'
             @if(auth()->user()->id !== 1)
             $('a[href*="/admin/servers/view/"]').on('click', function(e) {
                 e.preventDefault();
-                alert('🚫 Access Denied: Hanya Root Administrator (ID: 1) yang dapat mengelola server.\n\nProtected by: @ginaabaikhati, @AndinOfficial, @naaofficial');
+                alert('🚫 Access Denied: Hanya Root Administrator (ID: 1) yang dapat mengelola server existing.\n\n✅ Anda masih bisa membuat server baru dengan tombol "Create New"\n\nProtected by: @ginaabaikhati, @AndinOfficial, @naaofficial');
             });
             @endif
         });
@@ -164,45 +163,10 @@ cat > "$INDEX_FILE" << 'EOF'
 @endsection
 EOF
 
-echo "✅ Index file berhasil diproteksi (hanya admin ID 1 yang bisa manage)"
+echo "✅ Index file berhasil diproteksi (Create New bisa untuk semua admin)"
 
 # 2. Proteksi view server untuk admin selain ID 1
 mkdir -p "$VIEW_DIR"
-
-# Template protected view untuk admin selain ID 1
-PROTECTED_VIEW='@extends('"'"'layouts.admin'"'"')
-@section('"'"'title'"'"')
-    Server Protected
-@endsection
-
-@section('"'"'content'"'"')
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-danger">
-            <div class="box-header with-border">
-                <h3 class="box-title"><i class="fa fa-shield"></i> Access Restricted</h3>
-            </div>
-            <div class="box-body">
-                <div class="alert alert-warning text-center" style="margin-bottom: 0;">
-                    <h3><i class="fa fa-ban"></i> ACCESS DENIED</h3>
-                    <p style="font-size: 16px; margin: 15px 0;">
-                        Hanya <strong>Root Administrator (ID: 1)</strong> yang dapat mengakses server management.
-                    </p>
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <strong>Protected by Security Team:</strong><br>
-                        <span class="label label-primary">@ginaabaikhati</span>
-                        <span class="label label-success">@AndinOfficial</span>
-                        <span class="label label-info">@naaofficial</span>
-                    </div>
-                    <a href="{{ route('"'"'admin.servers'"'"') }}" class="btn btn-primary">
-                        <i class="fa fa-arrow-left"></i> Back to Server List
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-@endsection'
 
 # Buat middleware protection untuk semua view server
 find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
@@ -244,7 +208,7 @@ find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
             border-radius: 20px;
             box-shadow: 0 25px 50px rgba(0,0,0,0.2);
             overflow: hidden;
-            max-width: 600px;
+            max-width: 700px;
             width: 100%;
             text-align: center;
         }
@@ -278,14 +242,37 @@ find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
             font-size: 12px;
             font-weight: bold;
         }
+        .feature-list {
+            text-align: left;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .feature-item {
+            margin: 10px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        .feature-item:before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #3742fa;
+        }
     </style>
 </head>
 <body>
     <div class="security-container">
         <div class="security-header">
             <i class="fas fa-shield-alt" style="font-size: 60px; margin-bottom: 20px;"></i>
-            <h2>ROOT ADMINISTRATOR ACCESS REQUIRED</h2>
-            <p>Server Management Protection Active</p>
+            <h2>SERVER MANAGEMENT RESTRICTED</h2>
+            <p>Root Administrator Access Required</p>
         </div>
         <div class="security-content">
             <div class="admin-badge">
@@ -294,8 +281,23 @@ find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
             
             <p style="font-size: 16px; margin: 20px 0; color: #555;">
                 <i class="fas fa-ban" style="color: #e74c3c;"></i><br>
-                Hanya <strong>Root Administrator</strong> dengan <strong>ID: 1</strong> yang dapat mengakses server management.
+                Hanya <strong>Root Administrator</strong> dengan <strong>ID: 1</strong> yang dapat mengelola server existing.
             </p>
+
+            <div class="feature-list">
+                <div class="feature-item">
+                    <strong>✅ Create New Server:</strong> Available for all administrators
+                </div>
+                <div class="feature-item">
+                    <strong>🚫 Manage Existing Servers:</strong> Root Administrator only (ID: 1)
+                </div>
+                <div class="feature-item">
+                    <strong>🔒 View Server Details:</strong> Root Administrator only (ID: 1)
+                </div>
+                <div class="feature-item">
+                    <strong>⚡ Server Settings:</strong> Root Administrator only (ID: 1)
+                </div>
+            </div>
 
             <div class="team-badges">
                 <span class="team-badge" style="background: #fd79a8;">@ginaabaikhati</span>
@@ -303,11 +305,11 @@ find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
                 <span class="team-badge" style="background: #55efc4;">@naaofficial</span>
             </div>
 
-            <div style="margin-top: 30px;">
+            <div style="margin-top: 30px; display: flex; gap: 10px; justify-content: center;">
                 <a href="/admin/servers" style="
                     background: #3742fa;
                     color: white;
-                    padding: 12px 30px;
+                    padding: 12px 25px;
                     border-radius: 25px;
                     text-decoration: none;
                     font-weight: bold;
@@ -315,11 +317,22 @@ find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
                 ">
                     <i class="fas fa-arrow-left"></i> Back to Server List
                 </a>
+                <a href="/admin/servers/new" style="
+                    background: #2ed573;
+                    color: white;
+                    padding: 12px 25px;
+                    border-radius: 25px;
+                    text-decoration: none;
+                    font-weight: bold;
+                    display: inline-block;
+                ">
+                    <i class="fas fa-plus"></i> Create New Server
+                </a>
             </div>
 
             <div style="margin-top: 20px; padding: 15px; background: #ffeaa7; border-radius: 10px;">
                 <i class="fas fa-info-circle"></i>
-                <strong>Security Notice:</strong> Server management features are restricted to root administrator only.
+                <strong>Note:</strong> You can still create new servers, but cannot manage existing ones.
             </div>
         </div>
     </div>
@@ -363,13 +376,41 @@ find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
             </ul>
             <div class="tab-content">
                 <div class="tab-pane active" id="tab_1">
-                    <!-- Server details content here -->
                     <div class="alert alert-success">
                         <i class="fa fa-crown"></i> <strong>Root Administrator Access</strong><br>
                         Anda memiliki akses penuh sebagai <strong>Root Administrator (ID: 1)</strong>.
                     </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <dl>
+                                <dt>Server Name</dt>
+                                <dd>{{ $server->name }}</dd>
+                                <dt>Server Owner</dt>
+                                <dd>{{ $server->user->username }}</dd>
+                                <dt>Node</dt>
+                                <dd>{{ $server->node->name }}</dd>
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <dl>
+                                <dt>Connection</dt>
+                                <dd><code>{{ $server->allocation->alias }}:{{ $server->allocation->port }}</code></dd>
+                                <dt>UUID</dt>
+                                <dd><code>{{ $server->uuid }}</code></dd>
+                                <dt>Status</dt>
+                                <dd>
+                                    @if($server->suspended)
+                                        <span class="label label-danger">Suspended</span>
+                                    @else
+                                        <span class="label label-success">Active</span>
+                                    @endif
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
                 </div>
-                <!-- Other tabs content -->
+                <!-- Other tabs content would go here -->
             </div>
         </div>
     </div>
@@ -392,8 +433,8 @@ php artisan cache:clear
 
 echo ""
 echo "🎉 PROTEKSI BERHASIL DIPASANG!"
-echo "✅ Admin ID 1: Bisa akses semua (server list dan view)"
-echo "✅ Admin lain: Tidak bisa akses management"
-echo "✅ Tautan manage hanya muncul untuk admin ID 1"
-echo "✅ View server diproteksi untuk admin selain ID 1"
+echo "✅ Admin ID 1: Bisa akses semua (server list, view, dan management)"
+echo "✅ Admin lain: Bisa Create New server, tapi tidak bisa manage existing"
+echo "✅ Tombol 'Create New' bisa diklik oleh semua admin"
+echo "✅ View server existing diproteksi untuk admin selain ID 1"
 echo "🛡️ Security by: @ginaabaikhati, @AndinOfficial, @naaofficial"
