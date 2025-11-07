@@ -98,8 +98,7 @@ done
 
 # Hapus file protected yang tidak ada backup
 find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
-    if grep -q "Server Protected" "$view_file" 2>/dev/null || 
-       grep -q "ginaabaikhati" "$view_file" 2>/dev/null; then
+    if grep -q "ROOT ADMINISTRATOR ACCESS REQUIRED" "$view_file" 2>/dev/null; then
         echo "🗑️  Menghapus protected view: $(basename "$view_file")"
         rm -f "$view_file"
     fi
@@ -117,6 +116,6 @@ php artisan cache:clear
 echo ""
 echo "🎉 UNINSTALL BERHASIL!"
 echo "✅ Proteksi telah dihapus"
-echo "✅ Tautan manage kembali muncul di server list"
-echo "✅ View server dapat diakses normal"
-echo "🔓 Sistem kembali normal"
+echo "✅ Semua admin sekarang bisa akses server management"
+echo "✅ Tidak ada restriction berdasarkan admin ID"
+echo "🔓 Sistem kembali normal untuk semua admin"
