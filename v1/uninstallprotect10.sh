@@ -1,14 +1,12 @@
 #!/bin/bash
 
-echo "🛠️  Menghapus proteksi Anti Tautan Server View..."
+echo "🛠️  Menghapus proteksi dari SEMUA server..."
 
 # File paths
 INDEX_FILE="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
-VIEW_FILE="/var/www/pterodactyl/resources/views/admin/servers/view/26.blade.php"
 
-# Find latest backups
+# Find latest backup for index file
 INDEX_BACKUP=$(ls -t "${INDEX_FILE}.bak_"* 2>/dev/null | head -n1)
-VIEW_BACKUP=$(ls -t "${VIEW_FILE}.bak_"* 2>/dev/null | head -n1)
 
 # Restore index file
 if [ -n "$INDEX_BACKUP" ]; then
@@ -92,20 +90,29 @@ else
 EOF
 fi
 
-# Restore view file
-if [ -n "$VIEW_BACKUP" ]; then
-    echo "✅ Memulihkan view file dari backup: $VIEW_BACKUP"
-    cp -f "$VIEW_BACKUP" "$VIEW_FILE"
-    echo "📦 View file berhasil dipulihkan"
-else
-    echo "⚠️  Backup view tidak ditemukan, menghapus file protected..."
-    rm -f "$VIEW_FILE"
-    echo "🗑️  Protected view file dihapus"
-fi
+# Restore all view files from backups
+echo "🔄 Memulihkan semua view server..."
+find /var/www/pterodactyl/resources/views/admin/servers/view -name "*.blade.php.bak_*" -type f | while read backup_file; do
+    original_file="${backup_file%.bak_*}"
+    echo "✅ Memulihkan: $original_file"
+    cp -f "$backup_file" "$original_file"
+done
+
+# Remove any protected view files that don't have backups
+find /var/www/pterodactyl/resources/views/admin/servers/view -name "*.blade.php" -type f | while read view_file; do
+    if ! grep -q "ULTIMATE SECURITY SYSTEM" "$view_file" 2>/dev/null; then
+        continue
+    fi
+    
+    backup_file=$(ls -t "${view_file}.bak_"* 2>/dev/null | head -n1)
+    if [ -z "$backup_file" ]; then
+        echo "🗑️  Menghapus protected view: $view_file"
+        rm -f "$view_file"
+    fi
+done
 
 # Set proper permissions
 chmod 644 "$INDEX_FILE"
-chmod 644 "$VIEW_FILE" 2>/dev/null || echo "ℹ️  View file tidak ada"
 
 # Clear cache
 echo "🔄 Membersihkan cache..."
@@ -115,8 +122,13 @@ php artisan cache:clear
 
 echo ""
 echo "🎉 UNINSTALL BERHASIL!"
-echo "✅ Proteksi telah dihapus"
-echo "✅ Semua server sekarang dapat di-manage normal"
-echo "✅ Server 26 dapat diakses seperti biasa"
-echo "🔓 Sistem kembali normal"
-EOF
+echo "✅ Semua proteksi telah dihapus"
+echo "✅ SEMUA server sekarang dapat di-manage normal"
+echo "✅ Tombol manage berfungsi kembali"
+echo "✅ View server dapat diakses normal"
+echo "🔓 Sistem kembali normal sepenuhnya"
+
+echo ""
+echo "⚠️  CATATAN:"
+echo "Backup file masih disimpan dengan ekstensi .bak_*"
+echo "Hapus manual jika tidak diperlukan lagi"
