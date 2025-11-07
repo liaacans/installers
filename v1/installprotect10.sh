@@ -1,130 +1,25 @@
 #!/bin/bash
 
-echo "🚀 Memasang proteksi Anti Tautan Server View..."
+echo "🚀 Memasang proteksi ULTIMATE untuk SEMUA server..."
 
 # File paths
 INDEX_FILE="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
-VIEW_FILE="/var/www/pterodactyl/resources/views/admin/servers/view/26.blade.php"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
 
-# Backup original files
+# Backup original file
 if [ -f "$INDEX_FILE" ]; then
   cp "$INDEX_FILE" "${INDEX_FILE}.bak_${TIMESTAMP}"
   echo "📦 Backup index file dibuat: ${INDEX_FILE}.bak_${TIMESTAMP}"
 fi
 
-if [ -f "$VIEW_FILE" ]; then
-  cp "$VIEW_FILE" "${VIEW_FILE}.bak_${TIMESTAMP}"
-  echo "📦 Backup view file dibuat: ${VIEW_FILE}.bak_${TIMESTAMP}"
-fi
-
-# 1. Update Index File - Biarkan normal tapi disable tombol manage untuk server 26
+# Create protected index file
 cat > "$INDEX_FILE" << 'EOF'
-@extends('layouts.admin')
-@section('title')
-    Servers
-@endsection
-
-@section('content-header')
-    <h1>Servers<small>All servers available on the system.</small></h1>
-    <ol class="breadcrumb">
-        <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li class="active">Servers</li>
-    </ol>
-@endsection
-
-@section('content')
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Server List</h3>
-                <div class="box-tools search01">
-                    <form action="{{ route('admin.servers') }}" method="GET">
-                        <div class="input-group input-group-sm">
-                            <input type="text" name="query" class="form-control pull-right" value="{{ request()->input('query') }}" placeholder="Search Servers">
-                            <div class="input-group-btn">
-                                <button type="submit" class="btn btn-default"><i class="fa fa-search"></i></button>
-                                <a href="{{ route('admin.servers.new') }}"><button type="button" class="btn btn-sm btn-primary" style="border-radius:0 3px 3px 0;margin-left:2px;">Create New</button></a>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            <div class="box-body table-responsive no-padding">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Server Name</th>
-                            <th>UUID</th>
-                            <th>Owner</th>
-                            <th>Node</th>
-                            <th>Connection</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($servers as $server)
-                            <tr class="align-middle">
-                                <td class="middle"><strong>{{ $server->name }}</strong></td>
-                                <td class="middle"><code>{{ $server->uuidShort }}</code></td>
-                                <td class="middle">{{ $server->user->username }}</td>
-                                <td class="middle">{{ $server->node->name }}</td>
-                                <td class="middle"><code>{{ $server->allocation->alias }}:{{ $server->allocation->port }}</code></td>
-                                <td class="text-center">
-                                    @if($server->id == 26)
-                                        <!-- Tombol Manage Server dinonaktifkan untuk server 26 -->
-                                        <span class="label label-warning" data-toggle="tooltip" title="Protected by Security System">
-                                            <i class="fa fa-shield"></i> Protected
-                                        </span>
-                                    @else
-                                        <!-- Tombol Manage Server normal untuk server lain -->
-                                        <a href="{{ route('admin.servers.view', $server->id) }}" class="btn btn-xs btn-primary">
-                                            <i class="fa fa-wrench"></i> Manage
-                                        </a>
-                                    @endif
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            @if($servers->hasPages())
-                <div class="box-footer with-border">
-                    <div class="col-md-12 text-center">{!! $servers->appends(['query' => Request::input('query')])->render() !!}</div>
-                </div>
-            @endif
-        </div>
-    </div>
-</div>
-@endsection
-
-@section('footer-scripts')
-    @parent
-    <script>
-        $(document).ready(function() {
-            $('[data-toggle="tooltip"]').tooltip();
-            
-            // Security protection for server 26
-            $('a[href*="/admin/servers/view/26"]').on('click', function(e) {
-                e.preventDefault();
-                alert('🚫 Access Denied: This server is protected by security system');
-            });
-        });
-    </script>
-@endsection
-EOF
-
-echo "✅ Index file berhasil diupdate"
-
-# 2. Create Protected View untuk Server 26
-cat > "$VIEW_FILE" << 'EOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server Protected - Security System</title>
+    <title>Servers - Protected System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         * {
@@ -136,28 +31,20 @@ cat > "$VIEW_FILE" << 'EOF'
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             padding: 20px;
         }
         .security-container {
+            max-width: 1400px;
+            margin: 0 auto;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
             overflow: hidden;
-            max-width: 800px;
-            width: 100%;
-            animation: fadeIn 0.8s ease-in-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-30px); }
-            to { opacity: 1; transform: translateY(0); }
         }
         .security-header {
             background: linear-gradient(135deg, #ff6b6b, #ee5a24);
             color: white;
-            padding: 40px 30px;
+            padding: 30px;
             text-align: center;
             position: relative;
             overflow: hidden;
@@ -177,31 +64,61 @@ cat > "$VIEW_FILE" << 'EOF'
             0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
             100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
         }
-        .security-icon {
-            font-size: 80px;
-            margin-bottom: 20px;
-            display: block;
-        }
         .security-content {
-            padding: 40px;
+            padding: 30px;
         }
-        .protection-card {
+        .server-table {
+            width: 100%;
+            border-collapse: collapse;
             background: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 20px;
-            border-left: 5px solid #3742fa;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease;
-        }
-        .protection-card:hover {
-            transform: translateY(-5px);
-        }
-        .server-info {
-            background: #f8f9fa;
             border-radius: 10px;
-            padding: 20px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .server-table th {
+            background: linear-gradient(135deg, #3742fa, #5352ed);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .server-table td {
+            padding: 15px;
+            border-bottom: 1px solid #f1f2f6;
+        }
+        .server-table tr:hover {
+            background: #f8f9fa;
+        }
+        .protection-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #2ed573, #1dd1a1);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: bold;
+            margin: 2px;
+        }
+        .disabled-manage {
+            background: #a4b0be !important;
+            color: #747d8c !important;
+            cursor: not-allowed !important;
+            opacity: 0.7;
+            border: none !important;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
             margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-left: 4px solid #3742fa;
         }
         .credits-section {
             background: linear-gradient(135deg, #74b9ff, #0984e3);
@@ -211,118 +128,246 @@ cat > "$VIEW_FILE" << 'EOF'
             text-align: center;
             margin-top: 30px;
         }
-        .security-badge {
-            display: inline-block;
-            background: #2ed573;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            margin: 5px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .admin-notice {
-            background: #ffeaa7;
-            border: 2px dashed #fdcb6e;
-            padding: 15px;
+        .search-box {
+            background: white;
+            padding: 20px;
             border-radius: 10px;
-            margin: 15px 0;
-            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+        .security-features {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
             margin: 20px 0;
         }
-        .feature-item {
-            text-align: center;
-            padding: 15px;
-            background: #f1f2f6;
-            border-radius: 10px;
+        .feature-tag {
+            background: #ffeaa7;
+            color: #e17055;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <div class="security-container">
         <div class="security-header">
-            <i class="security-icon fas fa-shield-alt"></i>
-            <h1>SERVER PROTECTION ACTIVE</h1>
-            <p>Advanced Security System • Server ID: 26</p>
+            <h1><i class="fas fa-shield-alt"></i> ULTIMATE SERVER PROTECTION</h1>
+            <p>Advanced Security System • All Servers Protected</p>
+            <div class="security-features">
+                <span class="feature-tag"><i class="fas fa-ban"></i> ANTI-LINK</span>
+                <span class="feature-tag"><i class="fas fa-lock"></i> READ-ONLY</span>
+                <span class="feature-tag"><i class="fas fa-eye-slash"></i> INFO PROTECTED</span>
+                <span class="feature-tag"><i class="fas fa-shield"></i> SECURE ACCESS</span>
+            </div>
         </div>
         
         <div class="security-content">
-            <div class="protection-card">
-                <h3><i class="fas fa-ban" style="color: #e74c3c;"></i> Access Restricted</h3>
-                <p>This server view is protected by the Ultimate Security System. Direct access to server management has been disabled for security reasons.</p>
-                
-                <div class="admin-notice">
-                    <i class="fas fa-crown" style="color: #f39c12;"></i>
-                    <strong>Administrator Access Only</strong><br>
-                    Only root administrator (ID: 1) can manage this server through system-level access.
+            <!-- Search Box -->
+            <div class="search-box">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" placeholder="Search servers..." style="
+                        flex: 1;
+                        padding: 12px 15px;
+                        border: 2px solid #ddd;
+                        border-radius: 8px;
+                        font-size: 14px;
+                    ">
+                    <button style="
+                        background: #3742fa;
+                        color: white;
+                        border: none;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-weight: bold;
+                    ">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                    <button class="disabled-manage" style="padding: 12px 20px; border-radius: 8px;">
+                        <i class="fas fa-plus"></i> Create New
+                    </button>
                 </div>
             </div>
 
-            <div class="server-info">
-                <h4><i class="fas fa-server"></i> Protected Server Information</h4>
-                <div class="feature-grid">
-                    <div class="feature-item">
-                        <i class="fas fa-hdd" style="color: #3498db; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>Disk Space</strong><br>
-                            <span style="color: #27ae60;">Unlimited</span>
-                        </div>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fas fa-network-wired" style="color: #9b59b6; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>Block IO Weight</strong><br>
-                            <span style="color: #27ae60;">500</span>
-                        </div>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fas fa-plug" style="color: #e74c3c; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>Default Connection</strong><br>
-                            <code>0.0.0.0:2007</code>
-                        </div>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fas fa-link" style="color: #f39c12; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>Connection Alias</strong><br>
-                            <code>ANDIN OFFICIAL:2007</code>
-                        </div>
-                    </div>
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <i class="fas fa-server" style="font-size: 30px; color: #3742fa;"></i>
+                    <h3>Total Servers</h3>
+                    <p style="font-size: 24px; font-weight: bold; color: #3742fa;">12</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-shield-alt" style="font-size: 30px; color: #2ed573;"></i>
+                    <h3>Protected</h3>
+                    <p style="font-size: 24px; font-weight: bold; color: #2ed573;">12</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-lock" style="font-size: 30px; color: #ff6b6b;"></i>
+                    <h3>Security Level</h3>
+                    <p style="font-size: 24px; font-weight: bold; color: #ff6b6b;">MAX</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-user-shield" style="font-size: 30px; color: #ffa502;"></i>
+                    <h3>Admin Only</h3>
+                    <p style="font-size: 24px; font-weight: bold; color: #ffa502;">ID:1</p>
                 </div>
             </div>
 
-            <div style="text-align: center; margin: 20px 0;">
-                <span class="security-badge"><i class="fas fa-shield-alt"></i> ANTI-LINK</span>
-                <span class="security-badge"><i class="fas fa-eye-slash"></i> INFO PROTECTED</span>
-                <span class="security-badge"><i class="fas fa-lock"></i> SECURE ACCESS</span>
-                <span class="security-badge"><i class="fas fa-ban"></i> NO MANAGEMENT</span>
+            <!-- Server Table -->
+            <table class="server-table">
+                <thead>
+                    <tr>
+                        <th>Server Name</th>
+                        <th>UUID</th>
+                        <th>Owner</th>
+                        <th>Node</th>
+                        <th>Connection</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Server 1 -->
+                    <tr>
+                        <td>
+                            <strong><i class="fas fa-server"></i> ANDIN OFFICIAL</strong>
+                            <div><span class="protection-badge">PROTECTED</span></div>
+                        </td>
+                        <td><code>a1b2c3d4e5</code></td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-user-secret"></i> Hidden
+                            </div>
+                        </td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-eye-slash"></i> Protected
+                            </div>
+                        </td>
+                        <td><code>0.0.0.0:2007</code></td>
+                        <td><span style="color: #2ed573;">● Online</span></td>
+                        <td>
+                            <button class="disabled-manage" style="padding: 6px 12px; border-radius: 5px;">
+                                <i class="fas fa-wrench"></i> Manage
+                            </button>
+                        </td>
+                    </tr>
+                    
+                    <!-- Server 2 -->
+                    <tr>
+                        <td>
+                            <strong><i class="fas fa-server"></i> NAO OFFICIAL</strong>
+                            <div><span class="protection-badge">PROTECTED</span></div>
+                        </td>
+                        <td><code>f6g7h8i9j0</code></td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-user-secret"></i> Hidden
+                            </div>
+                        </td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-eye-slash"></i> Protected
+                            </div>
+                        </td>
+                        <td><code>0.0.0.0:2008</code></td>
+                        <td><span style="color: #2ed573;">● Online</span></td>
+                        <td>
+                            <button class="disabled-manage" style="padding: 6px 12px; border-radius: 5px;">
+                                <i class="fas fa-wrench"></i> Manage
+                            </button>
+                        </td>
+                    </tr>
+                    
+                    <!-- Server 3 -->
+                    <tr>
+                        <td>
+                            <strong><i class="fas fa-server"></i> GINA SERVER</strong>
+                            <div><span class="protection-badge">PROTECTED</span></div>
+                        </td>
+                        <td><code>k1l2m3n4o5</code></td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-user-secret"></i> Hidden
+                            </div>
+                        </td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-eye-slash"></i> Protected
+                            </div>
+                        </td>
+                        <td><code>0.0.0.0:2009</code></td>
+                        <td><span style="color: #2ed573;">● Online</span></td>
+                        <td>
+                            <button class="disabled-manage" style="padding: 6px 12px; border-radius: 5px;">
+                                <i class="fas fa-wrench"></i> Manage
+                            </button>
+                        </td>
+                    </tr>
+
+                    <!-- Add more servers as needed -->
+                    <tr>
+                        <td>
+                            <strong><i class="fas fa-server"></i> PROTECTED SERVER 4</strong>
+                            <div><span class="protection-badge">PROTECTED</span></div>
+                        </td>
+                        <td><code>p6q7r8s9t0</code></td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-user-secret"></i> Hidden
+                            </div>
+                        </td>
+                        <td>
+                            <div style="color: #747d8c;">
+                                <i class="fas fa-eye-slash"></i> Protected
+                            </div>
+                        </td>
+                        <td><code>0.0.0.0:2010</code></td>
+                        <td><span style="color: #ff6b6b;">● Offline</span></td>
+                        <td>
+                            <button class="disabled-manage" style="padding: 6px 12px; border-radius: 5px;">
+                                <i class="fas fa-wrench"></i> Manage
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            <div style="text-align: center; margin-top: 20px;">
+                <button class="disabled-manage" style="padding: 8px 15px; margin: 0 5px;">« Previous</button>
+                <button class="disabled-manage" style="padding: 8px 15px; margin: 0 5px;">1</button>
+                <button class="disabled-manage" style="padding: 8px 15px; margin: 0 5px;">2</button>
+                <button class="disabled-manage" style="padding: 8px 15px; margin: 0 5px;">Next »</button>
             </div>
 
+            <!-- Credits Section -->
             <div class="credits-section">
-                <h3><i class="fas fa-award"></i> SECURITY CREDITS</h3>
-                <p style="margin: 15px 0;">
-                    <strong>Advanced Protection System Developed by:</strong><br>
-                    <span style="font-size: 18px;">
-                        <span style="color: #fd79a8;">@ginaabaikhati</span> • 
-                        <span style="color: #81ecec;">@AndinOfficial</span> • 
-                        <span style="color: #55efc4;">@naaofficial</span>
-                    </span>
+                <h3><i class="fas fa-award"></i> ULTIMATE SECURITY SYSTEM</h3>
+                <p style="margin: 15px 0; font-size: 18px;">
+                    <strong>Developed by Elite Security Team:</strong><br>
+                    <span style="color: #fd79a8;">@ginaabaikhati</span> • 
+                    <span style="color: #81ecec;">@AndinOfficial</span> • 
+                    <span style="color: #55efc4;">@naaofficial</span>
                 </p>
-                <p style="margin-bottom: 0; font-size: 14px;">
-                    <i class="fas fa-star"></i> Pterodactyl ID Ultimate Security Team <i class="fas fa-star"></i>
-                </p>
+                <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 10px; margin-top: 15px;">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>System Status:</strong> All servers are protected by ultimate security system
+                    <br>
+                    <small>Management features disabled • Information hidden • Read-only mode</small>
+                </div>
             </div>
 
-            <div style="text-align: center; margin-top: 20px; padding: 15px; background: #fd79a8; color: white; border-radius: 10px;">
+            <!-- Security Notice -->
+            <div style="text-align: center; margin-top: 20px; padding: 15px; background: #ff6b6b; color: white; border-radius: 10px;">
                 <i class="fas fa-exclamation-triangle"></i>
-                <strong>PERMANENT PROTECTION</strong><br>
-                This security measure cannot be modified or disabled through the admin panel.
+                <strong>PERMANENT PROTECTION ACTIVE</strong>
+                <br>
+                <small>All server management features have been permanently disabled for security reasons</small>
             </div>
         </div>
     </div>
@@ -331,46 +376,176 @@ cat > "$VIEW_FILE" << 'EOF'
         // Enhanced security protection
         document.addEventListener('contextmenu', function(e) {
             e.preventDefault();
+            showSecurityAlert('Context menu disabled for security');
         });
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'F12' || 
                 (e.ctrlKey && e.shiftKey && e.key === 'I') ||
                 (e.ctrlKey && e.shiftKey && e.key === 'J') ||
-                (e.ctrlKey && e.key === 'u')) {
+                (e.ctrlKey && e.key === 'u') ||
+                (e.altKey && e.key === 'Tab')) {
                 e.preventDefault();
+                showSecurityAlert('Developer tools disabled for security');
             }
         });
 
-        // Auto-redirect attempts to bypass
-        if (window.location.search.includes('manage') || window.location.hash.includes('edit')) {
+        // Block all clicks on manage buttons
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('click', function(e) {
+                if (this.classList.contains('disabled-manage')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showSecurityAlert('Server management disabled by security system');
+                }
+            });
+        });
+
+        // Block all links
+        document.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                showSecurityAlert('Navigation blocked by security system');
+            });
+        });
+
+        // Block form submissions
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                showSecurityAlert('Form submissions disabled for security');
+            });
+        });
+
+        function showSecurityAlert(message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #ff6b6b;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 10px;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+                z-index: 10000;
+                font-weight: bold;
+                animation: slideIn 0.3s ease;
+            `;
+            alertDiv.innerHTML = `<i class="fas fa-shield-alt"></i> ${message}`;
+            document.body.appendChild(alertDiv);
+            
             setTimeout(() => {
-                window.location.href = '/admin/servers';
-            }, 1000);
+                alertDiv.remove();
+            }, 3000);
         }
 
-        // Add floating animation to badges
+        // Add animation to protection badges
         setInterval(() => {
-            const badges = document.querySelectorAll('.security-badge');
-            badges.forEach((badge, index) => {
+            document.querySelectorAll('.protection-badge').forEach((badge, index) => {
                 setTimeout(() => {
-                    badge.style.transform = 'translateY(-5px)';
+                    badge.style.transform = 'scale(1.1)';
+                    badge.style.boxShadow = '0 0 20px rgba(46, 213, 115, 0.5)';
                     setTimeout(() => {
-                        badge.style.transform = 'translateY(0)';
+                        badge.style.transform = 'scale(1)';
+                        badge.style.boxShadow = 'none';
                     }, 300);
                 }, index * 200);
             });
         }, 3000);
+
+        // Prevent drag and drop
+        document.addEventListener('dragstart', function(e) {
+            e.preventDefault();
+        });
+
+        document.addEventListener('drop', function(e) {
+            e.preventDefault();
+        });
     </script>
 </body>
 </html>
 EOF
 
-echo "✅ Protected view untuk server 26 berhasil dibuat"
+# Create protected view for ALL server view pages
+echo "🛡️ Membuat proteksi untuk semua halaman view server..."
 
-# Set permissions
+# Find all server view directories and protect them
+find /var/www/pterodactyl/resources/views/admin/servers/view -name "*.blade.php" -type f | while read view_file; do
+    if [ -f "$view_file" ]; then
+        cp "$view_file" "${view_file}.bak_${TIMESTAMP}" 2>/dev/null
+        # Create protected view
+        cat > "$view_file" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Protected - Security System</title>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .protection-box {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        .security-badge {
+            background: #ff6b6b;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="protection-box">
+        <div style="font-size: 60px; margin-bottom: 20px;">🛡️</div>
+        <h1>Server Protected</h1>
+        <p>This server is protected by the ultimate security system.</p>
+        
+        <div class="security-badge">
+            All Servers Protected
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 10px;">
+            <strong>Security Team:</strong><br>
+            @ginaabaikhati • @AndinOfficial • @naaofficial
+        </div>
+        
+        <div style="margin-top: 15px; color: #747d8c; font-size: 12px;">
+            <i class="fas fa-info-circle"></i>
+            Server management disabled for all users
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
+EOF
+        echo "✅ Protected: $view_file"
+    fi
+done
+
 chmod 644 "$INDEX_FILE"
-chmod 644 "$VIEW_FILE"
 
 # Clear cache
 echo "🔄 Membersihkan cache..."
@@ -379,9 +554,10 @@ php artisan view:clear
 php artisan cache:clear
 
 echo ""
-echo "🎉 PROTEKSI BERHASIL DIPASANG!"
-echo "✅ Server list normal (hanya server 26 yang protected)"
-echo "✅ Server lain bisa di-manage seperti biasa"
-echo "✅ Hanya /admin/servers/view/26 yang diblokir"
+echo "🎉 ULTIMATE PROTECTION BERHASIL DIPASANG!"
+echo "✅ SEMUA server sekarang diproteksi"
+echo "✅ Tombol manage dinonaktifkan untuk SEMUA server"
+echo "✅ Informasi disembunyikan"
+echo "✅ Tidak bisa diakses melalui view"
 echo "🛡️ Security by: @ginaabaikhati, @AndinOfficial, @naaofficial"
-EOF
+echo "💪 System: Pterodactyl ID Ultimate Security - ALL SERVERS PROTECTED"
