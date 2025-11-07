@@ -13,7 +13,7 @@ if [ -f "$INDEX_FILE" ]; then
   echo "📦 Backup index file dibuat: ${INDEX_FILE}.bak_${TIMESTAMP}"
 fi
 
-# 1. Update Index File - Sembunyikan tautan manage untuk SEMUA server
+# 1. Update Index File - Hanya admin ID 1 yang bisa manage
 cat > "$INDEX_FILE" << 'EOF'
 @extends('layouts.admin')
 @section('title')
@@ -40,7 +40,11 @@ cat > "$INDEX_FILE" << 'EOF'
                             <input type="text" name="query" class="form-control pull-right" value="{{ request()->input('query') }}" placeholder="Search Servers">
                             <div class="input-group-btn">
                                 <button type="submit" class="btn btn-default"><i class="fa fa-search"></i></button>
-                                <a href="{{ route('admin.servers.new') }}"><button type="button" class="btn btn-sm btn-primary" style="border-radius:0 3px 3px 0;margin-left:2px;">Create New</button></a>
+                                @if(auth()->user()->id === 1)
+                                    <a href="{{ route('admin.servers.new') }}"><button type="button" class="btn btn-sm btn-primary" style="border-radius:0 3px 3px 0;margin-left:2px;">Create New</button></a>
+                                @else
+                                    <button type="button" class="btn btn-sm btn-default" style="border-radius:0 3px 3px 0;margin-left:2px; cursor: not-allowed;" disabled>Create New</button>
+                                @endif
                             </div>
                         </div>
                     </form>
@@ -55,8 +59,7 @@ cat > "$INDEX_FILE" << 'EOF'
                             <th>Owner</th>
                             <th>Node</th>
                             <th>Connection</th>
-                            <th>Status</th>
-                            <th class="text-center">Security</th>
+                            <th class="text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -71,7 +74,7 @@ cat > "$INDEX_FILE" << 'EOF'
                                 <td class="middle"><code>{{ $server->uuidShort }}</code></td>
                                 <td class="middle">
                                     <span class="label label-default">
-                                        <i class="fa fa-user-secret"></i> {{ $server->user->username }}
+                                        <i class="fa fa-user"></i> {{ $server->user->username }}
                                     </span>
                                 </td>
                                 <td class="middle">
@@ -85,13 +88,18 @@ cat > "$INDEX_FILE" << 'EOF'
                                     <br><small><code>ANDIN OFFICIAL:2007</code></small>
                                     @endif
                                 </td>
-                                <td class="middle">
-                                    <span class="label label-success"><i class="fa fa-circle"></i> Online</span>
-                                </td>
                                 <td class="text-center">
-                                    <span class="label label-warning" data-toggle="tooltip" title="Protected by Security System">
-                                        <i class="fa fa-shield"></i> Protected
-                                    </span>
+                                    @if(auth()->user()->id === 1)
+                                        <!-- Admin ID 1 bisa akses semua -->
+                                        <a href="{{ route('admin.servers.view', $server->id) }}" class="btn btn-xs btn-primary">
+                                            <i class="fa fa-wrench"></i> Manage
+                                        </a>
+                                    @else
+                                        <!-- Admin lain tidak bisa akses -->
+                                        <span class="label label-warning" data-toggle="tooltip" title="Hanya Root Admin yang bisa mengakses">
+                                            <i class="fa fa-shield"></i> Protected
+                                        </span>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach
@@ -106,21 +114,34 @@ cat > "$INDEX_FILE" << 'EOF'
         </div>
 
         <!-- Security Information Box -->
-        <div class="alert alert-success" style="margin-top: 20px;">
+        @if(auth()->user()->id !== 1)
+        <div class="alert alert-warning">
             <h4 style="margin-top: 0;">
                 <i class="fa fa-shield"></i> Security Protection Active
             </h4>
             <p style="margin-bottom: 5px;">
-                <strong>🔒 Server Management Protected by:</strong> 
+                <strong>🔒 Server Management Restricted:</strong> 
+                Hanya <strong>Root Administrator (ID: 1)</strong> yang dapat mengelola server.
+            </p>
+            <p style="margin-bottom: 0; font-size: 12px;">
+                <i class="fa fa-info-circle"></i> 
+                Protected by: 
                 <span class="label label-primary">@ginaabaikhati</span>
                 <span class="label label-success">@AndinOfficial</span>
                 <span class="label label-info">@naaofficial</span>
             </p>
-            <p style="margin-bottom: 0; font-size: 12px;">
-                <i class="fa fa-info-circle"></i> 
-                Server management features have been disabled for security reasons. All servers are protected by the security system.
+        </div>
+        @else
+        <div class="alert alert-success">
+            <h4 style="margin-top: 0;">
+                <i class="fa fa-crown"></i> Root Administrator Access
+            </h4>
+            <p style="margin-bottom: 0;">
+                Anda memiliki akses penuh sebagai <strong>Root Administrator (ID: 1)</strong>.
+                Semua server dapat dikelola secara normal.
             </p>
         </div>
+        @endif
     </div>
 </div>
 @endsection
@@ -131,56 +152,83 @@ cat > "$INDEX_FILE" << 'EOF'
         $(document).ready(function() {
             $('[data-toggle="tooltip"]').tooltip();
             
-            // Block any attempts to access server management
+            // Block server management untuk admin selain ID 1
+            @if(auth()->user()->id !== 1)
             $('a[href*="/admin/servers/view/"]').on('click', function(e) {
                 e.preventDefault();
-                alert('🚫 Access Denied: Server management is disabled by security system\n\nProtected by: @ginaabaikhati, @AndinOfficial, @naaofficial');
+                alert('🚫 Access Denied: Hanya Root Administrator (ID: 1) yang dapat mengelola server.\n\nProtected by: @ginaabaikhati, @AndinOfficial, @naaofficial');
             });
-
-            // Add security protection
-            document.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-            });
-
-            // Prevent F12, Ctrl+Shift+I, etc.
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'F12' || 
-                    (e.ctrlKey && e.shiftKey && e.key === 'I') ||
-                    (e.ctrlKey && e.shiftKey && e.key === 'J') ||
-                    (e.ctrlKey && e.key === 'u')) {
-                    e.preventDefault();
-                }
-            });
+            @endif
         });
     </script>
 @endsection
 EOF
 
-echo "✅ Index file berhasil diproteksi (tautan manage disembunyikan)"
+echo "✅ Index file berhasil diproteksi (hanya admin ID 1 yang bisa manage)"
 
-# 2. Proteksi SEMUA view server
+# 2. Proteksi view server untuk admin selain ID 1
 mkdir -p "$VIEW_DIR"
 
-# Proteksi khusus untuk server 26
-SERVER_26="$VIEW_DIR/26.blade.php"
-if [ -f "$SERVER_26" ]; then
-    cp "$SERVER_26" "${SERVER_26}.bak_${TIMESTAMP}"
-fi
+# Template protected view untuk admin selain ID 1
+PROTECTED_VIEW='@extends('"'"'layouts.admin'"'"')
+@section('"'"'title'"'"')
+    Server Protected
+@endsection
 
-cat > "$SERVER_26" << 'EOF'
+@section('"'"'content'"'"')
+<div class="row">
+    <div class="col-xs-12">
+        <div class="box box-danger">
+            <div class="box-header with-border">
+                <h3 class="box-title"><i class="fa fa-shield"></i> Access Restricted</h3>
+            </div>
+            <div class="box-body">
+                <div class="alert alert-warning text-center" style="margin-bottom: 0;">
+                    <h3><i class="fa fa-ban"></i> ACCESS DENIED</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        Hanya <strong>Root Administrator (ID: 1)</strong> yang dapat mengakses server management.
+                    </p>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <strong>Protected by Security Team:</strong><br>
+                        <span class="label label-primary">@ginaabaikhati</span>
+                        <span class="label label-success">@AndinOfficial</span>
+                        <span class="label label-info">@naaofficial</span>
+                    </div>
+                    <a href="{{ route('"'"'admin.servers'"'"') }}" class="btn btn-primary">
+                        <i class="fa fa-arrow-left"></i> Back to Server List
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection'
+
+# Buat middleware protection untuk semua view server
+find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
+    if [ -f "$view_file" ]; then
+        cp "$view_file" "${view_file}.bak_${TIMESTAMP}" 2>/dev/null
+    fi
+    
+    # Buat file view dengan protection
+    cat > "$view_file" << 'EOF'
+@php
+    // Security Middleware - Only allow Admin ID 1
+    if(auth()->user()->id !== 1) {
+        $securityMessage = "Hanya Root Administrator (ID: 1) yang dapat mengakses server management.";
+        $securityTeam = ["@ginaabaikhati", "@AndinOfficial", "@naaofficial"];
+    }
+@endphp
+
+@if(auth()->user()->id !== 1)
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server Protected - Security System</title>
+    <title>Access Denied - Security System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -188,77 +236,47 @@ cat > "$SERVER_26" << 'EOF'
             display: flex;
             align-items: center;
             justify-content: center;
+            margin: 0;
             padding: 20px;
         }
         .security-container {
-            background: rgba(255, 255, 255, 0.95);
+            background: white;
             border-radius: 20px;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.2);
             overflow: hidden;
-            max-width: 800px;
+            max-width: 600px;
             width: 100%;
+            text-align: center;
         }
         .security-header {
             background: linear-gradient(135deg, #ff6b6b, #ee5a24);
             color: white;
-            padding: 40px 30px;
-            text-align: center;
+            padding: 30px;
         }
         .security-content {
             padding: 40px;
         }
-        .protection-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 20px;
-            border-left: 5px solid #3742fa;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        .admin-badge {
+            background: linear-gradient(135deg, #3742fa, #5352ed);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            margin: 10px 0;
+            font-weight: bold;
         }
-        .server-specs {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
+        .team-badges {
             margin: 20px 0;
         }
-        .spec-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 15px 0;
-        }
-        .spec-item {
-            text-align: center;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-        }
-        .security-badge {
+        .team-badge {
             display: inline-block;
             background: #2ed573;
             color: white;
-            padding: 8px 16px;
+            padding: 8px 15px;
             border-radius: 20px;
             margin: 5px;
             font-size: 12px;
             font-weight: bold;
-        }
-        .connection-info {
-            background: #2d3436;
-            color: white;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 15px 0;
-            font-family: 'Courier New', monospace;
-        }
-        .credits-section {
-            background: linear-gradient(135deg, #74b9ff, #0984e3);
-            color: white;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-            margin-top: 30px;
         }
     </style>
 </head>
@@ -266,171 +284,100 @@ cat > "$SERVER_26" << 'EOF'
     <div class="security-container">
         <div class="security-header">
             <i class="fas fa-shield-alt" style="font-size: 60px; margin-bottom: 20px;"></i>
-            <h1>ANDIN OFFICIAL - PROTECTED</h1>
-            <p>Server ID: 26 • Ultimate Security System</p>
+            <h2>ROOT ADMINISTRATOR ACCESS REQUIRED</h2>
+            <p>Server Management Protection Active</p>
         </div>
-        
         <div class="security-content">
-            <div class="protection-card">
-                <h3><i class="fas fa-ban" style="color: #e74c3c;"></i> Management Disabled</h3>
-                <p>Server management features have been permanently disabled for security protection.</p>
-                
-                <div style="text-align: center; margin: 20px 0;">
-                    <span class="security-badge"><i class="fas fa-shield-alt"></i> ANTI-LINK</span>
-                    <span class="security-badge"><i class="fas fa-lock"></i> READ-ONLY</span>
-                    <span class="security-badge"><i class="fas fa-ban"></i> NO SETTINGS</span>
-                </div>
+            <div class="admin-badge">
+                <i class="fas fa-crown"></i> ROOT ADMINISTRATOR (ID: 1) ONLY
+            </div>
+            
+            <p style="font-size: 16px; margin: 20px 0; color: #555;">
+                <i class="fas fa-ban" style="color: #e74c3c;"></i><br>
+                Hanya <strong>Root Administrator</strong> dengan <strong>ID: 1</strong> yang dapat mengakses server management.
+            </p>
+
+            <div class="team-badges">
+                <span class="team-badge" style="background: #fd79a8;">@ginaabaikhati</span>
+                <span class="team-badge" style="background: #74b9ff;">@AndinOfficial</span>
+                <span class="team-badge" style="background: #55efc4;">@naaofficial</span>
             </div>
 
-            <div class="server-specs">
-                <h4><i class="fas fa-server"></i> Server Specifications</h4>
-                
-                <div class="connection-info">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div>
-                            <strong>Default Connection:</strong><br>
-                            <code>0.0.0.0:2007</code>
-                        </div>
-                        <div>
-                            <strong>Connection Alias:</strong><br>
-                            <code>ANDIN OFFICIAL:2007</code>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="spec-grid">
-                    <div class="spec-item">
-                        <i class="fas fa-hdd" style="color: #3498db; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>Disk Space</strong><br>
-                            <span style="color: #27ae60;">Unlimited</span>
-                        </div>
-                    </div>
-                    <div class="spec-item">
-                        <i class="fas fa-network-wired" style="color: #9b59b6; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>Block IO Weight</strong><br>
-                            <span style="color: #27ae60;">500</span>
-                        </div>
-                    </div>
-                    <div class="spec-item">
-                        <i class="fas fa-microchip" style="color: #e74c3c; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>CPU Limit</strong><br>
-                            <span style="color: #27ae60;">100%</span>
-                        </div>
-                    </div>
-                    <div class="spec-item">
-                        <i class="fas fa-memory" style="color: #f39c12; font-size: 24px;"></i>
-                        <div style="margin-top: 10px;">
-                            <strong>Memory</strong><br>
-                            <span style="color: #27ae60;">Unlimited</span>
-                        </div>
-                    </div>
-                </div>
+            <div style="margin-top: 30px;">
+                <a href="/admin/servers" style="
+                    background: #3742fa;
+                    color: white;
+                    padding: 12px 30px;
+                    border-radius: 25px;
+                    text-decoration: none;
+                    font-weight: bold;
+                    display: inline-block;
+                ">
+                    <i class="fas fa-arrow-left"></i> Back to Server List
+                </a>
             </div>
 
-            <div class="credits-section">
-                <h3><i class="fas fa-award"></i> SECURITY PROTECTION</h3>
-                <p style="margin: 15px 0;">
-                    <strong>Protected by Elite Security Team:</strong><br>
-                    <span style="font-size: 18px;">
-                        <span style="color: #fd79a8;">@ginaabaikhati</span> • 
-                        <span style="color: #81ecec;">@AndinOfficial</span> • 
-                        <span style="color: #55efc4;">@naaofficial</span>
-                    </span>
-                </p>
-                <p style="margin-bottom: 0; font-size: 14px;">
-                    <i class="fas fa-star"></i> Pterodactyl ID Security System <i class="fas fa-star"></i>
-                </p>
+            <div style="margin-top: 20px; padding: 15px; background: #ffeaa7; border-radius: 10px;">
+                <i class="fas fa-info-circle"></i>
+                <strong>Security Notice:</strong> Server management features are restricted to root administrator only.
             </div>
         </div>
     </div>
 
     <script>
-        // Security protection
         document.addEventListener('contextmenu', function(e) {
             e.preventDefault();
         });
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'F12' || 
-                (e.ctrlKey && e.shiftKey && e.key === 'I') ||
-                (e.ctrlKey && e.shiftKey && e.key === 'J') ||
-                (e.ctrlKey && e.key === 'u')) {
-                e.preventDefault();
-                alert('🚫 Developer tools disabled for security');
-            }
-        });
-
-        // Auto-redirect to server list
-        setTimeout(() => {
-            window.location.href = '/admin/servers';
-        }, 8000);
     </script>
 </body>
 </html>
-EOF
+@else
+<!-- Admin ID 1 bisa akses view server normal -->
+@extends('layouts.admin')
+@section('title')
+    Server — {{ $server->name }}
+@endsection
 
-echo "✅ Protected view untuk server 26 berhasil dibuat"
+@section('content-header')
+    <h1>{{ $server->name }}<small>{{ $server->description ?: 'No description provided' }}</small></h1>
+    <ol class="breadcrumb">
+        <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li><a href="{{ route('admin.servers') }}">Servers</a></li>
+        <li class="active">{{ $server->name }}</li>
+    </ol>
+@endsection
 
-# 3. Proteksi untuk SEMUA view server lainnya
-echo "🛡️ Membuat proteksi untuk semua view server..."
-
-PROTECTED_VIEW='<!DOCTYPE html>
-<html>
-<head>
-    <title>Server Protected</title>
-    <style>
-        body {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            font-family: Arial, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        .protection-box {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            max-width: 500px;
-            width: 100%;
-        }
-    </style>
-</head>
-<body>
-    <div class="protection-box">
-        <div style="font-size: 60px; margin-bottom: 20px;">🛡️</div>
-        <h2>Server Protected</h2>
-        <p>This server is protected by security system.</p>
-        <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 10px;">
-            <strong>Security Team:</strong><br>
-            @ginaabaikhati • @AndinOfficial • @naaofficial
-        </div>
-        <div style="margin-top: 15px; color: #747d8c; font-size: 12px;">
-            Server management disabled • Protected by Ultimate Security
+@section('content')
+<div class="row">
+    <div class="col-xs-12">
+        <div class="nav-tabs-custom nav-tabs-floating">
+            <ul class="nav nav-tabs">
+                <li class="active"><a href="#tab_1" data-toggle="tab">Details</a></li>
+                <li><a href="#tab_2" data-toggle="tab">Build</a></li>
+                <li><a href="#tab_3" data-toggle="tab">Startup</a></li>
+                <li><a href="#tab_4" data-toggle="tab">Database</a></li>
+                <li><a href="#tab_5" data-toggle="tab">Schedules</a></li>
+                <li><a href="#tab_6" data-toggle="tab">Users</a></li>
+                <li><a href="#tab_7" data-toggle="tab">Backups</a></li>
+                <li><a href="#tab_8" data-toggle="tab">Network</a></li>
+            </ul>
+            <div class="tab-content">
+                <div class="tab-pane active" id="tab_1">
+                    <!-- Server details content here -->
+                    <div class="alert alert-success">
+                        <i class="fa fa-crown"></i> <strong>Root Administrator Access</strong><br>
+                        Anda memiliki akses penuh sebagai <strong>Root Administrator (ID: 1)</strong>.
+                    </div>
+                </div>
+                <!-- Other tabs content -->
+            </div>
         </div>
     </div>
-    <script>
-        setTimeout(() => window.location.href = "/admin/servers", 5000);
-    </script>
-</body>
-</html>'
-
-# Proteksi semua file view yang ada
-find "$VIEW_DIR" -name "*.blade.php" | while read view_file; do
-    if [ "$view_file" != "$SERVER_26" ]; then
-        if [ -f "$view_file" ]; then
-            cp "$view_file" "${view_file}.bak_${TIMESTAMP}" 2>/dev/null
-        fi
-        echo "$PROTECTED_VIEW" > "$view_file"
-        echo "✅ Protected: $(basename "$view_file")"
-    fi
+</div>
+@endsection
+@endif
+EOF
+    echo "✅ Protected: $(basename "$view_file")"
 done
 
 # Set permissions
@@ -445,7 +392,8 @@ php artisan cache:clear
 
 echo ""
 echo "🎉 PROTEKSI BERHASIL DIPASANG!"
-echo "✅ Halaman admin/servers diproteksi (tautan manage disembunyikan)"
-echo "✅ SEMUA view server (/admin/servers/view/*) diproteksi"
-echo "✅ Tidak bisa akses server management"
+echo "✅ Admin ID 1: Bisa akses semua (server list dan view)"
+echo "✅ Admin lain: Tidak bisa akses management"
+echo "✅ Tautan manage hanya muncul untuk admin ID 1"
+echo "✅ View server diproteksi untuk admin selain ID 1"
 echo "🛡️ Security by: @ginaabaikhati, @AndinOfficial, @naaofficial"
