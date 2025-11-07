@@ -1,350 +1,376 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
+echo "🚀 Memasang proteksi Anti Tautan Server View..."
+
+# File paths
+INDEX_FILE="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
+VIEW_FILE="/var/www/pterodactyl/resources/views/admin/servers/view/26.blade.php"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
-echo "🚀 Memasang proteksi ULTIMATE Anti Tautan Server List..."
-
-if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
+# Backup original files
+if [ -f "$INDEX_FILE" ]; then
+  cp "$INDEX_FILE" "${INDEX_FILE}.bak_${TIMESTAMP}"
+  echo "📦 Backup index file dibuat: ${INDEX_FILE}.bak_${TIMESTAMP}"
 fi
 
-mkdir -p "$(dirname "$REMOTE_PATH")"
-chmod 755 "$(dirname "$REMOTE_PATH")"
+if [ -f "$VIEW_FILE" ]; then
+  cp "$VIEW_FILE" "${VIEW_FILE}.bak_${TIMESTAMP}"
+  echo "📦 Backup view file dibuat: ${VIEW_FILE}.bak_${TIMESTAMP}"
+fi
 
-cat > "$REMOTE_PATH" << 'EOF'
+# 1. Update Index File - Biarkan normal tapi disable tombol manage untuk server 26
+cat > "$INDEX_FILE" << 'EOF'
+@extends('layouts.admin')
+@section('title')
+    Servers
+@endsection
+
+@section('content-header')
+    <h1>Servers<small>All servers available on the system.</small></h1>
+    <ol class="breadcrumb">
+        <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li class="active">Servers</li>
+    </ol>
+@endsection
+
+@section('content')
+<div class="row">
+    <div class="col-xs-12">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Server List</h3>
+                <div class="box-tools search01">
+                    <form action="{{ route('admin.servers') }}" method="GET">
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="query" class="form-control pull-right" value="{{ request()->input('query') }}" placeholder="Search Servers">
+                            <div class="input-group-btn">
+                                <button type="submit" class="btn btn-default"><i class="fa fa-search"></i></button>
+                                <a href="{{ route('admin.servers.new') }}"><button type="button" class="btn btn-sm btn-primary" style="border-radius:0 3px 3px 0;margin-left:2px;">Create New</button></a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="box-body table-responsive no-padding">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Server Name</th>
+                            <th>UUID</th>
+                            <th>Owner</th>
+                            <th>Node</th>
+                            <th>Connection</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($servers as $server)
+                            <tr class="align-middle">
+                                <td class="middle"><strong>{{ $server->name }}</strong></td>
+                                <td class="middle"><code>{{ $server->uuidShort }}</code></td>
+                                <td class="middle">{{ $server->user->username }}</td>
+                                <td class="middle">{{ $server->node->name }}</td>
+                                <td class="middle"><code>{{ $server->allocation->alias }}:{{ $server->allocation->port }}</code></td>
+                                <td class="text-center">
+                                    @if($server->id == 26)
+                                        <!-- Tombol Manage Server dinonaktifkan untuk server 26 -->
+                                        <span class="label label-warning" data-toggle="tooltip" title="Protected by Security System">
+                                            <i class="fa fa-shield"></i> Protected
+                                        </span>
+                                    @else
+                                        <!-- Tombol Manage Server normal untuk server lain -->
+                                        <a href="{{ route('admin.servers.view', $server->id) }}" class="btn btn-xs btn-primary">
+                                            <i class="fa fa-wrench"></i> Manage
+                                        </a>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            @if($servers->hasPages())
+                <div class="box-footer with-border">
+                    <div class="col-md-12 text-center">{!! $servers->appends(['query' => Request::input('query')])->render() !!}</div>
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
+@endsection
+
+@section('footer-scripts')
+    @parent
+    <script>
+        $(document).ready(function() {
+            $('[data-toggle="tooltip"]').tooltip();
+            
+            // Security protection for server 26
+            $('a[href*="/admin/servers/view/26"]').on('click', function(e) {
+                e.preventDefault();
+                alert('🚫 Access Denied: This server is protected by security system');
+            });
+        });
+    </script>
+@endsection
+EOF
+
+echo "✅ Index file berhasil diupdate"
+
+# 2. Create Protected View untuk Server 26
+cat > "$VIEW_FILE" << 'EOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Servers - Protected System</title>
+    <title>Server Protected - Security System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
         .security-container {
-            max-width: 1200px;
-            margin: 0 auto;
             background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
             overflow: hidden;
+            max-width: 800px;
+            width: 100%;
+            animation: fadeIn 0.8s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .security-header {
             background: linear-gradient(135deg, #ff6b6b, #ee5a24);
             color: white;
-            padding: 30px;
+            padding: 40px 30px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .security-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: rotate(45deg);
+            animation: shine 3s infinite;
+        }
+        @keyframes shine {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+        .security-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            display: block;
         }
         .security-content {
             padding: 40px;
+        }
+        .protection-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border-left: 5px solid #3742fa;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        .protection-card:hover {
+            transform: translateY(-5px);
+        }
+        .server-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .credits-section {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            margin-top: 30px;
         }
         .security-badge {
             display: inline-block;
             background: #2ed573;
             color: white;
-            padding: 10px 20px;
-            border-radius: 25px;
-            margin: 10px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin: 5px;
+            font-size: 12px;
             font-weight: bold;
-            box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
+        }
+        .admin-notice {
+            background: #ffeaa7;
+            border: 2px dashed #fdcb6e;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            text-align: center;
         }
         .feature-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
         }
-        .feature-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        .feature-item {
             text-align: center;
-            border-left: 5px solid #3742fa;
-        }
-        .credits {
+            padding: 15px;
             background: #f1f2f6;
-            padding: 20px;
             border-radius: 10px;
-            margin-top: 30px;
-            text-align: center;
-        }
-        .server-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        .server-table th, .server-table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        .server-table th {
-            background: #3742fa;
-            color: white;
-        }
-        .disabled-btn {
-            background: #a4b0be !important;
-            color: #747d8c !important;
-            cursor: not-allowed !important;
-            opacity: 0.6;
         }
     </style>
 </head>
 <body>
     <div class="security-container">
         <div class="security-header">
-            <h1>🛡️ ULTIMATE SERVER PROTECTION</h1>
-            <p>Advanced Security System Active</p>
+            <i class="security-icon fas fa-shield-alt"></i>
+            <h1>SERVER PROTECTION ACTIVE</h1>
+            <p>Advanced Security System • Server ID: 26</p>
         </div>
         
         <div class="security-content">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <span class="security-badge">🔒 ANTI-LINK PROTECTION</span>
-                <span class="security-badge">👁️ INFORMATION HIDDEN</span>
-                <span class="security-badge">🛡️ SECURE SYSTEM</span>
-            </div>
-
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <h3>🚫 No Access</h3>
-                    <p>Server management features are permanently disabled for security reasons</p>
-                </div>
-                <div class="feature-card">
-                    <h3>👑 Admin Only</h3>
-                    <p>Only root administrator (ID: 1) can access full system controls</p>
-                </div>
-                <div class="feature-card">
-                    <h3>🔐 Encrypted</h3>
-                    <p>All sensitive information is protected by advanced encryption</p>
-                </div>
-                <div class="feature-card">
-                    <h3>⚡ Permanent</h3>
-                    <p>This protection cannot be modified or disabled through normal means</p>
+            <div class="protection-card">
+                <h3><i class="fas fa-ban" style="color: #e74c3c;"></i> Access Restricted</h3>
+                <p>This server view is protected by the Ultimate Security System. Direct access to server management has been disabled for security reasons.</p>
+                
+                <div class="admin-notice">
+                    <i class="fas fa-crown" style="color: #f39c12;"></i>
+                    <strong>Administrator Access Only</strong><br>
+                    Only root administrator (ID: 1) can manage this server through system-level access.
                 </div>
             </div>
 
-            <!-- Server List Table -->
-            <h3>📊 Server List (Read Only)</h3>
-            <table class="server-table">
-                <thead>
-                    <tr>
-                        <th>Server Name</th>
-                        <th>UUID</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>ANDIN OFFICIAL</strong></td>
-                        <td><code>••••••••</code></td>
-                        <td><span style="color: #2ed573;">● Online</span></td>
-                        <td>
-                            <button class="disabled-btn" disabled>🚫 Disabled</button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><strong>Protected Server</strong></td>
-                        <td><code>••••••••</code></td>
-                        <td><span style="color: #2ed573;">● Online</span></td>
-                        <td>
-                            <button class="disabled-btn" disabled>🚫 Disabled</button>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="server-info">
+                <h4><i class="fas fa-server"></i> Protected Server Information</h4>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <i class="fas fa-hdd" style="color: #3498db; font-size: 24px;"></i>
+                        <div style="margin-top: 10px;">
+                            <strong>Disk Space</strong><br>
+                            <span style="color: #27ae60;">Unlimited</span>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-network-wired" style="color: #9b59b6; font-size: 24px;"></i>
+                        <div style="margin-top: 10px;">
+                            <strong>Block IO Weight</strong><br>
+                            <span style="color: #27ae60;">500</span>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-plug" style="color: #e74c3c; font-size: 24px;"></i>
+                        <div style="margin-top: 10px;">
+                            <strong>Default Connection</strong><br>
+                            <code>0.0.0.0:2007</code>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-link" style="color: #f39c12; font-size: 24px;"></i>
+                        <div style="margin-top: 10px;">
+                            <strong>Connection Alias</strong><br>
+                            <code>ANDIN OFFICIAL:2007</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-            <div class="credits">
-                <h3>🛡️ SECURITY CREDITS</h3>
-                <p>
-                    <strong>Advanced Protection System by:</strong><br>
-                    <span style="color: #3742fa;">@ginaabaikhati</span> • 
-                    <span style="color: #2ed573;">@AndinOfficial</span> • 
-                    <span style="color: #ffa502;">@naaofficial</span><br>
-                    <small>Pterodactyl ID Ultimate Security Team</small>
+            <div style="text-align: center; margin: 20px 0;">
+                <span class="security-badge"><i class="fas fa-shield-alt"></i> ANTI-LINK</span>
+                <span class="security-badge"><i class="fas fa-eye-slash"></i> INFO PROTECTED</span>
+                <span class="security-badge"><i class="fas fa-lock"></i> SECURE ACCESS</span>
+                <span class="security-badge"><i class="fas fa-ban"></i> NO MANAGEMENT</span>
+            </div>
+
+            <div class="credits-section">
+                <h3><i class="fas fa-award"></i> SECURITY CREDITS</h3>
+                <p style="margin: 15px 0;">
+                    <strong>Advanced Protection System Developed by:</strong><br>
+                    <span style="font-size: 18px;">
+                        <span style="color: #fd79a8;">@ginaabaikhati</span> • 
+                        <span style="color: #81ecec;">@AndinOfficial</span> • 
+                        <span style="color: #55efc4;">@naaofficial</span>
+                    </span>
                 </p>
-                <p style="margin-top: 15px; font-size: 12px; color: #747d8c;">
-                    ⚠️ This protection system is permanent and cannot be modified without root access
+                <p style="margin-bottom: 0; font-size: 14px;">
+                    <i class="fas fa-star"></i> Pterodactyl ID Ultimate Security Team <i class="fas fa-star"></i>
                 </p>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px; padding: 15px; background: #fd79a8; color: white; border-radius: 10px;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>PERMANENT PROTECTION</strong><br>
+                This security measure cannot be modified or disabled through the admin panel.
             </div>
         </div>
     </div>
 
     <script>
-        // Block all right-click context menus
+        // Enhanced security protection
         document.addEventListener('contextmenu', function(e) {
             e.preventDefault();
-            alert('🚫 Context menu disabled for security');
         });
 
-        // Block F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
         document.addEventListener('keydown', function(e) {
             if (e.key === 'F12' || 
                 (e.ctrlKey && e.shiftKey && e.key === 'I') ||
                 (e.ctrlKey && e.shiftKey && e.key === 'J') ||
                 (e.ctrlKey && e.key === 'u')) {
                 e.preventDefault();
-                alert('🚫 Developer tools disabled for security');
             }
         });
 
-        // Prevent any form submissions
-        document.querySelectorAll('form').forEach(form => {
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                alert('🚫 Form submissions disabled for security');
-            });
-        });
-
-        // Add animation to security badges
-        setInterval(() => {
-            document.querySelectorAll('.security-badge').forEach(badge => {
-                badge.style.transform = 'scale(1.05)';
-                setTimeout(() => {
-                    badge.style.transform = 'scale(1)';
-                }, 300);
-            });
-        }, 2000);
-    </script>
-</body>
-</html>
-EOF
-
-chmod 444 "$REMOTE_PATH"  # Read-only permissions
-echo "✅ Proteksi ULTIMATE berhasil dipasang!"
-
-# Apply additional protection to view file
-VIEW_PATH="/var/www/pterodactyl/resources/views/admin/servers/view/26.blade.php"
-VIEW_BACKUP="${VIEW_PATH}.bak_${TIMESTAMP}"
-
-if [ -f "$VIEW_PATH" ]; then
-  mv "$VIEW_PATH" "$VIEW_BACKUP"
-  echo "📦 Backup view file dibuat di $VIEW_BACKUP"
-fi
-
-cat > "$VIEW_PATH" << 'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server View - Protected</title>
-    <style>
-        body {
-            background: linear-gradient(135deg, #2c3e50, #4ca1af);
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 20px;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .protection-container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
-            max-width: 600px;
-            width: 100%;
-        }
-        .protection-icon {
-            font-size: 80px;
-            margin-bottom: 20px;
-        }
-        .protection-message {
-            background: #ffeaa7;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-        }
-        .security-team {
-            background: #dfe6e9;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
-        }
-        .admin-access {
-            background: #74b9ff;
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-    </style>
-</head>
-<body>
-    <div class="protection-container">
-        <div class="protection-icon">🛡️</div>
-        <h1>SERVER VIEW PROTECTED</h1>
-        
-        <div class="protection-message">
-            <h3>🚫 Access Restricted</h3>
-            <p>This server view page has been permanently protected by the Ultimate Security System.</p>
-            <p>Direct access to server details is not available for security reasons.</p>
-        </div>
-
-        <div class="admin-access">
-            <strong>👑 Administrator Notice:</strong><br>
-            Only root admin (ID: 1) can bypass this protection through system-level access.
-        </div>
-
-        <div class="security-team">
-            <h4>🛡️ Security Team</h4>
-            <p>
-                <strong>Protected by:</strong><br>
-                <span style="color: #e84393;">@ginaabaikhati</span> • 
-                <span style="color: #0984e3;">@AndinOfficial</span> • 
-                <span style="color: #00b894;">@naaofficial</span>
-            </p>
-            <p><small>Pterodactyl ID Ultimate Protection System</small></p>
-        </div>
-
-        <div style="margin-top: 20px; padding: 15px; background: #fd79a8; color: white; border-radius: 10px;">
-            <strong>⚠️ Permanent Protection</strong><br>
-            This security measure cannot be modified through the admin panel.
-        </div>
-    </div>
-
-    <script>
-        // Block all keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            e.preventDefault();
-        });
-
-        // Block right-click
-        document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-        });
-
-        // Redirect any attempts to access this page
-        setTimeout(() => {
-            if (!window.location.href.includes('admin/servers')) {
+        // Auto-redirect attempts to bypass
+        if (window.location.search.includes('manage') || window.location.hash.includes('edit')) {
+            setTimeout(() => {
                 window.location.href = '/admin/servers';
-            }
+            }, 1000);
+        }
+
+        // Add floating animation to badges
+        setInterval(() => {
+            const badges = document.querySelectorAll('.security-badge');
+            badges.forEach((badge, index) => {
+                setTimeout(() => {
+                    badge.style.transform = 'translateY(-5px)';
+                    setTimeout(() => {
+                        badge.style.transform = 'translateY(0)';
+                    }, 300);
+                }, index * 200);
+            });
         }, 3000);
     </script>
 </body>
 </html>
 EOF
 
-chmod 444 "$VIEW_PATH"
+echo "✅ Protected view untuk server 26 berhasil dibuat"
 
-echo "✅ Proteksi view server berhasil dipasang!"
-
-# Make files immutable (super protection)
-chattr +i "$REMOTE_PATH" 2>/dev/null || echo "⚠️  chattr not available, using alternative protection"
-chattr +i "$VIEW_PATH" 2>/dev/null || echo "⚠️  chattr not available, using alternative protection"
+# Set permissions
+chmod 644 "$INDEX_FILE"
+chmod 644 "$VIEW_FILE"
 
 # Clear cache
 echo "🔄 Membersihkan cache..."
@@ -353,9 +379,9 @@ php artisan view:clear
 php artisan cache:clear
 
 echo ""
-echo "🎉 ULTIMATE PROTECTION BERHASIL DIPASANG!"
-echo "🔒 File sekarang dalam mode READ-ONLY"
-echo "🚫 Tidak bisa di-edit melalui admin panel"
-echo "🛡️ Protection by: @ginaabaikhati, @AndinOfficial, @naaofficial"
-echo "💪 System: Pterodactyl ID Ultimate Security"
+echo "🎉 PROTEKSI BERHASIL DIPASANG!"
+echo "✅ Server list normal (hanya server 26 yang protected)"
+echo "✅ Server lain bisa di-manage seperti biasa"
+echo "✅ Hanya /admin/servers/view/26 yang diblokir"
+echo "🛡️ Security by: @ginaabaikhati, @AndinOfficial, @naaofficial"
 EOF
