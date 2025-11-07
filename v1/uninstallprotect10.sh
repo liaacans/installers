@@ -1,32 +1,22 @@
 #!/bin/bash
 
-echo "🛠️  Mencoba menghapus proteksi ULTIMATE..."
+echo "🛠️  Menghapus proteksi Anti Tautan Server View..."
 
 # File paths
 INDEX_FILE="/var/www/pterodactyl/resources/views/admin/servers/index.blade.php"
 VIEW_FILE="/var/www/pterodactyl/resources/views/admin/servers/view/26.blade.php"
 
-# Remove immutable attribute first
-echo "🔓 Menghapus atribut immutable..."
-chattr -i "$INDEX_FILE" 2>/dev/null || echo "ℹ️  chattr not available"
-chattr -i "$VIEW_FILE" 2>/dev/null || echo "ℹ️  chattr not available"
-
-# Restore permissions
-chmod 644 "$INDEX_FILE" 2>/dev/null || echo "⚠️  Cannot change index file permissions"
-chmod 644 "$VIEW_FILE" 2>/dev/null || echo "⚠️  Cannot change view file permissions"
-
-# Find and restore from backups
-echo "🔄 Mencari backup file..."
-
+# Find latest backups
 INDEX_BACKUP=$(ls -t "${INDEX_FILE}.bak_"* 2>/dev/null | head -n1)
 VIEW_BACKUP=$(ls -t "${VIEW_FILE}.bak_"* 2>/dev/null | head -n1)
 
+# Restore index file
 if [ -n "$INDEX_BACKUP" ]; then
-    echo "✅ Menemukan backup index: $INDEX_BACKUP"
+    echo "✅ Memulihkan index file dari backup: $INDEX_BACKUP"
     cp -f "$INDEX_BACKUP" "$INDEX_FILE"
     echo "📦 Index file berhasil dipulihkan"
 else
-    echo "❌ Backup index tidak ditemukan, membuat file default..."
+    echo "⚠️  Backup index tidak ditemukan, membuat file default..."
     # Create default index file
     cat > "$INDEX_FILE" << 'EOF'
 @extends('layouts.admin')
@@ -48,10 +38,53 @@ else
         <div class="box box-primary">
             <div class="box-header with-border">
                 <h3 class="box-title">Server List</h3>
+                <div class="box-tools search01">
+                    <form action="{{ route('admin.servers') }}" method="GET">
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="query" class="form-control pull-right" value="{{ request()->input('query') }}" placeholder="Search Servers">
+                            <div class="input-group-btn">
+                                <button type="submit" class="btn btn-default"><i class="fa fa-search"></i></button>
+                                <a href="{{ route('admin.servers.new') }}"><button type="button" class="btn btn-sm btn-primary" style="border-radius:0 3px 3px 0;margin-left:2px;">Create New</button></a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
-            <div class="box-body">
-                <p>Server list will be displayed here after protection removal.</p>
+            <div class="box-body table-responsive no-padding">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Server Name</th>
+                            <th>UUID</th>
+                            <th>Owner</th>
+                            <th>Node</th>
+                            <th>Connection</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($servers as $server)
+                            <tr class="align-middle">
+                                <td class="middle"><strong>{{ $server->name }}</strong></td>
+                                <td class="middle"><code>{{ $server->uuidShort }}</code></td>
+                                <td class="middle">{{ $server->user->username }}</td>
+                                <td class="middle">{{ $server->node->name }}</td>
+                                <td class="middle"><code>{{ $server->allocation->alias }}:{{ $server->allocation->port }}</code></td>
+                                <td class="text-center">
+                                    <a href="{{ route('admin.servers.view', $server->id) }}" class="btn btn-xs btn-primary">
+                                        <i class="fa fa-wrench"></i> Manage
+                                    </a>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
             </div>
+            @if($servers->hasPages())
+                <div class="box-footer with-border">
+                    <div class="col-md-12 text-center">{!! $servers->appends(['query' => Request::input('query')])->render() !!}</div>
+                </div>
+            @endif
         </div>
     </div>
 </div>
@@ -59,39 +92,20 @@ else
 EOF
 fi
 
+# Restore view file
 if [ -n "$VIEW_BACKUP" ]; then
-    echo "✅ Menemukan backup view: $VIEW_BACKUP"
+    echo "✅ Memulihkan view file dari backup: $VIEW_BACKUP"
     cp -f "$VIEW_BACKUP" "$VIEW_FILE"
     echo "📦 View file berhasil dipulihkan"
 else
-    echo "❌ Backup view tidak ditemukan, membuat file default..."
-    # Create default view file
-    cat > "$VIEW_FILE" << 'EOF'
-@extends('layouts.admin')
-@section('title')
-    Server View
-@endsection
-
-@section('content')
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Server Details</h3>
-            </div>
-            <div class="box-body">
-                <p>Server details will be displayed here after protection removal.</p>
-            </div>
-        </div>
-    </div>
-</div>
-@endsection
-EOF
+    echo "⚠️  Backup view tidak ditemukan, menghapus file protected..."
+    rm -f "$VIEW_FILE"
+    echo "🗑️  Protected view file dihapus"
 fi
 
 # Set proper permissions
 chmod 644 "$INDEX_FILE"
-chmod 644 "$VIEW_FILE"
+chmod 644 "$VIEW_FILE" 2>/dev/null || echo "ℹ️  View file tidak ada"
 
 # Clear cache
 echo "🔄 Membersihkan cache..."
@@ -101,12 +115,8 @@ php artisan cache:clear
 
 echo ""
 echo "🎉 UNINSTALL BERHASIL!"
-echo "✅ Proteksi ULTIMATE telah dihapus"
-echo "✅ File telah dikembalikan ke keadaan semula"
-echo "✅ Permission normal telah dipulihkan"
-echo "🔓 Sistem sekarang dapat diakses normal"
-
-# Security notice
-echo ""
-echo "⚠️  SECURITY NOTICE:"
-echo "Sistem sekarang tidak memiliki proteksi. Instal ulang proteksi jika diperlukan."
+echo "✅ Proteksi telah dihapus"
+echo "✅ Semua server sekarang dapat di-manage normal"
+echo "✅ Server 26 dapat diakses seperti biasa"
+echo "🔓 Sistem kembali normal"
+EOF
