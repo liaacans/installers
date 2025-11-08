@@ -1,2 +1,10 @@
-#fakyu
-#by@ginaabaikhati
+### INSTALL PROTECT NEW
+
+# COCOK UNTUK RUN DI BOT
+```
+USER ✓
+SERVER / VIEW ✓
+NODES ✓
+LOCATION ✓
+NESTS ✓
+```
