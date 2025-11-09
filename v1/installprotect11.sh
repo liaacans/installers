@@ -50,7 +50,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 View untuk halaman about node
+     * 🔓 View untuk halaman about node - Admin ID 1 akses normal
      */
     public function index(Request $request, $id)
     {
@@ -65,7 +65,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 View untuk halaman settings node
+     * 🔓 View untuk halaman settings node - Admin ID 1 akses normal
      */
     public function settings(Request $request, $id)
     {
@@ -80,7 +80,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 View untuk halaman configuration node
+     * 🔓 View untuk halaman configuration node - Admin ID 1 akses normal
      */
     public function configuration(Request $request, $id)
     {
@@ -94,7 +94,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 View untuk halaman allocation node
+     * 🔓 View untuk halaman allocation node - Admin ID 1 akses normal
      */
     public function allocation(Request $request, $id)
     {
@@ -109,7 +109,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 View untuk halaman servers node
+     * 🔓 View untuk halaman servers node - Admin ID 1 akses normal
      */
     public function servers(Request $request, $id)
     {
@@ -124,7 +124,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 Update settings node - hanya admin ID 1
+     * 🔓 Update settings node - hanya admin ID 1
      */
     public function updateSettings(NodeFormRequest $request, $id)
     {
@@ -136,7 +136,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 Update configuration node - hanya admin ID 1
+     * 🔓 Update configuration node - hanya admin ID 1
      */
     public function updateConfiguration(NodeFormRequest $request, $id)
     {
@@ -148,7 +148,7 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 Update allocation - hanya admin ID 1
+     * 🔓 Update allocation node - hanya admin ID 1
      */
     public function updateAllocation(Request $request, $id)
     {
@@ -159,20 +159,20 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 Delete server - hanya admin ID 1
+     * 🔓 Update servers node - hanya admin ID 1
      */
-    public function deleteServer(Request $request, $id)
+    public function updateServers(Request $request, $id)
     {
         $this->checkAdminAccess($request);
         
-        // Original server deletion logic here
+        // Original servers update logic here
         return response()->json(['status' => 'success']);
     }
 }
 ?>
 EOF
 
-# Proteksi view templates untuk admin lain
+# Juga proteksi view templates untuk admin lain
 VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view"
 mkdir -p "$VIEW_PATH"
 
@@ -185,7 +185,7 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
 @endsection
 
 @section('content-header')
-    <h1>{{ $node->name }}<small>A quick overview of your node.</small></h1>
+    <h1>{{ $node->name }}<small>Quick overview of your node.</small></h1>
     <ol class="breadcrumb">
         <li><a href="{{ route('admin.index') }}">Admin</a></li>
         <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
@@ -205,7 +205,7 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
             <div class="box box-danger">
                 <div class="box-header with-border">
                     <h3 class="box-title">
-                        <i class="fa fa-shield"></i> Security Protection Active
+                        <i class="fa fa-shield"></i> Security Protection Active - About Page
                     </h3>
                 </div>
                 <div class="box-body">
@@ -216,7 +216,7 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
                         </div>
                         <hr style="border-color: rgba(255,255,255,0.3)">
                         <p>⚠️ <strong>Unauthorized Access Detected</strong></p>
-                        <p>This node overview is restricted to System Owner only.</p>
+                        <p>This administrative section is restricted to System Owner only.</p>
                         <div class="security-details">
                             <small>Attempted by: {{ $user->name }} (ID: {{ $user->id }})</small><br>
                             <small>Timestamp: {{ now()->format('Y-m-d H:i:s') }}</small><br>
@@ -224,7 +224,7 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
                         </div>
                     </div>
                     
-                    <!-- Blurred Content Preview -->
+                    <!-- Blurred About Content Preview -->
                     <div style="filter: blur(8px); pointer-events: none; opacity: 0.6;">
                         <div class="row">
                             <div class="col-md-6">
@@ -233,7 +233,17 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
                                         <h3 class="box-title">About</h3>
                                     </div>
                                     <div class="box-body">
-                                        <p>Node information would be displayed here.</p>
+                                        <div class="row">
+                                            <div class="col-sm-12">
+                                                <div class="info-box">
+                                                    <span class="info-box-icon"><i class="fa fa-server"></i></span>
+                                                    <div class="info-box-content">
+                                                        <span class="info-box-text">Node Information</span>
+                                                        <span class="info-box-number">Hidden for security</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -244,71 +254,66 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
         </div>
     </div>
 @else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 -->
+    <!-- 🔓 ORIGINAL ABOUT CONTENT FOR ADMIN ID 1 -->
     <div class="row">
         <div class="col-xs-12">
             <div class="box box-primary">
                 <div class="box-header with-border">
                     <h3 class="box-title">About</h3>
+                    <div class="box-tools">
+                        <a href="{{ route('admin.nodes.view.settings', $node->id) }}" class="btn btn-sm btn-default">Settings</a>
+                        <a href="{{ route('admin.nodes.view.configuration', $node->id) }}" class="btn btn-sm btn-default">Configuration</a>
+                    </div>
                 </div>
                 <div class="box-body">
                     <div class="row">
                         <div class="col-sm-6">
-                            <dl>
-                                <dt>Daemon Version</dt>
-                                <dd>{{ $node->daemonVersion }}</dd>
-                                <dt>System Information</dt>
-                                <dd>{{ $node->systemInformation }}</dd>
-                                <dt>Total CPU Threads</dt>
-                                <dd>{{ $node->totalCpuThreads }}</dd>
-                            </dl>
+                            <div class="info-box">
+                                <span class="info-box-icon"><i class="fa fa-server"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Node Information</span>
+                                    <span class="info-box-number">{{ $node->name }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="info-box">
+                                <span class="info-box-icon"><i class="fa fa-microchip"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">System Information</span>
+                                    <span class="info-box-number">{{ $node->getVersionData()['version'] ?? 'N/A' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Original about content continues -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="box">
+                                <div class="box-header with-border">
+                                    <h3 class="box-title">Information</h3>
+                                </div>
+                                <div class="box-body">
+                                    <dl>
+                                        <dt>Daemon Version</dt>
+                                        <dd>{{ $node->getVersionData()['version'] ?? 'N/A' }}</dd>
+                                        
+                                        <dt>System Information</dt>
+                                        <dd>{{ $node->getVersionData()['system'] ?? 'N/A' }}</dd>
+                                        
+                                        <dt>Total CPU Threads</dt>
+                                        <dd>{{ $node->getCpuThreads() }}</dd>
+                                    </dl>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Navigation Tabs -->
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box box-secondary">
-                <div class="box-body">
-                    <ul class="nav nav-tabs">
-                        <li class="active"><a href="#about" data-toggle="tab">About</a></li>
-                        <li><a href="{{ route('admin.nodes.view.settings', $node->id) }}">Settings</a></li>
-                        <li><a href="{{ route('admin.nodes.view.configuration', $node->id) }}">Configuration</a></li>
-                        <li><a href="{{ route('admin.nodes.view.allocation', $node->id) }}">Allocation</a></li>
-                        <li><a href="{{ route('admin.nodes.view.servers', $node->id) }}">Servers</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
 @endif
-@endsection
-
-@section('footer-scripts')
-    @parent
-    <style>
-    .security-alert {
-        border-left: 5px solid #dc3545;
-        animation: pulse 2s infinite;
-    }
-    .security-header {
-        font-size: 1.2em;
-        margin-bottom: 10px;
-    }
-    .security-details {
-        margin-top: 15px;
-        opacity: 0.9;
-    }
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-        70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-    }
-    </style>
 @endsection
 EOF
 
@@ -342,7 +347,7 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
             <div class="box box-danger">
                 <div class="box-header with-border">
                     <h3 class="box-title">
-                        <i class="fa fa-shield"></i> Security Protection Active
+                        <i class="fa fa-shield"></i> Security Protection Active - Settings Page
                     </h3>
                 </div>
                 <div class="box-body">
@@ -361,7 +366,7 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
                         </div>
                     </div>
                     
-                    <!-- Blurred Content Preview -->
+                    <!-- Blurred Settings Content Preview -->
                     <div style="filter: blur(8px); pointer-events: none; opacity: 0.6;">
                         <div class="row">
                             <div class="col-sm-6">
@@ -382,7 +387,7 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
         </div>
     </div>
 @else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 -->
+    <!-- 🔓 ORIGINAL SETTINGS CONTENT FOR ADMIN ID 1 -->
     <div class="row">
         <div class="col-sm-6">
             <div class="box">
@@ -392,14 +397,18 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
                 <div class="box-body">
                     <p>Authorized access - System Owner</p>
                     <!-- Original settings form and content here -->
-                    <div class="form-group">
-                        <label for="node_name">Node Name</label>
-                        <input type="text" class="form-control" id="node_name" value="{{ $node->name }}" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="node_location">Location</label>
-                        <input type="text" class="form-control" id="node_location" value="{{ $location->short }}" readonly>
-                    </div>
+                    <form action="{{ route('admin.nodes.view.settings.update', $node->id) }}" method="POST">
+                        @csrf
+                        <div class="form-group">
+                            <label for="node_name">Node Name</label>
+                            <input type="text" class="form-control" id="node_name" name="name" value="{{ $node->name }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="node_description">Description</label>
+                            <textarea class="form-control" id="node_description" name="description">{{ $node->description }}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Settings</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -444,28 +453,33 @@ cat > "$VIEW_PATH/configuration.blade.php" << 'EOF'
         <div class="box">
             <div class="box-body">
                 <p>Configuration details are hidden for security reasons.</p>
+                <p>Daemon connection settings, security options, and advanced configuration are protected.</p>
             </div>
         </div>
     </div>
 @else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 -->
+    <!-- 🔓 ORIGINAL CONFIGURATION CONTENT FOR ADMIN ID 1 -->
     <div class="row">
-        <div class="col-xs-12">
+        <div class="col-md-12">
             <div class="box">
                 <div class="box-header with-border">
-                    <h3 class="box-title">Configuration Details</h3>
+                    <h3 class="box-title">Daemon Configuration</h3>
                 </div>
                 <div class="box-body">
                     <p>Authorized configuration access - System Owner</p>
-                    <!-- Original configuration content here -->
-                    <div class="form-group">
-                        <label>Daemon Secret Token</label>
-                        <input type="text" class="form-control" value="**********" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label>Connection Port</label>
-                        <input type="text" class="form-control" value="{{ $node->daemonListen }}" readonly>
-                    </div>
+                    <!-- Original configuration form here -->
+                    <form action="{{ route('admin.nodes.view.configuration.update', $node->id) }}" method="POST">
+                        @csrf
+                        <div class="form-group">
+                            <label for="daemon_token">Daemon Secret Token</label>
+                            <input type="text" class="form-control" id="daemon_token" name="daemon_token" value="{{ $node->daemon_token }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="daemon_port">Daemon Port</label>
+                            <input type="number" class="form-control" id="daemon_port" name="daemon_port" value="{{ $node->daemon_port }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Configuration</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -483,7 +497,7 @@ cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
 @endsection
 
 @section('content-header')
-    <h1>{{ $node->name }}<small>Manage network allocations.</small></h1>
+    <h1>{{ $node->name }}<small>Network allocation management.</small></h1>
     <ol class="breadcrumb">
         <li><a href="{{ route('admin.index') }}">Admin</a></li>
         <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
@@ -498,10 +512,11 @@ cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
 @endphp
 
 @if($user->id !== 1)
+    <!-- 🔒 SECURITY PROTECTION ACTIVATED -->
     <div class="alert alert-warning security-alert">
         <h4><i class="fa fa-exclamation-triangle"></i> Allocation Access Restricted</h4>
         <p><strong>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅</strong></p>
-        <p>Network allocation management is restricted to System Owner.</p>
+        <p>Network allocation management is restricted to System Owner only.</p>
     </div>
     
     <div style="filter: blur(5px); opacity: 0.7; pointer-events: none;">
@@ -513,22 +528,23 @@ cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
         </div>
     </div>
 @else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 -->
+    <!-- 🔓 ORIGINAL ALLOCATION CONTENT FOR ADMIN ID 1 -->
     <div class="row">
-        <div class="col-xs-12">
+        <div class="col-md-12">
             <div class="box">
                 <div class="box-header with-border">
-                    <h3 class="box-title">Allocation Management</h3>
+                    <h3 class="box-title">Network Allocations</h3>
                 </div>
                 <div class="box-body">
-                    <p>Authorized allocation access - System Owner</p>
-                    <!-- Original allocation content here -->
-                    <table class="table table-bordered">
+                    <p>Authorized allocation management - System Owner</p>
+                    <!-- Original allocation management interface -->
+                    <table class="table table-bordered table-hover">
                         <thead>
                             <tr>
                                 <th>IP Address</th>
                                 <th>Port</th>
                                 <th>Assigned</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -537,6 +553,9 @@ cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
                                 <td>{{ $allocation->ip }}</td>
                                 <td>{{ $allocation->port }}</td>
                                 <td>{{ $allocation->server_id ? 'Yes' : 'No' }}</td>
+                                <td>
+                                    <button class="btn btn-xs btn-danger">Delete</button>
+                                </td>
                             </tr>
                             @endforeach
                         </tbody>
@@ -573,10 +592,11 @@ cat > "$VIEW_PATH/servers.blade.php" << 'EOF'
 @endphp
 
 @if($user->id !== 1)
+    <!-- 🔒 SECURITY PROTECTION ACTIVATED -->
     <div class="alert alert-info security-alert">
         <h4><i class="fa fa-server"></i> Server Management Protected</h4>
         <p><strong>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅</strong></p>
-        <p>Server management is restricted to System Owner only.</p>
+        <p>Server management and monitoring is restricted to System Owner only.</p>
     </div>
     
     <div style="filter: blur(6px); opacity: 0.6; pointer-events: none;">
@@ -588,30 +608,38 @@ cat > "$VIEW_PATH/servers.blade.php" << 'EOF'
         </div>
     </div>
 @else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 -->
+    <!-- 🔓 ORIGINAL SERVERS CONTENT FOR ADMIN ID 1 -->
     <div class="row">
-        <div class="col-xs-12">
+        <div class="col-md-12">
             <div class="box">
                 <div class="box-header with-border">
-                    <h3 class="box-title">Server List</h3>
+                    <h3 class="box-title">Servers on this Node</h3>
                 </div>
                 <div class="box-body">
-                    <p>Authorized server access - System Owner</p>
-                    <!-- Original servers content here -->
-                    <table class="table table-bordered">
+                    <p>Authorized server management - System Owner</p>
+                    <!-- Original servers management interface -->
+                    <table class="table table-bordered table-hover">
                         <thead>
                             <tr>
                                 <th>Server Name</th>
                                 <th>Owner</th>
                                 <th>Status</th>
+                                <th>CPU</th>
+                                <th>Memory</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($servers as $server)
                             <tr>
                                 <td>{{ $server->name }}</td>
-                                <td>{{ $server->user->username }}</td>
+                                <td>{{ $server->user->name ?? 'N/A' }}</td>
                                 <td><span class="label label-success">Running</span></td>
+                                <td>0%</td>
+                                <td>0 MB</td>
+                                <td>
+                                    <a href="{{ route('admin.servers.view', $server->id) }}" class="btn btn-xs btn-primary">View</a>
+                                </td>
                             </tr>
                             @endforeach
                         </tbody>
@@ -630,13 +658,13 @@ chmod -R 755 "/var/www/pterodactyl/resources/views/admin/nodes/view"
 # Clear cache
 echo "🧹 Membersihkan cache..."
 cd /var/www/pterodactyl
-php artisan view:clear > /dev/null 2>&1
-php artisan cache:clear > /dev/null 2>&1
+php artisan view:clear 2>/dev/null || echo "⚠️ Gagal clear view cache"
+php artisan cache:clear 2>/dev/null || echo "⚠️ Gagal clear cache"
 
 echo "✅ Proteksi Anti Akses Admin Node View berhasil dipasang!"
 echo "📂 Lokasi controller: $REMOTE_PATH"
 echo "📂 Lokasi views: $VIEW_PATH"
 echo "🗂️ Backup file lama: $BACKUP_PATH"
 echo "🔓 Admin ID 1: Akses NORMAL ke semua tabel (About, Settings, Configuration, Allocation, Servers)"
-echo "🔒 Admin Lain: Diblokir dengan efek security + blur content"
+echo "🔒 Admin Lain: Diblokir dengan efek security di semua halaman"
 echo "🎨 Efek security: Blur content + Alert protection + Animation"
