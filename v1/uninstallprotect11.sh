@@ -40,8 +40,15 @@ done
 
 # Remove middleware dari Kernel
 KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
-if [ -f "$KERNEL_PATH" ]; then
-    sed -i "/'node.access' =>.*CheckNodeAccess::class,/d" "$KERNEL_PATH"
+KERNEL_BACKUP="${KERNEL_PATH}.bak_*"
+LATEST_KERNEL_BACKUP=$(ls -t $KERNEL_BACKUP 2>/dev/null | head -n1)
+
+if [ -n "$LATEST_KERNEL_BACKUP" ]; then
+    mv "$LATEST_KERNEL_BACKUP" "$KERNEL_PATH"
+    echo "🔧 Kernel berhasil di-restore dari backup"
+else
+    # Hapus manual jika tidak ada backup
+    sed -i "/'node.access' =>.*CheckNodeAccess::class,/d" "$KERNEL_PATH" 2>/dev/null
     echo "🔧 Middleware dihapus dari Kernel"
 fi
 
@@ -49,9 +56,15 @@ fi
 ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
 ROUTES_BACKUP_PATTERN="${ROUTES_PATH}.bak_*"
 LATEST_ROUTES_BACKUP=$(ls -t $ROUTES_BACKUP_PATTERN 2>/dev/null | head -n1)
+
 if [ -n "$LATEST_ROUTES_BACKUP" ]; then
     mv "$LATEST_ROUTES_BACKUP" "$ROUTES_PATH"
     echo "🔄 Routes berhasil di-restore"
+else
+    # Hapus manual middleware dari routes
+    sed -i "/'middleware' => 'node.access'/d" "$ROUTES_PATH" 2>/dev/null
+    sed -i "/Route::group(\[.*node\.access.*\], function () {/d" "$ROUTES_PATH" 2>/dev/null
+    echo "🔄 Middleware dihapus dari Routes"
 fi
 
 # Clear semua cache
