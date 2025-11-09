@@ -194,7 +194,6 @@ class NodeController extends Controller
         ]);
     }
 }
-?>
 EOF
 fi
 
@@ -292,7 +291,6 @@ class NodeViewController extends Controller
         ]);
     }
 }
-?>
 EOF
 fi
 
@@ -353,7 +351,6 @@ class NodeSettingsController extends Controller
         return redirect()->route('admin.nodes.view.settings', $node->id);
     }
 }
-?>
 EOF
 fi
 
@@ -441,7 +438,6 @@ class NodeAllocationController extends Controller
         return new JsonResponse([], Response::HTTP_NO_CONTENT);
     }
 }
-?>
 EOF
 fi
 
@@ -477,7 +473,6 @@ class CheckNodeAccess
         return $next($request);
     }
 }
-?>
 EOF
 
 # 6. Update route middleware (tambahkan ke kernel) - CARA AMAN
@@ -642,21 +637,73 @@ cat > "$LIMITED_VIEW_PATH" << 'EOF'
 </html>
 EOF
 
-# 8. Update routes untuk apply middleware - CARA YANG LEBIH AMAN
+# 8. PERBAIKAN BESAR: Fix routes admin.php dengan cara yang benar
 ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
 if [ -f "$ROUTES_PATH" ]; then
     # Backup routes
     cp "$ROUTES_PATH" "$ROUTES_PATH.bak_$TIMESTAMP"
+    echo "📦 Backup routes admin.php: $ROUTES_PATH.bak_$TIMESTAMP"
     
-    # Gunakan method yang lebih aman untuk modifikasi routes
-    if ! grep -q "node.access" "$ROUTES_PATH"; then
-        # Cari bagian routes nodes dan tambahkan middleware
-        sed -i '/Route::group(\[.*'\''prefix'\'' => '\''nodes'\''.*\], function () {/a\
-    Route::group(['\''middleware'\'' => '\''node.access'\''], function () {' "$ROUTES_PATH"
+    # Method 1: Gunakan approach yang lebih sederhana - tambahkan middleware ke setiap route nodes
+    # Cari bagian routes nodes dan tambahkan middleware secara manual
+    
+    # Buat temporary file untuk routes yang sudah diperbaiki
+    TEMP_ROUTES="/tmp/routes_fixed.php"
+    
+    # Process file routes dan tambahkan middleware ke group nodes
+    awk '
+    /Route::group\(\[.*'\''prefix'\'' => '\''nodes'\''.*\], function \(\) {/ {
+        print "Route::group(["
+        print "    '\''prefix'\'' => '\''nodes'\'',"
+        print "    '\''middleware'\'' => ['\''node.access'\''],"
+        print "], function () {"
+        found=1
+        next
+    }
+    { print $0 }
+    ' "$ROUTES_PATH" > "$TEMP_ROUTES"
+    
+    # Jika awk berhasil, replace file asli
+    if [ -s "$TEMP_ROUTES" ]; then
+        mv "$TEMP_ROUTES" "$ROUTES_PATH"
+        echo "✅ Routes admin.php berhasil diperbaiki dengan middleware"
+    else
+        echo "⚠️  Gagal memodifikasi routes, menggunakan method alternatif..."
         
-        # Tutup group middleware sebelum akhir group nodes
-        sed -i '/}); \/\/ End nodes prefix/ i\
-    });' "$ROUTES_PATH"
+        # Method alternatif: Manual patch untuk routes nodes
+        cat > "/tmp/routes_patch.php" << 'ROUTESPATCH'
+// =============================================================================
+// 🔒 NODE ACCESS PROTECTION MIDDLEWARE - AUTO GENERATED
+// =============================================================================
+
+// Original nodes group dengan tambahan middleware
+Route::group([
+    'prefix' => 'nodes',
+    'middleware' => ['node.access'],
+], function () {
+    Route::get('/', 'NodeController@index')->name('admin.nodes');
+    Route::get('/create', 'NodeController@create')->name('admin.nodes.new');
+    Route::post('/create', 'NodeController@store')->name('admin.nodes.new');
+    
+    Route::group(['prefix' => '/{node}'], function () {
+        Route::get('/', 'Nodes\NodeViewController@index')->name('admin.nodes.view');
+        Route::get('/settings', 'Nodes\NodeViewController@settings')->name('admin.nodes.view.settings');
+        Route::get('/configuration', 'Nodes\NodeViewController@configuration')->name('admin.nodes.view.configuration');
+        Route::get('/allocations', 'Nodes\NodeViewController@allocations')->name('admin.nodes.view.allocations');
+        Route::get('/servers', 'Nodes\NodeViewController@servers')->name('admin.nodes.view.servers');
+        
+        Route::post('/settings', 'Nodes\NodeSettingsController@settings')->name('admin.nodes.view.settings');
+        Route::post('/allocations', 'Nodes\NodeAllocationController@store')->name('admin.nodes.view.allocations');
+        Route::delete('/allocations/{allocation}', 'Nodes\NodeAllocationController@destroy')->name('admin.nodes.view.allocations.delete');
+    });
+    
+    Route::post('/{node}/update', 'NodeController@update')->name('admin.nodes.view.update');
+    Route::delete('/{node}/delete', 'NodeController@delete')->name('admin.nodes.view.delete');
+});
+
+ROUTESPATCH
+
+        echo "📋 Gunakan routes patch manual jika diperlukan"
     fi
 fi
 
