@@ -7,7 +7,7 @@ BACKUP_DIR="/var/www/pterodactyl/backups"
 mkdir -p "$BACKUP_DIR"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
 
-# Create custom middleware
+# Create custom middleware (FIXED VERSION)
 MIDDLEWARE_PATH="/var/www/pterodactyl/app/Http/Middleware/CheckNodeAccess.php"
 cat > "$MIDDLEWARE_PATH" << 'EOF'
 <?php
@@ -34,12 +34,15 @@ class CheckNodeAccess
         // Check if this is a nodes related route
         $path = $request->path();
         if (str_contains($path, 'admin/nodes')) {
-            $nodeId = $request->route('node');
-            $tab = $request->route('tab', 'index');
-            
-            // Allow only index tab for non-admin users
-            if ($tab !== 'index') {
-                abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall');
+            // Get the current route
+            $route = $request->route();
+            if ($route) {
+                $tab = $route->parameter('tab', 'index');
+                
+                // Allow only index tab for non-admin users
+                if ($tab !== 'index' && $tab !== null) {
+                    abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall');
+                }
             }
         }
 
@@ -51,16 +54,16 @@ EOF
 chmod 644 "$MIDDLEWARE_PATH"
 echo "✅ Custom middleware created: $MIDDLEWARE_PATH"
 
-# Register middleware in Kernel
+# Register middleware in Kernel (FIXED VERSION)
 KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
 if [ -f "$KERNEL_PATH" ]; then
     if ! grep -q "CheckNodeAccess" "$KERNEL_PATH"; then
         # Backup original kernel
         cp "$KERNEL_PATH" "$BACKUP_DIR/Kernel.php.bak_$TIMESTAMP"
         
-        # Add to routeMiddleware array
-        sed -i "/protected \$routeMiddleware = \[/a \
-        'node.access' => \\\\Pterodactyl\\\\Http\\\\Middleware\\\\CheckNodeAccess::class," "$KERNEL_PATH"
+        # Add to routeMiddleware array - FIXED SYNTAX
+        sed -i '/protected \$routeMiddleware = \[/a\
+        '\''node.access'\'' => \Pterodactyl\Http\Middleware\CheckNodeAccess::class,' "$KERNEL_PATH"
         
         echo "✅ Middleware registered in Kernel"
     else
@@ -68,23 +71,32 @@ if [ -f "$KERNEL_PATH" ]; then
     fi
 fi
 
-# Apply middleware to nodes routes
+# Apply middleware to nodes routes (SIMPLIFIED VERSION)
 ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
 if [ -f "$ROUTES_PATH" ]; then
-    if ! grep -q "node.access" "$ROUTES_PATH"; then
-        # Backup original routes
-        cp "$ROUTES_PATH" "$BACKUP_DIR/admin_routes.php.bak_$TIMESTAMP"
-        
-        # Apply middleware to nodes group
-        sed -i '/Route::prefix(\x27nodes\x27)->group/,/});/{
-            /Route::prefix(\x27nodes\x27)->group/a \
-    ->middleware([\x27node.access\x27]);
-        }' "$ROUTES_PATH"
-        
-        echo "✅ Middleware applied to nodes routes"
-    else
-        echo "⚠️ Middleware already applied to routes"
-    fi
+    # Create modified routes file
+    MODIFIED_ROUTES="/tmp/admin_routes_modified.php"
+    
+    # Process the routes file to add middleware
+    awk '
+    /Route::prefix\('\''nodes'\''\)->group/ {
+        print $0
+        getline
+        if (!/->middleware/) {
+            print "    ->middleware(['\''node.access'\'']);"
+        }
+        print
+        next
+    }
+    { print }
+    ' "$ROUTES_PATH" > "$MODIFIED_ROUTES"
+    
+    # Backup original and replace
+    cp "$ROUTES_PATH" "$BACKUP_DIR/admin_routes.php.bak_$TIMESTAMP"
+    cp "$MODIFIED_ROUTES" "$ROUTES_PATH"
+    rm "$MODIFIED_ROUTES"
+    
+    echo "✅ Middleware applied to nodes routes"
 fi
 
 # Create security CSS
@@ -175,29 +187,47 @@ echo "✅ Security Panel CSS created!"
 LAYOUT_PATH="/var/www/pterodactyl/resources/views/layouts/admin.blade.php"
 if [ -f "$LAYOUT_PATH" ]; then
     if ! grep -q "security-panel.css" "$LAYOUT_PATH"; then
-        sed -i '/<\/head>/i <link rel="stylesheet" href="{{ asset(\"/themes/pterodactyl/css/security-panel.css\") }}">' "$LAYOUT_PATH"
+        sed -i '/<\/head>/i\
+    <link rel="stylesheet" href="{{ asset(\"/themes/pterodactyl/css/security-panel.css\") }}">' "$LAYOUT_PATH"
         echo "✅ Security CSS added to admin layout!"
     fi
 fi
 
-# Modify the nodes index view to show security tabs
-NODES_VIEW_DIR="/var/www/pterodactyl/resources/views/admin/nodes/view"
-mkdir -p "$NODES_VIEW_DIR"
+# Create a simple view composer instead of blade directive
+COMPOSER_PATH="/var/www/pterodactyl/app/Http/View/Composers/NodeComposer.php"
+mkdir -p "$(dirname "$COMPOSER_PATH")"
 
-# Create a simple blade extension to check access
-BLADE_EXT_PATH="/var/www/pterodactyl/app/Providers/AppServiceProvider.php"
-if [ -f "$BLADE_EXT_PATH" ]; then
-    if ! grep -q "canAccessNodes" "$BLADE_EXT_PATH"; then
-        # Backup original
-        cp "$BLADE_EXT_PATH" "$BACKUP_DIR/AppServiceProvider.php.bak_$TIMESTAMP"
+cat > "$COMPOSER_PATH" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\View\Composers;
+
+use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
+
+class NodeComposer
+{
+    public function compose(View $view)
+    {
+        $view->with('canAccessNodes', Auth::check() && Auth::user()->id === 1);
+    }
+}
+EOF
+
+chmod 644 "$COMPOSER_PATH"
+echo "✅ View composer created"
+
+# Register view composer
+COMPOSER_PROVIDER_PATH="/var/www/pterodactyl/app/Providers/ViewServiceProvider.php"
+if [ -f "$COMPOSER_PROVIDER_PATH" ]; then
+    if ! grep -q "NodeComposer" "$COMPOSER_PROVIDER_PATH"; then
+        cp "$COMPOSER_PROVIDER_PATH" "$BACKUP_DIR/ViewServiceProvider.php.bak_$TIMESTAMP"
         
-        # Add blade directive
-        sed -i '/public function boot()/a \
-        \\\\Blade::if(\x27canAccessNodes\x27, function () { \
-            return \\\\Auth::check() && \\\\Auth::user()->id === 1; \
-        });' "$BLADE_EXT_PATH"
+        # Add composer registration
+        sed -i '/public function boot()/a\
+    \\n    view()->composer('\''admin.nodes.*'\'', \\Pterodactyl\\Http\\View\\Composers\\NodeComposer::class);' "$COMPOSER_PROVIDER_PATH"
         
-        echo "✅ Blade directive added"
+        echo "✅ View composer registered"
     fi
 fi
 
@@ -207,6 +237,14 @@ php /var/www/pterodactyl/artisan view:clear
 php /var/www/pterodactyl/artisan cache:clear
 php /var/www/pterodactyl/artisan config:clear
 php /var/www/pterodactyl/artisan route:clear
+
+# Test PHP syntax
+echo "🔍 Testing PHP syntax..."
+php -l "$MIDDLEWARE_PATH"
+php -l "$COMPOSER_PATH"
+if [ -f "$COMPOSER_PROVIDER_PATH" ]; then
+    php -l "$COMPOSER_PROVIDER_PATH"
+fi
 
 echo ""
 echo "🎉 Proteksi Admin Nodes Security Panel berhasil dipasang!"
