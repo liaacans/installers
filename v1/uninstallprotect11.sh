@@ -1,153 +1,144 @@
 #!/bin/bash
 
-echo "🗑️ Menghapus proteksi Admin Nodes Security Panel..."
+REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/NodesViewController.php"
+BACKUP_PATTERN="/var/www/pterodactyl/app/Http/Controllers/Admin/NodesViewController.php.bak_*"
 
-BACKUP_DIR="/var/www/pterodactyl/backups"
-TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+echo "🗑️ Menghapus proteksi Security Panel Admin Nodes View..."
 
-# Remove middleware file
-MIDDLEWARE_PATH="/var/www/pterodactyl/app/Http/Middleware/CheckNodeAccess.php"
-if [ -f "$MIDDLEWARE_PATH" ]; then
-    rm -f "$MIDDLEWARE_PATH"
-    echo "✅ Middleware file removed: $MIDDLEWARE_PATH"
-fi
+# Cari backup file terbaru
+LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
 
-# Restore original Kernel from backup
-KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
-KERNEL_BACKUP=$(ls -t "$BACKUP_DIR"/Kernel.php.bak_* 2>/dev/null | head -n1)
-if [ -n "$KERNEL_BACKUP" ]; then
-    cp "$KERNEL_BACKUP" "$KERNEL_PATH"
-    echo "✅ Kernel restored from backup: $KERNEL_BACKUP"
+if [ -n "$LATEST_BACKUP" ]; then
+    mv "$LATEST_BACKUP" "$REMOTE_PATH"
+    echo "✅ Backup berhasil dikembalikan: $LATEST_BACKUP"
 else
-    echo "⚠️ No Kernel backup found, creating fresh Kernel..."
-    # Create fresh Kernel file
-    cat > "$KERNEL_PATH" << 'KERNELEOF'
+    echo "⚠️ Tidak ada backup ditemukan, membuat file baru..."
+    
+    cat > "$REMOTE_PATH" << 'EOF'
 <?php
 
-namespace Pterodactyl\Http;
+namespace Pterodactyl\Http\Controllers\Admin;
 
-use Illuminate\Foundation\Http\Kernel as HttpKernel;
+use Illuminate\Http\Request;
+use Pterodactyl\Models\Node;
+use Pterodactyl\Models\User;
+use Illuminate\Http\JsonResponse;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Repositories\Wings\DaemonServerRepository;
+use Pterodactyl\Services\Nodes\NodeUpdateService;
+use Pterodactyl\Services\Nodes\NodeCreationService;
+use Pterodactyl\Services\Nodes\NodeDeletionService;
+use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
+use Pterodactyl\Http\Requests\Admin\Node\NodeFormRequest;
+use Pterodactyl\Http\Requests\Admin\Node\AllocationFormRequest;
 
-class Kernel extends HttpKernel
+class NodesViewController extends Controller
 {
-    /**
-     * The application's global HTTP middleware stack.
-     */
-    protected $middleware = [
-        \Pterodactyl\Http\Middleware\MaintenanceMiddleware::class,
-        \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
-        \Pterodactyl\Http\Middleware\TrimStrings::class,
-        \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
-        \Pterodactyl\Http\Middleware\TrustProxies::class,
-    ];
+    public function __construct(
+        protected NodeRepositoryInterface $repository,
+        protected NodeCreationService $creationService,
+        protected NodeUpdateService $updateService,
+        protected NodeDeletionService $deletionService,
+        protected DaemonServerRepository $serverRepository
+    ) {}
 
-    /**
-     * The application's route middleware groups.
-     */
-    protected $middlewareGroups = [
-        'web' => [
-            \Pterodactyl\Http\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
-            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-            \Pterodactyl\Http\Middleware\VerifyCsrfToken::class,
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \Pterodactyl\Http\Middleware\LanguageMiddleware::class,
-        ],
-        'api' => [
-            'throttle:60,1',
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \Pterodactyl\Http\Middleware\Api\SetSessionDriver::class,
-        ],
-        'client-api' => [
-            \Pterodactyl\Http\Middleware\Api\AuthenticateIPAccess::class,
-            'throttle:60,1',
-            \Pterodactyl\Http\Middleware\Api\AuthenticateKey::class,
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        ],
-        'daemon' => [
-            'throttle:60,1',
-            \Pterodactyl\Http\Middleware\Daemon\DaemonAuthenticate::class,
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        ],
-    ];
+    public function index(Request $request)
+    {
+        $nodes = $this->repository->getAllNodesWithServers();
 
-    /**
-     * The application's route middleware.
-     */
-    protected $routeMiddleware = [
-        'auth' => \Pterodactyl\Http\Middleware\Authenticate::class,
-        'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
-        'bindings' => \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        'can' => \Illuminate\Auth\Middleware\Authorize::class,
-        'guest' => \Pterodactyl\Http\Middleware\RedirectIfAuthenticated::class,
-        'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
-    ];
+        return view('admin.nodes.index', [
+            'nodes' => $nodes,
+        ]);
+    }
 
-    /**
-     * The priority-sorted list of middleware.
-     */
-    protected $middlewarePriority = [
-        \Pterodactyl\Http\Middleware\MaintenanceMiddleware::class,
-        \Illuminate\Session\Middleware\StartSession::class,
-        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-        \Pterodactyl\Http\Middleware\Authenticate::class,
-        \Illuminate\Routing\Middleware\ThrottleRequests::class,
-        \Illuminate\Session\Middleware\AuthenticateSession::class,
-        \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        \Illuminate\Auth\Middleware\Authorize::class,
-    ];
+    public function view(Request $request, Node $node)
+    {
+        $allocations = $node->allocations()->with('server')->get();
+        $servers = $node->servers;
+
+        return view('admin.nodes.view', [
+            'node' => $node,
+            'allocations' => $allocations,
+            'servers' => $servers,
+        ]);
+    }
+
+    public function update(NodeFormRequest $request, Node $node)
+    {
+        $this->updateService->handle($node, $request->validated());
+
+        return redirect()->route('admin.nodes.view', $node->id)
+            ->with('success', 'Node berhasil diperbarui');
+    }
+
+    public function create()
+    {
+        return view('admin.nodes.create');
+    }
+
+    public function store(NodeFormRequest $request)
+    {
+        $node = $this->creationService->handle($request->validated());
+
+        return redirect()->route('admin.nodes.view', $node->id)
+            ->with('success', 'Node berhasil dibuat');
+    }
+
+    public function delete(Request $request, Node $node)
+    {
+        $this->deletionService->handle($node);
+
+        return redirect()->route('admin.nodes')
+            ->with('success', 'Node berhasil dihapus');
+    }
+
+    public function allocation(AllocationFormRequest $request, Node $node)
+    {
+        $this->updateService->handle($node, $request->validated());
+
+        return redirect()->route('admin.nodes.view', $node->id)
+            ->with('success', 'Alokasi berhasil diperbarui');
+    }
+
+    public function configuration(Request $request, Node $node)
+    {
+        return response()->json([
+            'config' => $node->getConfiguration(),
+        ]);
+    }
 }
 ?>
-KERNELEOF
-    echo "✅ Fresh Kernel created"
+EOF
 fi
 
-# Restore original routes from backup
-ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
-ROUTES_BACKUP=$(ls -t "$BACKUP_DIR"/admin_routes.php.bak_* 2>/dev/null | head -n1)
-if [ -n "$ROUTES_BACKUP" ]; then
-    cp "$ROUTES_BACKUP" "$ROUTES_PATH"
-    echo "✅ Routes restored from backup: $ROUTES_BACKUP"
-else
-    echo "⚠️ No routes backup found, perlu restore manual routes admin.php"
-fi
+# Kembalikan view template
+VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view.blade.php"
+VIEW_BACKUP_PATTERN="/var/www/pterodactyl/resources/views/admin/nodes/view.blade.php.bak_*"
 
-# Restore original layout from backup
-LAYOUT_PATH="/var/www/pterodactyl/resources/views/layouts/admin.blade.php"
-LAYOUT_BACKUP=$(ls -t "$BACKUP_DIR"/admin_layout.blade.php.bak_* 2>/dev/null | head -n1)
-if [ -n "$LAYOUT_BACKUP" ]; then
-    cp "$LAYOUT_BACKUP" "$LAYOUT_PATH"
-    echo "✅ Layout restored from backup: $LAYOUT_BACKUP"
+LATEST_VIEW_BACKUP=$(ls -t $VIEW_BACKUP_PATTERN 2>/dev/null | head -n1)
+
+if [ -n "$LATEST_VIEW_BACKUP" ]; then
+    mv "$LATEST_VIEW_BACKUP" "$VIEW_PATH"
+    echo "✅ View template berhasil dikembalikan: $LATEST_VIEW_BACKUP"
 else
-    # Remove CSS from layout manually
-    if [ -f "$LAYOUT_PATH" ]; then
-        sed -i '/security-panel.css/d' "$LAYOUT_PATH"
-        echo "✅ CSS reference removed from layout"
+    # Hapus security code dari view template jika ada
+    if [ -f "$VIEW_PATH" ]; then
+        sed -i '/@if(auth()->check() && auth()->user()->id !== 1 && \$node->id == 1)/d' "$VIEW_PATH"
+        sed -i '/security-overlay/d' "$VIEW_PATH"
+        sed -i '/security-panel-view/d' "$VIEW_PATH"
+        sed -i '/SECURITY RESTRICTION/d' "$VIEW_PATH"
+        sed -i '/Akses ditolak, protect by @naaofficiall/d' "$VIEW_PATH"
+        echo "✅ Security code di view template telah dihapus"
     fi
 fi
 
-# Remove security CSS
-SECURITY_CSS_PATH="/var/www/pterodactyl/public/themes/pterodactyl/css/security-panel.css"
-if [ -f "$SECURITY_CSS_PATH" ]; then
-    rm -f "$SECURITY_CSS_PATH"
-    echo "✅ Security CSS removed"
-fi
+chmod 644 "$REMOTE_PATH"
 
-# Clear all caches
-echo "🔄 Clearing all caches..."
-php /var/www/pterodactyl/artisan view:clear
-php /var/www/pterodactyl/artisan cache:clear
-php /var/www/pterodactyl/artisan config:clear
-php /var/www/pterodactyl/artisan route:clear
+# Clear cache
+cd /var/www/pterodactyl
+php artisan cache:clear
+php artisan view:clear
 
-# Test PHP syntax
-echo "🔍 Testing PHP syntax..."
-php -l "$KERNEL_PATH"
-php -l "$ROUTES_PATH"
-
-echo ""
-echo "♻️ Uninstall proteksi nodes selesai!"
-echo "🔓 Semua fitur nodes sekarang dapat diakses normal oleh semua admin"
-echo "📁 Backup files tersimpan di: $BACKUP_DIR"
-echo "✅ Semua file sudah di-restore ke original"
+echo "✅ Proteksi Security Panel berhasil dihapus!"
+echo "🔓 Semua admin sekarang bisa mengakses semua nodes"
+echo "🔄 Cache telah dibersihkan"
