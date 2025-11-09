@@ -30,6 +30,8 @@ for view_file in "${VIEW_FILES[@]}"; do
     if [ -f "$VIEW_PATH/$view_file" ]; then
         rm "$VIEW_PATH/$view_file"
         echo "✅ View file dihapus: $view_file"
+    else
+        echo "ℹ️  View file tidak ditemukan: $view_file"
     fi
 done
 
@@ -42,4 +44,4 @@ php artisan route:clear 2>/dev/null || echo "⚠️ Gagal clear route cache"
 
 echo "🎉 Uninstall proteksi berhasil diselesaikan!"
 echo "🔓 Semua admin sekarang bisa mengakses halaman nodes view normal"
-echo "💡 Semua tabel (About, Settings, Configuration, Allocation, Servers) terbuka untuk semua admin"
+echo "💡 Jangan lupa restart worker queue jika diperlukan: php artisan queue:restart"
