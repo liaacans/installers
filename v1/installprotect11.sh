@@ -13,8 +13,34 @@ declare -A FILES=(
     ["NodeAllocationController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeAllocationController.php"
 )
 
-# Fungsi untuk cek akses admin
-CHECK_ACCESS_FUNCTION='
+# 1. Proteksi NodeController utama
+if [ -f "${FILES[NodeController]}" ]; then
+    BACKUP_PATH="${FILES[NodeController]}.bak_${TIMESTAMP}"
+    cp "${FILES[NodeController]}" "$BACKUP_PATH"
+    echo "📦 Backup NodeController: $BACKUP_PATH"
+    
+    # Buat file NodeController yang sudah diproteksi
+    cat > "${FILES[NodeController]}" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
+use Pterodactyl\Http\Requests\Admin\Node\NodeFormRequest;
+use Pterodactyl\Models\Node;
+
+class NodeController extends Controller
+{
+    public function __construct(
+        protected AlertsMessageBag $alert,
+        protected NodeRepositoryInterface $repository
+    ) {
+    }
+
     /**
      * 🔒 Fungsi tambahan: Cek akses admin untuk node.
      */
@@ -30,24 +56,145 @@ CHECK_ACCESS_FUNCTION='
         // Admin lain ditolak dengan efek security
         abort(403, "𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅");
     }
-'
 
-# 1. Proteksi NodeController utama
-if [ -f "${FILES[NodeController]}" ]; then
-    BACKUP_PATH="${FILES[NodeController]}.bak_${TIMESTAMP}"
-    cp "${FILES[NodeController]}" "$BACKUP_PATH"
-    echo "📦 Backup NodeController: $BACKUP_PATH"
-    
-    # Tambahkan checkAdminAccess di NodeController
-    sed -i '/class NodeController extends Controller/{:a;n;/^}$/!ba;i\'"$CHECK_ACCESS_FUNCTION" ${FILES[NodeController]}
-    
-    # Tambahkan pemanggilan checkAdminAccess di setiap method public
-    sed -i '/public function [a-zA-Z_0-9]*\([^)]*\)[^{]*{/ {
-        /public function __construct/! {
-            a\
+    /**
+     * Display node index page.
+     */
+    public function index(): View
+    {
         $this->checkAdminAccess();
+        
+        return view('admin.nodes.index', [
+            'nodes' => $this->repository->getAllWithDetails(),
+        ]);
+    }
+
+    /**
+     * Display node create page.
+     */
+    public function create(): View
+    {
+        $this->checkAdminAccess();
+        
+        return view('admin.nodes.view');
+    }
+
+    /**
+     * Display node view page.
+     */
+    public function view(int $id, string $section = 'settings'): View
+    {
+        $this->checkAdminAccess();
+        
+        $node = $this->repository->find($id);
+        
+        // Blur atau sembunyikan data sensitif untuk admin selain ID 1
+        $user = auth()->user();
+        if ($user->id !== 1) {
+            // Data yang dibatasi untuk admin lain
+            $limitedData = [
+                'node' => $node,
+                'isLimited' => true,
+                'section' => $section,
+            ];
+            
+            return view('admin.nodes.view-limited', $limitedData);
         }
-    }' ${FILES[NodeController]}
+
+        return view('admin.nodes.view', [
+            'node' => $node,
+            'section' => $section,
+            'isLimited' => false,
+        ]);
+    }
+
+    /**
+     * Handle node creation.
+     */
+    public function store(NodeFormRequest $request): RedirectResponse
+    {
+        $this->checkAdminAccess();
+        
+        $node = $this->repository->create($request->validated());
+
+        $this->alert->success('Node was successfully created.')->flash();
+
+        return redirect()->route('admin.nodes.view', $node->id);
+    }
+
+    /**
+     * Handle node update.
+     */
+    public function update(NodeFormRequest $request, int $id): RedirectResponse
+    {
+        $this->checkAdminAccess();
+        
+        $this->repository->update($id, $request->validated());
+
+        $this->alert->success('Node was successfully updated.')->flash();
+
+        return redirect()->route('admin.nodes.view', $id)->withInput();
+    }
+
+    /**
+     * Handle node deletion.
+     */
+    public function delete(int $id): RedirectResponse
+    {
+        $this->checkAdminAccess();
+        
+        $this->repository->delete($id);
+
+        $this->alert->success('Node was successfully deleted.')->flash();
+
+        return redirect()->route('admin.nodes');
+    }
+
+    /**
+     * Get allocations for a specific node.
+     */
+    public function allocations(int $id): View
+    {
+        $this->checkAdminAccess();
+        
+        $node = $this->repository->find($id);
+
+        return view('admin.nodes.allocation', [
+            'node' => $node,
+            'allocations' => $node->allocations,
+        ]);
+    }
+
+    /**
+     * Get servers for a specific node.
+     */
+    public function servers(int $id): View
+    {
+        $this->checkAdminAccess();
+        
+        $node = $this->repository->find($id);
+
+        return view('admin.nodes.servers', [
+            'node' => $node,
+            'servers' => $node->servers,
+        ]);
+    }
+
+    /**
+     * Get configuration for a specific node.
+     */
+    public function configuration(int $id): View
+    {
+        $this->checkAdminAccess();
+        
+        $node = $this->repository->find($id);
+
+        return view('admin.nodes.configuration', [
+            'node' => $node,
+        ]);
+    }
+}
+EOF
 fi
 
 # 2. Proteksi NodeViewController
@@ -144,7 +291,6 @@ class NodeViewController extends Controller
         ]);
     }
 }
-?>
 EOF
 fi
 
@@ -205,7 +351,6 @@ class NodeSettingsController extends Controller
         return redirect()->route('admin.nodes.view.settings', $node->id);
     }
 }
-?>
 EOF
 fi
 
@@ -293,7 +438,6 @@ class NodeAllocationController extends Controller
         return new JsonResponse([], Response::HTTP_NO_CONTENT);
     }
 }
-?>
 EOF
 fi
 
@@ -329,17 +473,34 @@ class CheckNodeAccess
         return $next($request);
     }
 }
-?>
 EOF
 
-# 6. Update route middleware (tambahkan ke kernel)
+# 6. Update route middleware (tambahkan ke kernel) - CARA AMAN
 KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
 if grep -q "CheckNodeAccess" "$KERNEL_PATH"; then
     echo "✅ Middleware sudah ada di Kernel"
 else
-    # Tambahkan ke routeMiddleware
-    sed -i "/protected \$routeMiddleware = \[/a\
-        'node.access' => \\\\Pterodactyl\\\\Http\\\\Middleware\\\\CheckNodeAccess::class," $KERNEL_PATH
+    # Backup kernel
+    cp "$KERNEL_PATH" "$KERNEL_PATH.bak_$TIMESTAMP"
+    
+    # Tambahkan middleware dengan cara yang aman
+    TEMP_KERNEL="/tmp/kernel_temp.php"
+    awk '
+    /protected \$routeMiddleware = \[/ {
+        print $0
+        found=1
+        next
+    }
+    found && /\]/ && !added {
+        print "        '\''node.access'\'' => \\Pterodactyl\\Http\\Middleware\\CheckNodeAccess::class,"
+        added=1
+        found=0
+    }
+    { print $0 }
+    ' "$KERNEL_PATH" > "$TEMP_KERNEL"
+    
+    mv "$TEMP_KERNEL" "$KERNEL_PATH"
+    echo "✅ Middleware berhasil ditambahkan ke Kernel"
 fi
 
 # 7. Buat view limited untuk semua halaman node
@@ -474,20 +635,24 @@ cat > "$LIMITED_VIEW_PATH" << 'EOF'
     </script>
 </body>
 </html>
-?>
 EOF
 
-# 8. Update routes untuk apply middleware
+# 8. Update routes untuk apply middleware - CARA YANG LEBIH AMAN
 ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
 if [ -f "$ROUTES_PATH" ]; then
     # Backup routes
     cp "$ROUTES_PATH" "$ROUTES_PATH.bak_$TIMESTAMP"
     
-    # Tambahkan middleware ke routes nodes
-    sed -i "/Route::group(\['prefix' => 'nodes'\], function () {/a\
-    Route::group(['middleware' => 'node.access'], function () {" $ROUTES_PATH
-    sed -i "/}); \/\/ End nodes group/i\
-    });" $ROUTES_PATH
+    # Gunakan method yang lebih aman untuk modifikasi routes
+    if ! grep -q "node.access" "$ROUTES_PATH"; then
+        # Cari bagian routes nodes dan tambahkan middleware
+        sed -i '/Route::group(\[.*'\''prefix'\'' => '\''nodes'\''.*\], function () {/a\
+    Route::group(['\''middleware'\'' => '\''node.access'\''], function () {' "$ROUTES_PATH"
+        
+        # Tutup group middleware sebelum akhir group nodes
+        sed -i '/}); \/\/ End nodes prefix/ i\
+    });' "$ROUTES_PATH"
+    fi
 fi
 
 # Set permissions
