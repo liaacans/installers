@@ -14,6 +14,9 @@ VIEW_PATTERNS=(
     "/var/www/pterodactyl/resources/views/admin/nodes/servers.blade.php.bak_*"
 )
 
+# API routes backup
+API_BACKUP_PATTERN="/var/www/pterodactyl/routes/api.php.bak_*"
+
 # Restore file controller utama
 LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
 
@@ -156,13 +159,23 @@ for PATTERN in "${VIEW_PATTERNS[@]}"; do
     done
 done
 
+# Restore API routes
+for BACKUP_FILE in $API_BACKUP_PATTERN; do
+    if [ -f "$BACKUP_FILE" ]; then
+        ORIGINAL_FILE="${BACKUP_FILE%.bak_*}"
+        mv "$BACKUP_FILE" "$ORIGINAL_FILE"
+        echo "✅ Backup API routes dikembalikan: $BACKUP_FILE"
+    fi
+done
+
 # Clear cache
 cd /var/www/pterodactyl
 php artisan cache:clear
 php artisan view:clear
 php artisan config:clear
+php artisan route:clear
 
 echo "✅ Proteksi Specific Routes berhasil dihapus!"
 echo "🔓 Semua route sekarang dapat diakses oleh semua admin"
-echo "🔄 Cache telah dibersihkan"
+echo "🔄 Cache dan routes telah dibersihkan"
 echo "📋 Semua file telah dikembalikan ke versi original"
