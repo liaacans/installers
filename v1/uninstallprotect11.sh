@@ -1,50 +1,52 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeViewController.php"
-BACKUP_PATTERN="${REMOTE_PATH}.bak_*"
-
 echo "🗑️ Menghapus proteksi Admin Nodes Security Panel..."
 
-# Cari backup file terbaru
-LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
-
-if [ -n "$LATEST_BACKUP" ]; then
-    echo "📦 Restore backup dari: $LATEST_BACKUP"
-    cp "$LATEST_BACKUP" "$REMOTE_PATH"
-    chmod 644 "$REMOTE_PATH"
-    echo "✅ File controller berhasil di-restore!"
-else
-    echo "⚠️ Tidak ditemukan backup file, perlu restore manual"
-    echo "📍 File asli perlu di-restore dari backup Pterodactyl"
+# Remove custom middleware
+MIDDLEWARE_PATH="/var/www/pterodactyl/app/Http/Middleware/CheckNodeAccess.php"
+if [ -f "$MIDDLEWARE_PATH" ]; then
+    rm -f "$MIDDLEWARE_PATH"
+    echo "✅ Custom middleware removed!"
 fi
 
-# Hapus CSS security
+# Remove middleware from kernel
+KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
+if [ -f "$KERNEL_PATH" ]; then
+    sed -i '/CheckNodeAccess/d' "$KERNEL_PATH"
+    echo "✅ Middleware removed from Kernel!"
+fi
+
+# Remove CSS security
 SECURITY_CSS_PATH="/var/www/pterodactyl/public/themes/pterodactyl/css/security-panel.css"
 if [ -f "$SECURITY_CSS_PATH" ]; then
     rm -f "$SECURITY_CSS_PATH"
     echo "✅ Security CSS dihapus!"
 fi
 
-# Hapus reference CSS dari layout
+# Remove CSS reference from layout
 LAYOUT_PATH="/var/www/pterodactyl/resources/views/layouts/admin.blade.php"
 if [ -f "$LAYOUT_PATH" ]; then
     sed -i '/security-panel.css/d' "$LAYOUT_PATH"
     echo "✅ Security CSS reference dihapus dari layout!"
 fi
 
-# Hapus view protected
-PROTECTED_VIEW="/var/www/pterodactyl/resources/views/admin/nodes/view/index_protected.blade.php"
-if [ -f "$PROTECTED_VIEW" ]; then
-    rm -f "$PROTECTED_VIEW"
-    echo "✅ Protected view dihapus!"
+# Restore original nodes view
+NODES_VIEW_DIR="/var/www/pterodactyl/resources/views/admin/nodes/view"
+if [ -f "$NODES_VIEW_DIR/index.blade.php.bak" ]; then
+    mv "$NODES_VIEW_DIR/index.blade.php.bak" "$NODES_VIEW_DIR/index.blade.php"
+    echo "✅ Original nodes view restored!"
+else
+    echo "⚠️ Backup view tidak ditemukan, nodes view mungkin masih modified"
 fi
 
-# Clear cache
-echo "🔄 Clearing cache..."
+# Clear all caches
+echo "🔄 Clearing all caches..."
+php /var/www/pterodactyl/artisan route:clear
+php /var/www/pterodactyl/artisan config:clear
 php /var/www/pterodactyl/artisan view:clear
 php /var/www/pterodactyl/artisan cache:clear
 
 echo ""
 echo "♻️ Uninstall proteksi nodes selesai!"
 echo "🔓 Semua fitur nodes sekarang dapat diakses normal oleh semua admin"
-echo "⚠️ Jika masih ada masalah, restore Pterodactyl dari backup original"
+echo "✅ Pterodactyl akan berjalan normal seperti semula"
