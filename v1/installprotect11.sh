@@ -48,10 +48,15 @@ class NodesViewController extends Controller
     private function checkNode1Access($request)
     {
         $user = $request->user();
-        $nodeId = $request->route('node');
+        $node = $request->route('node');
+
+        // Debug info
+        // echo "User ID: " . $user->id . "<br>";
+        // echo "Node ID: " . $node->id . "<br>";
+        // exit();
 
         // Jika bukan node ID 1, izinkan akses
-        if ($nodeId != 1) {
+        if ($node->id != 1) {
             return true;
         }
 
@@ -186,15 +191,6 @@ class NodesViewController extends Controller
                     0% { top: 0%; }
                     100% { top: 100%; }
                 }
-                
-                .pulse-effect {
-                    animation: pulse 2s infinite;
-                }
-                
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.7; }
-                }
             </style>
         </head>
         <body>
@@ -205,7 +201,7 @@ class NodesViewController extends Controller
                     <h1 class="denied-title">ACCESS DENIED</h1>
                     
                     <div class="denied-message">
-                        <p class="pulse-effect">✖️ akses ditolak, hanya admin id 1 yang bisa melihat!</p>
+                        <p>✖️ akses ditolak, hanya admin id 1 yang bisa melihat!</p>
                     </div>
                     
                     <div class="denied-protection">
@@ -217,29 +213,6 @@ class NodesViewController extends Controller
                     </div>
                 </div>
             </div>
-            
-            <script>
-                document.addEventListener("DOMContentLoaded", function() {
-                    const messages = [
-                        "✖️ akses ditolak, hanya admin id 1 yang bisa melihat!",
-                        "🚫 Unauthorized Access Attempt",
-                        "🔒 Restricted Area - Node 1"
-                    ];
-                    
-                    let currentMessage = 0;
-                    const messageElement = document.querySelector(".denied-message p");
-                    
-                    setInterval(() => {
-                        messageElement.style.opacity = "0";
-                        
-                        setTimeout(() => {
-                            messageElement.textContent = messages[currentMessage];
-                            messageElement.style.opacity = "1";
-                            currentMessage = (currentMessage + 1) % messages.length;
-                        }, 500);
-                    }, 3000);
-                });
-            </script>
         </body>
         </html>';
         exit();
@@ -253,18 +226,34 @@ class NodesViewController extends Controller
 
     public function settings(Request $request, Node $node)
     {
+        // Check access untuk settings
         if (!$this->checkNode1Access($request)) {
             return;
         }
 
-        // Original settings logic
+        // Original settings logic - hanya dijalankan jika akses diizinkan
         return view('admin.nodes.settings', [
             'node' => $node,
         ]);
     }
 
+    public function updateSettings(Request $request, Node $node)
+    {
+        // Check access untuk update settings
+        if (!$this->checkNode1Access($request)) {
+            return new JsonResponse(['error' => '✖️ akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
+        }
+
+        // Original update settings logic
+        $this->updateService->handle($node, $request->validated());
+
+        return redirect()->route('admin.nodes.view.settings', $node->id)
+            ->with('success', 'Settings berhasil diperbarui');
+    }
+
     public function configuration(Request $request, Node $node)
     {
+        // Check access untuk configuration
         if (!$this->checkNode1Access($request)) {
             return;
         }
@@ -275,21 +264,53 @@ class NodesViewController extends Controller
         ]);
     }
 
+    public function updateConfiguration(Request $request, Node $node)
+    {
+        // Check access untuk update configuration
+        if (!$this->checkNode1Access($request)) {
+            return new JsonResponse(['error' => '✖️ akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
+        }
+
+        // Original update configuration logic
+        $this->updateService->handle($node, $request->validated());
+
+        return redirect()->route('admin.nodes.view.configuration', $node->id)
+            ->with('success', 'Configuration berhasil diperbarui');
+    }
+
     public function allocation(Request $request, Node $node)
     {
+        // Check access untuk allocation
         if (!$this->checkNode1Access($request)) {
             return;
         }
 
         // Original allocation logic
+        $allocations = $node->allocations()->with('server')->get();
+
+        return view('admin.nodes.allocations', [
+            'node' => $node,
+            'allocations' => $allocations,
+        ]);
+    }
+
+    public function updateAllocation(AllocationFormRequest $request, Node $node)
+    {
+        // Check access untuk update allocation
+        if (!$this->checkNode1Access($request)) {
+            return new JsonResponse(['error' => '✖️ akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
+        }
+
+        // Original allocation update logic
         $this->updateService->handle($node, $request->validated());
 
-        return redirect()->route('admin.nodes.view', $node->id)
+        return redirect()->route('admin.nodes.view.allocation', $node->id)
             ->with('success', 'Alokasi berhasil diperbarui');
     }
 
     public function servers(Request $request, Node $node)
     {
+        // Check access untuk servers
         if (!$this->checkNode1Access($request)) {
             return;
         }
@@ -387,8 +408,10 @@ for VIEW_PATH in "${VIEW_PATHS[@]}"; do
         # Ganti konten view dengan security panel
         cat > "$VIEW_PATH" << 'VIEW_EOF'
 @php
+    // Security Check untuk Node 1
     $user = auth()->user();
-    $nodeId = isset($node) ? $node->id : request()->route('node');
+    $node = isset($node) ? $node : null;
+    $nodeId = $node ? $node->id : (request()->route('node') ? request()->route('node')->id : null);
     
     if ($nodeId == 1 && $user->id !== 1) {
         http_response_code(403);
@@ -501,30 +524,37 @@ for VIEW_PATH in "${VIEW_PATHS[@]}"; do
     endif
 @endphp
 
-{{-- Original View Content Below --}}
+{{-- Original View Content --}}
 VIEW_EOF
 
-        # Append original content jika perlu, tapi biasanya tidak perlu karena sudah diblokir
-        echo "# Original content preserved in backup: $VIEW_BACKUP" >> "$VIEW_PATH"
+        # Append original content dari backup
+        echo "{{-- Original content below --}}" >> "$VIEW_PATH"
+        tail -n +20 "$VIEW_BACKUP" >> "$VIEW_PATH" 2>/dev/null || echo "{{-- Original content preserved in backup: $VIEW_BACKUP --}}" >> "$VIEW_PATH"
     fi
 done
 
-chmod 644 "$REMOTE_PATH"
+# Juga proteksi route API jika ada
+API_PATH="/var/www/pterodactyl/routes/api.php"
+if [ -f "$API_PATH" ]; then
+    cp "$API_PATH" "${API_PATH}.bak_${TIMESTAMP}"
+    echo "📦 Backup API routes: ${API_PATH}.bak_${TIMESTAMP}"
+fi
 
-# Clear cache
+# Clear cache dan routes
 cd /var/www/pterodactyl
 php artisan cache:clear
 php artisan view:clear
 php artisan config:clear
+php artisan route:clear
 
 echo "✅ Proteksi Specific Routes berhasil dipasang!"
 echo "📂 Lokasi file: $REMOTE_PATH"
 echo "🗂️ Backup file lama: $BACKUP_PATH"
-echo "🔒 Route yang diproteksi:"
-echo "   • admin/nodes/view/1/settings"
-echo "   • admin/nodes/view/1/configuration" 
-echo "   • admin/nodes/view/1/allocation"
-echo "   • admin/nodes/view/1/servers"
+echo "🔒 Route yang diproteksi di Node 1:"
+echo "   • settings (GET & UPDATE)"
+echo "   • configuration (GET & UPDATE)" 
+echo "   • allocation (GET & UPDATE)"
+echo "   • servers (GET)"
 echo "🚫 Pesan Error: '✖️ akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'"
-echo "👤 Hanya Admin ID 1 yang bisa akses route di atas"
-echo "🔓 Route lain tetap bisa diakses semua admin"
+echo "👤 Hanya Admin ID 1 yang bisa akses route di atas di Node 1"
+echo "🔓 Route lain & node lain tetap bisa diakses semua admin"
