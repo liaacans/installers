@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🗑️ Menghapus proteksi Security Panel Admin Nodes View..."
+echo "🗑️ Menghapus proteksi Specific Routes Admin Nodes View..."
 
 # File utama
 REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/NodesViewController.php"
@@ -8,26 +8,22 @@ BACKUP_PATTERN="/var/www/pterodactyl/app/Http/Controllers/Admin/NodesViewControl
 
 # View templates patterns
 VIEW_PATTERNS=(
-    "/var/www/pterodactyl/resources/views/admin/nodes/index.blade.php.bak_*"
-    "/var/www/pterodactyl/resources/views/admin/nodes/view.blade.php.bak_*"
     "/var/www/pterodactyl/resources/views/admin/nodes/settings.blade.php.bak_*"
     "/var/www/pterodactyl/resources/views/admin/nodes/configuration.blade.php.bak_*"
-    "/var/www/pterodactyl/resources/views/admin/nodes/allocation.blade.php.bak_*"
+    "/var/www/pterodactyl/resources/views/admin/nodes/allocations.blade.php.bak_*"
     "/var/www/pterodactyl/resources/views/admin/nodes/servers.blade.php.bak_*"
-    "/var/www/pterodactyl/resources/views/admin/nodes/about.blade.php.bak_*"
 )
 
-# Routes backup
-ROUTES_PATTERN="/var/www/pterodactyl/routes/web.php.bak_*"
-
-# ==================== RESTORE FILE UTAMA ====================
+# Restore file controller utama
 LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
 
 if [ -n "$LATEST_BACKUP" ]; then
     mv "$LATEST_BACKUP" "$REMOTE_PATH"
-    echo "✅ Backup utama dikembalikan: $LATEST_BACKUP"
+    echo "✅ Backup controller utama dikembalikan: $LATEST_BACKUP"
 else
-    echo "⚠️ Tidak ada backup utama ditemukan, membuat file default..."
+    echo "⚠️ Tidak ada backup controller utama ditemukan"
+    echo "📝 Membuat controller default..."
+    
     cat > "$REMOTE_PATH" << 'EOF'
 <?php
 
@@ -106,17 +102,18 @@ class NodesViewController extends Controller
             ->with('success', 'Node berhasil dihapus');
     }
 
-    public function allocation(Request $request, Node $node)
+    public function allocation(AllocationFormRequest $request, Node $node)
     {
-        return view('admin.nodes.allocation', [
-            'node' => $node,
-        ]);
+        $this->updateService->handle($node, $request->validated());
+
+        return redirect()->route('admin.nodes.view', $node->id)
+            ->with('success', 'Alokasi berhasil diperbarui');
     }
 
     public function configuration(Request $request, Node $node)
     {
-        return view('admin.nodes.configuration', [
-            'node' => $node,
+        return response()->json([
+            'config' => $node->getConfiguration(),
         ]);
     }
 
@@ -148,64 +145,24 @@ class NodesViewController extends Controller
 EOF
 fi
 
-# ==================== RESTORE VIEW TEMPLATES ====================
+# Restore view templates
 for PATTERN in "${VIEW_PATTERNS[@]}"; do
     for BACKUP_FILE in $PATTERN; do
         if [ -f "$BACKUP_FILE" ]; then
             ORIGINAL_FILE="${BACKUP_FILE%.bak_*}"
             mv "$BACKUP_FILE" "$ORIGINAL_FILE"
-            echo "✅ View template dikembalikan: $(basename $BACKUP_FILE)"
+            echo "✅ Backup view dikembalikan: $BACKUP_FILE"
         fi
     done
 done
 
-# ==================== RESTORE ROUTES ====================
-LATEST_ROUTES_BACKUP=$(ls -t $ROUTES_PATTERN 2>/dev/null | head -n1)
-if [ -n "$LATEST_ROUTES_BACKUP" ]; then
-    mv "$LATEST_ROUTES_BACKUP" "/var/www/pterodactyl/routes/web.php"
-    echo "✅ Routes web dikembalikan: $LATEST_ROUTES_BACKUP"
-fi
-
-# ==================== CLEANUP VIEW TEMPLATES ====================
-VIEW_PATHS=(
-    "/var/www/pterodactyl/resources/views/admin/nodes/index.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/view.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/settings.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/configuration.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/allocation.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/servers.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/about.blade.php"
-)
-
-for VIEW_PATH in "${VIEW_PATHS[@]}"; do
-    if [ -f "$VIEW_PATH" ]; then
-        # Hapus security code dari awal file
-        sed -i '/@if(auth()->check() && auth()->user()->id !== 1)/,/@endif/d' "$VIEW_PATH"
-        sed -i '/Akses ditolak, hanya admin id 1 yang bisa melihat/d' "$VIEW_PATH"
-        sed -i '/protect by @andinofficial/d' "$VIEW_PATH"
-        echo "✅ Security code dihapus dari: $(basename $VIEW_PATH)"
-    fi
-done
-
-# ==================== CLEAR CACHE ====================
+# Clear cache
 cd /var/www/pterodactyl
 php artisan cache:clear
 php artisan view:clear
 php artisan config:clear
-php artisan route:clear
 
-echo ""
-echo "✅ ==========================================="
-echo "✅ PROTEKSI BERHASIL DIHAPUS!"
-echo "✅ ==========================================="
-echo "🔓 Semua admin sekarang bisa mengakses nodes"
-echo "🗑️ Semua file backup telah dikembalikan"
+echo "✅ Proteksi Specific Routes berhasil dihapus!"
+echo "🔓 Semua route sekarang dapat diakses oleh semua admin"
 echo "🔄 Cache telah dibersihkan"
-echo ""
-echo "📋 STATUS:"
-echo "   • Controller: ✅ Dikembalikan"
-echo "   • View Templates: ✅ Dikembalikan" 
-echo "   • Routes: ✅ Dikembalikan"
-echo "   • Security Code: ✅ Dihapus"
-echo ""
-echo "🎯 Sistem kembali ke mode akses normal"
+echo "📋 Semua file telah dikembalikan ke versi original"
