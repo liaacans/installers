@@ -1,54 +1,69 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/NodeController.php"
-BACKUP_PATTERN="/var/www/pterodactyl/app/Http/Controllers/Admin/NodeController.php.bak_*"
-LIMITED_VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view-limited.blade.php"
-
 echo "🔄 Memulai proses uninstall proteksi Node Controller..."
 
-# Cek apakah ada backup file
-LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
+# Files yang perlu di-restore
+declare -A FILES=(
+    ["NodeController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/NodeController.php"
+    ["NodeViewController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeViewController.php"
+    ["NodeSettingsController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeSettingsController.php"
+    ["NodeAllocationController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeAllocationController.php"
+)
 
-if [ -n "$LATEST_BACKUP" ]; then
-    echo "📦 Menemukan backup file: $LATEST_BACKUP"
+# Files tambahan yang dibuat
+EXTRA_FILES=(
+    "/var/www/pterodactyl/app/Http/Middleware/CheckNodeAccess.php"
+    "/var/www/pterodactyl/resources/views/admin/nodes/limited.blade.php"
+)
+
+# Restore backup files
+for FILE_NAME in "${!FILES[@]}"; do
+    FILE_PATH="${FILES[$FILE_NAME]}"
+    BACKUP_PATTERN="${FILE_PATH}.bak_*"
+    LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
     
-    # Restore backup
-    mv "$LATEST_BACKUP" "$REMOTE_PATH"
-    echo "✅ File asli berhasil di-restore dari backup"
-    
-    # Hapus view limited jika ada
-    if [ -f "$LIMITED_VIEW_PATH" ]; then
-        rm "$LIMITED_VIEW_PATH"
-        echo "✅ View limited berhasil dihapus"
+    if [ -n "$LATEST_BACKUP" ]; then
+        echo "📦 Restoring $FILE_NAME dari: $LATEST_BACKUP"
+        mv "$LATEST_BACKUP" "$FILE_PATH"
+    else
+        echo "⚠️  Tidak ada backup untuk $FILE_NAME"
     fi
-    
-    # Clear cache
-    php /var/www/pterodactyl/artisan view:clear
-    php /var/www/pterodactyl/artisan cache:clear
-    
-    echo "🎉 Uninstall proteksi berhasil!"
-    echo "🔓 Akses Node Controller sekarang terbuka untuk semua admin"
-else
-    echo "❌ Tidak ditemukan backup file untuk di-restore"
-    echo "ℹ️ File saat ini mungkin sudah dalam keadaan normal atau backup tidak tersedia"
-    
-    # Hapus view limited jika ada
-    if [ -f "$LIMITED_VIEW_PATH" ]; then
-        rm "$LIMITED_VIEW_PATH"
-        echo "✅ View limited berhasil dihapus"
+done
+
+# Hapus file tambahan
+for EXTRA_FILE in "${EXTRA_FILES[@]}"; do
+    if [ -f "$EXTRA_FILE" ]; then
+        rm "$EXTRA_FILE"
+        echo "🗑️  Menghapus: $EXTRA_FILE"
     fi
-    
-    # Clear cache
-    php /var/www/pterodactyl/artisan view:clear
-    php /var/www/pterodactyl/artisan cache:clear
+done
+
+# Remove middleware dari Kernel
+KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
+if [ -f "$KERNEL_PATH" ]; then
+    sed -i "/'node.access' =>.*CheckNodeAccess::class,/d" "$KERNEL_PATH"
+    echo "🔧 Middleware dihapus dari Kernel"
 fi
 
-# Hapus backup files lainnya jika ada
-OTHER_BACKUPS=$(ls $BACKUP_PATTERN 2>/dev/null | wc -l)
-if [ $OTHER_BACKUPS -gt 0 ]; then
-    echo "🧹 Membersihkan backup files lainnya..."
-    rm -f $BACKUP_PATTERN
-    echo "✅ Backup files lainnya berhasil dibersihkan"
+# Restore routes
+ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
+ROUTES_BACKUP_PATTERN="${ROUTES_PATH}.bak_*"
+LATEST_ROUTES_BACKUP=$(ls -t $ROUTES_BACKUP_PATTERN 2>/dev/null | head -n1)
+if [ -n "$LATEST_ROUTES_BACKUP" ]; then
+    mv "$LATEST_ROUTES_BACKUP" "$ROUTES_PATH"
+    echo "🔄 Routes berhasil di-restore"
 fi
 
-echo "🎯 Proses uninstall selesai!"
+# Clear semua cache
+php /var/www/pterodactyl/artisan view:clear
+php /var/www/pterodactyl/artisan cache:clear
+php /var/www/pterodactyl/artisan route:clear
+
+# Hapus backup files lainnya
+echo "🧹 Membersihkan backup files tersisa..."
+find /var/www/pterodactyl -name "*.bak_*" -type f -delete 2>/dev/null
+
+echo ""
+echo "🎉 Uninstall proteksi berhasil!"
+echo "🔓 Akses Node Controller sekarang terbuka untuk semua admin"
+echo "✅ Semua file telah di-restore ke keadaan semula"
