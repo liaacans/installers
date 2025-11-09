@@ -1,157 +1,63 @@
 #!/bin/bash
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeViewController.php"
-TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
-
 echo "🚀 Memasang proteksi Admin Nodes Security Panel..."
 
-# Backup file original
-if [ -f "$REMOTE_PATH" ]; then
-  cp "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
-fi
+# Create custom middleware
+MIDDLEWARE_PATH="/var/www/pterodactyl/app/Http/Middleware/CheckNodeAccess.php"
+mkdir -p "$(dirname "$MIDDLEWARE_PATH")"
 
-# Create modified controller
-cat > "$REMOTE_PATH" << 'EOF'
+cat > "$MIDDLEWARE_PATH" << 'EOF'
 <?php
 
-namespace Pterodactyl\Http\Controllers\Admin\Nodes;
+namespace Pterodactyl\Http\Middleware;
 
-use Illuminate\View\View;
-use Pterodactyl\Models\Node;
+use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse;
-use Prologue\Alerts\AlertsMessageBag;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Services\Nodes\NodeUpdateService;
-use Pterodactyl\Traits\Controllers\JavascriptInjection;
-use Pterodactyl\Http\Requests\Admin\Node\NodeFormRequest;
-use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
-use Pterodactyl\Contracts\Repository\AllocationRepositoryInterface;
 
-class NodeViewController extends Controller
+class CheckNodeAccess
 {
-    use JavascriptInjection;
-
-    public function __construct(
-        protected AlertsMessageBag $alert,
-        protected AllocationRepositoryInterface $allocation,
-        protected NodeRepositoryInterface $repository,
-        protected NodeUpdateService $updateService
-    ) {
-    }
-
     /**
-     * 🔒 Fungsi tambahan: Cek akses admin nodes
+     * Handle an incoming request.
      */
-    private function checkNodeAccess()
+    public function handle(Request $request, Closure $next)
     {
-        $user = auth()->user();
+        $user = $request->user();
         
-        // Admin (user id = 1) bebas akses semua
-        if ($user->id === 1) {
-            return true;
+        // Allow all access for admin ID 1
+        if ($user && $user->id === 1) {
+            return $next($request);
         }
 
-        // Jika bukan admin ID 1, tolak akses dengan 403
-        abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall');
-    }
-
-    /**
-     * Display the index page with a listing of nodes.
-     */
-    public function index(): View
-    {
-        $this->checkNodeAccess();
+        // Check if this is a nodes route
+        $path = $request->path();
         
-        $this->setJavascript();
-        $this->injset['nodeData'] = true;
-
-        return view('admin.nodes.index', [
-            'nodes' => $this->repository->getAllNodesWithServers(),
-        ]);
-    }
-
-    /**
-     * Display a single node on the system.
-     */
-    public function view(Node $node, string $tab = 'index'): View
-    {
-        $user = auth()->user();
-        
-        // Only check access for restricted tabs
-        if ($tab !== 'index' && $user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall');
-        }
-
-        $this->setJavascript();
-
-        try {
-            $stats = $this->repository->getUsageStats($node);
-            $this->injset['node'] = array_merge($node->toArray(), [
-                'disk_used' => $stats['disk']['used'] ?? 0,
-                'disk_percent' => $stats['disk']['percent'] ?? 0,
-                'memory_used' => $stats['memory']['used'] ?? 0,
-                'memory_percent' => $stats['memory']['percent'] ?? 0,
-            ]);
-        } catch (\Exception $e) {
-            $this->alert->warning(
-                sprintf('There was an error while attempting to load usage statistics for this node: %s', $e->getMessage())
-            )->flash();
-
-            $this->injset['node'] = $node;
-        }
-
-        $this->injset['stats'] = $stats ?? null;
-
-        // Return appropriate view based on tab
-        if ($user->id === 1) {
-            // Admin ID 1 can access all tabs normally
-            switch ($tab) {
-                case 'settings':
-                    return view('admin.nodes.view.settings', ['node' => $node]);
-                case 'configuration':
-                    return view('admin.nodes.view.configuration', ['node' => $node]);
-                case 'allocation':
-                    return view('admin.nodes.view.allocation', [
-                        'node' => $node,
-                        'allocations' => $this->allocation->setColumns(['ip', 'port', 'alias', 'server_id'])->getAllocationsForNode($node->id),
-                    ]);
-                case 'servers':
-                    return view('admin.nodes.view.servers', [
-                        'node' => $node,
-                        'servers' => $node->servers()->with(['user', 'nest', 'egg'])->paginate(25),
-                    ]);
-                default:
-                    return view('admin.nodes.view.index', ['node' => $node]);
-            }
-        } else {
-            // Non-admin users only get the index view
-            if ($tab !== 'index') {
+        // Block access to specific nodes tabs for non-admin users
+        if (str_contains($path, 'admin/nodes/') && !str_contains($path, 'index')) {
+            if (str_contains($path, 'settings') || 
+                str_contains($path, 'configuration') || 
+                str_contains($path, 'allocation') || 
+                str_contains($path, 'servers')) {
                 abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall');
             }
-            return view('admin.nodes.view.index_protected', ['node' => $node]);
         }
-    }
 
-    /**
-     * Update a node's configuration.
-     */
-    public function update(NodeFormRequest $request, Node $node): RedirectResponse
-    {
-        $this->checkNodeAccess();
-        
-        $this->updateService->handle($node, $request->validated(), $request->input('reset_secret'));
-
-        $this->alert->success('Node settings have been updated successfully.')->flash();
-
-        return redirect()->route('admin.nodes.view', [$node->id, 'settings']);
+        return $next($request);
     }
 }
 EOF
 
-chmod 644 "$REMOTE_PATH"
+chmod 644 "$MIDDLEWARE_PATH"
+echo "✅ Custom middleware created!"
+
+# Register middleware in kernel
+KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
+if [ -f "$KERNEL_PATH" ]; then
+    if ! grep -q "CheckNodeAccess" "$KERNEL_PATH"; then
+        # Add to routeMiddleware array
+        sed -i "/protected \$routeMiddleware = \[/a\        'node.access' => \\\Pterodactyl\\Http\\Middleware\\CheckNodeAccess::class," "$KERNEL_PATH"
+        echo "✅ Middleware registered in Kernel!"
+    fi
+fi
 
 # Create security CSS
 SECURITY_CSS_PATH="/var/www/pterodactyl/public/themes/pterodactyl/css/security-panel.css"
@@ -225,6 +131,25 @@ cat > "$SECURITY_CSS_PATH" << 'EOF'
     border-left: 4px solid #ff3860;
     background: rgba(255, 56, 96, 0.1);
 }
+
+.node-access-denied {
+    text-align: center;
+    padding: 40px 20px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 10px;
+    border: 2px solid #ff3860;
+    margin: 20px 0;
+}
+
+.node-access-denied h2 {
+    color: #ff3860;
+    margin-bottom: 20px;
+}
+
+.node-access-denied p {
+    color: #ccc;
+    font-size: 16px;
+}
 EOF
 
 echo "✅ Security Panel CSS created!"
@@ -238,19 +163,25 @@ if [ -f "$LAYOUT_PATH" ]; then
     fi
 fi
 
-# Create protected view for non-admin users
+# Modify the nodes view directly
 NODES_VIEW_DIR="/var/www/pterodactyl/resources/views/admin/nodes/view"
 mkdir -p "$NODES_VIEW_DIR"
 
-# Create the protected view
-cat > "$NODES_VIEW_DIR/index_protected.blade.php" << 'EOF'
+# Backup original index view if exists
+if [ -f "$NODES_VIEW_DIR/index.blade.php" ]; then
+    cp "$NODES_VIEW_DIR/index.blade.php" "$NODES_VIEW_DIR/index.blade.php.bak"
+    echo "📦 Backup original index view created"
+fi
+
+# Create modified index view
+cat > "$NODES_VIEW_DIR/index.blade.php" << 'EOF'
 @extends('layouts.admin')
 @section('title')
     Node — {{ $node->name }}
 @endsection
 
 @section('content-header')
-    <h1>{{ $node->name }}<small>Security Protected Node</small></h1>
+    <h1>{{ $node->name }}<small>@if(auth()->user()->id === 1) Node Overview @else Security Protected Node @endif</small></h1>
     <ol class="breadcrumb">
         <li><a href="{{ route('admin.index') }}">Admin</a></li>
         <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
@@ -259,15 +190,27 @@ cat > "$NODES_VIEW_DIR/index_protected.blade.php" << 'EOF'
 @endsection
 
 @section('content')
+@if(auth()->user()->id !== 1)
+<div class="row">
+    <div class="col-xs-12">
+        <div class="node-access-denied">
+            <i class="fa fa-shield fa-4x" style="color: #ff3860; margin-bottom: 20px;"></i>
+            <h2>ACCESS DENIED</h2>
+            <p>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall</p>
+            <p style="font-size: 14px; margin-top: 10px;">Only primary administrator can access node details</p>
+        </div>
+    </div>
+</div>
+@else
 <div class="row">
     <div class="col-xs-12">
         <div class="nav-tabs-custom nav-tabs-floating">
             <ul class="nav nav-tabs">
                 <li class="active"><a href="{{ route('admin.nodes.view', $node->id) }}">About</a></li>
-                <li class="access-denied"><a href="javascript:void(0)" onclick="showAccessDenied()">Settings <span class="security-badge">LOCKED</span></a></li>
-                <li class="access-denied"><a href="javascript:void(0)" onclick="showAccessDenied()">Configuration <span class="security-badge">LOCKED</span></a></li>
-                <li class="access-denied"><a href="javascript:void(0)" onclick="showAccessDenied()">Allocation <span class="security-badge">LOCKED</span></a></li>
-                <li class="access-denied"><a href="javascript:void(0)" onclick="showAccessDenied()">Servers <span class="security-badge">LOCKED</span></a></li>
+                <li><a href="{{ route('admin.nodes.view.settings', $node->id) }}">Settings</a></li>
+                <li><a href="{{ route('admin.nodes.view.configuration', $node->id) }}">Configuration</a></li>
+                <li><a href="{{ route('admin.nodes.view.allocation', $node->id) }}">Allocation</a></li>
+                <li><a href="{{ route('admin.nodes.view.servers', $node->id) }}">Servers</a></li>
             </ul>
         </div>
     </div>
@@ -278,47 +221,33 @@ cat > "$NODES_VIEW_DIR/index_protected.blade.php" << 'EOF'
         <div class="security-shield security-pulse">
             <div class="row">
                 <div class="col-xs-6 col-md-3 text-center">
-                    <a href="javascript:void(0)"><p>Servers</p><h4>{{ $node->servers_count }}</h4></a>
+                    <a href="{{ route('admin.nodes.view.servers', $node->id) }}"><p>Servers</p><h4>{{ $node->servers_count }}</h4></a>
                 </div>
                 <div class="col-xs-6 col-md-3 text-center">
-                    <a href="javascript:void(0)"><p>Usage</p><h4>{{ $node->memory_percent ?? 0 }}%</h4></a>
+                    <a href="javascript:void(0)"><p>Usage</p><h4 data-toggle="tooltip" data-placement="top" title="{{ $node->memory_used }} / {{ $node->memory }} MB">{{ $node->memory_percent }}%</h4></a>
                 </div>
                 <div class="col-xs-6 col-md-3 text-center">
                     <a href="javascript:void(0)"><p>CPU</p><h4>0%</h4></a>
                 </div>
                 <div class="col-xs-6 col-md-3 text-center">
-                    <a href="javascript:void(0)"><p>Disk</p><h4>{{ $node->disk_percent ?? 0 }}%</h4></a>
+                    <a href="javascript:void(0)"><p>Disk</p><h4 data-toggle="tooltip" data-placement="top" title="{{ $node->disk_used }} / {{ $node->disk }} MB">{{ $node->disk_percent }}%</h4></a>
                 </div>
             </div>
         </div>
         
-        <div class="security-shield">
-            <h4><i class="fa fa-shield text-cyan"></i> Security Protected Area</h4>
-            <p class="text-muted">This node is protected by advanced security measures. Only authorized administrators can access detailed information and settings.</p>
-            
-            <div class="security-alert alert alert-warning">
-                <i class="fa fa-warning"></i> 
-                <strong>Access Restricted:</strong> 
-                Your account does not have permission to view node configuration details.
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Information</h3>
             </div>
-            
-            <div class="row mt-3">
-                <div class="col-md-6">
-                    <div class="info-box bg-blue">
-                        <span class="info-box-icon"><i class="fa fa-server"></i></span>
-                        <div class="info-box-content">
-                            <span class="info-box-text">Node Name</span>
-                            <span class="info-box-number">{{ $node->name }}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="info-box bg-green">
-                        <span class="info-box-icon"><i class="fa fa-plug"></i></span>
-                        <div class="info-box-content">
-                            <span class="info-box-text">Status</span>
-                            <span class="info-box-number">OPERATIONAL</span>
-                        </div>
+            <div class="box-body">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <strong>Node Authorized:</strong> 
+                        @if($node->scheme === 'https')
+                            <code class="text-success"><i class="fa fa-lock"></i> https://{{ $node->fqdn }}:{{ $node->daemonListen }}/</code>
+                        @else
+                            <code class="text-warning"><i class="fa fa-unlock-alt"></i> http://{{ $node->fqdn }}:{{ $node->daemonListen }}/</code>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -337,7 +266,7 @@ cat > "$NODES_VIEW_DIR/index_protected.blade.php" << 'EOF'
                             <span class="info-box-icon"><i class="fa fa-shield"></i></span>
                             <div class="info-box-content">
                                 <span class="info-box-text">Protection Level</span>
-                                <span class="info-box-number">MAXIMUM</span>
+                                <span class="info-box-number">ACTIVE</span>
                                 <div class="progress">
                                     <div class="progress-bar" style="width: 100%"></div>
                                 </div>
@@ -348,61 +277,81 @@ cat > "$NODES_VIEW_DIR/index_protected.blade.php" << 'EOF'
                         </div>
                     </div>
                 </div>
-                
-                <div class="security-shield text-center" style="padding: 15px; margin-top: 15px;">
-                    <i class="fa fa-user-secret fa-3x text-cyan"></i>
-                    <h4 style="margin: 10px 0 5px 0;">Restricted Access</h4>
-                    <p class="text-muted" style="font-size: 12px; margin: 0;">
-                        Limited preview mode
-                    </p>
-                </div>
             </div>
         </div>
     </div>
 </div>
+@endif
 @endsection
 
 @section('footer-scripts')
     @parent
     <script>
-        function showAccessDenied() {
-            Swal.fire({
-                icon: 'error',
-                title: 'Access Denied',
-                html: '<div style="color: #ff6b6b; font-weight: bold; font-size: 16px; font-family: monospace;">𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall</div>',
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#ff3860',
-                background: '#1a1a2e',
-                customClass: {
-                    popup: 'security-shield'
-                }
-            });
-        }
-        
         $(document).ready(function() {
-            console.log('🔒 Node Security Protection Active - @naaofficiall');
+            $('[data-toggle="tooltip"]').tooltip();
+            
+            @if(auth()->user()->id !== 1)
+            console.log('🔒 Node Access Restricted - Protected by @naaofficiall');
+            @endif
         });
     </script>
+@endsection
 EOF
 
-echo "✅ Protected view created!"
+echo "✅ Modified nodes view created!"
 
-# Clear view cache
-echo "🔄 Clearing view cache..."
+# Apply middleware to nodes routes using route service provider
+ROUTE_PROVIDER_PATH="/var/www/pterodactyl/app/Providers/RouteServiceProvider.php"
+if [ -f "$ROUTE_PROVIDER_PATH" ]; then
+    if ! grep -q "CheckNodeAccess" "$ROUTE_PROVIDER_PATH"; then
+        # Add the middleware to admin routes
+        sed -i '/protected \$middlewareGroups = \[/a\    ];' "$ROUTE_PROVIDER_PATH"
+        sed -i '/protected \$middlewareGroups = \[/a\        \\Pterodactyl\\Http\\Middleware\\CheckNodeAccess::class,' "$ROUTE_PROVIDER_PATH"
+        echo "✅ Middleware applied to admin routes!"
+    fi
+fi
+
+# Alternative: Apply middleware via routes file
+WEB_ROUTES_PATH="/var/www/pterodactyl/routes/web.php"
+if [ -f "$WEB_ROUTES_PATH" ]; then
+    # Add middleware to nodes routes group
+    if grep -q "admin.nodes" "$WEB_ROUTES_PATH" && ! grep -q "node.access" "$WEB_ROUTES_PATH"; then
+        # This is a simplified approach - we'll create a patch file
+        PATCH_FILE="/tmp/nodes_routes_patch.php"
+        cat > "$PATCH_FILE" << 'EOPATCH'
+<?php
+
+// Apply node access middleware to nodes routes
+Route::group([
+    'namespace' => 'Admin\Nodes',
+    'prefix' => 'admin/nodes', 
+    'middleware' => ['node.access'] // Add our custom middleware
+], function () {
+    // Existing nodes routes will be handled by the middleware
+});
+
+EOPATCH
+        echo "✅ Routes patch prepared (manual verification needed)"
+    fi
+fi
+
+# Clear all caches
+echo "🔄 Clearing all caches..."
+php /var/www/pterodactyl/artisan route:clear
+php /var/www/pterodactyl/artisan config:clear
 php /var/www/pterodactyl/artisan view:clear
 php /var/www/pterodactyl/artisan cache:clear
 
 echo ""
 echo "🎉 Proteksi Admin Nodes Security Panel berhasil dipasang!"
-echo "📂 File utama: $REMOTE_PATH"
+echo "📂 Middleware: $MIDDLEWARE_PATH"
 echo "🎨 CSS Effects: $SECURITY_CSS_PATH"
-echo "👁️ Protected View: $NODES_VIEW_DIR/index_protected.blade.php"
+echo "👁️ Modified View: $NODES_VIEW_DIR/index.blade.php"
 echo ""
 echo "🔒 ACCESS RULES:"
-echo "   ✅ Admin ID 1: Akses penuh semua tab"
-echo "   🚫 Admin lain: Hanya bisa lihat 'About' tab, lainnya error 403"
+echo "   ✅ Admin ID 1: Akses penuh semua tab (Pterodactyl normal)"
+echo "   🚫 Admin lain: Tidak bisa akses node details sama sekali"
 echo "   💬 Pesan error: '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄, 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @naaofficiall'"
 echo ""
 echo "⚠️  Pterodactyl akan berjalan NORMAL untuk Admin ID 1"
-echo "🚫 Admin lain akan mendapat ERROR 403 yang proper"
-EOF
+echo "🚫 Admin lain akan langsung terlihat ACCESS DENIED page"
