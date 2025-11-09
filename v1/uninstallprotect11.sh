@@ -10,17 +10,12 @@ LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
 
 if [ -n "$LATEST_BACKUP" ]; then
     echo "📦 Restore backup dari: $LATEST_BACKUP"
-    mv "$LATEST_BACKUP" "$REMOTE_PATH"
+    cp "$LATEST_BACKUP" "$REMOTE_PATH"
     chmod 644 "$REMOTE_PATH"
     echo "✅ File controller berhasil di-restore!"
 else
-    echo "⚠️ Tidak ditemukan backup file, menghapus file modifikasi..."
-    if [ -f "$REMOTE_PATH" ]; then
-        rm -f "$REMOTE_PATH"
-        echo "✅ File modifikasi dihapus!"
-    else
-        echo "ℹ️ File tidak ditemukan, mungkin sudah dihapus."
-    fi
+    echo "⚠️ Tidak ditemukan backup file, perlu restore manual"
+    echo "📍 File asli perlu di-restore dari backup Pterodactyl"
 fi
 
 # Hapus CSS security
@@ -37,12 +32,19 @@ if [ -f "$LAYOUT_PATH" ]; then
     echo "✅ Security CSS reference dihapus dari layout!"
 fi
 
-# Restore view nodes original (opsional - perlu manual restore jika ingin original)
-NODES_VIEW_DIR="/var/www/pterodactyl/resources/views/admin/nodes/view"
-if [ -d "$NODES_VIEW_DIR" ]; then
-    echo "⚠️ View nodes modified perlu di-restore manual dari backup"
-    echo "📍 Lokasi: $NODES_VIEW_DIR"
+# Hapus view protected
+PROTECTED_VIEW="/var/www/pterodactyl/resources/views/admin/nodes/view/index_protected.blade.php"
+if [ -f "$PROTECTED_VIEW" ]; then
+    rm -f "$PROTECTED_VIEW"
+    echo "✅ Protected view dihapus!"
 fi
 
+# Clear cache
+echo "🔄 Clearing cache..."
+php /var/www/pterodactyl/artisan view:clear
+php /var/www/pterodactyl/artisan cache:clear
+
+echo ""
 echo "♻️ Uninstall proteksi nodes selesai!"
-echo "🔓 Semua fitur nodes sekarang dapat diakses normal oleh admin yang berwenang"
+echo "🔓 Semua fitur nodes sekarang dapat diakses normal oleh semua admin"
+echo "⚠️ Jika masih ada masalah, restore Pterodactyl dari backup original"
