@@ -12,84 +12,126 @@ if [ -f "$MIDDLEWARE_PATH" ]; then
     echo "✅ Middleware file removed: $MIDDLEWARE_PATH"
 fi
 
-# Remove view composer file
-COMPOSER_PATH="/var/www/pterodactyl/app/Http/View/Composers/NodeComposer.php"
-if [ -f "$COMPOSER_PATH" ]; then
-    rm -f "$COMPOSER_PATH"
-    echo "✅ View composer removed: $COMPOSER_PATH"
-fi
-
-# Remove middleware from Kernel
+# Restore original Kernel from backup
 KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
-if [ -f "$KERNEL_PATH" ]; then
-    # Backup current kernel first
-    cp "$KERNEL_PATH" "$BACKUP_DIR/Kernel.current_$TIMESTAMP.php"
-    
-    # Remove middleware registration using awk (more reliable)
-    awk '!/'\''node.access'\'' =>.*CheckNodeAccess::class,/' "$KERNEL_PATH" > "/tmp/kernel_fixed.php"
-    mv "/tmp/kernel_fixed.php" "$KERNEL_PATH"
-    
-    echo "✅ Middleware removed from Kernel"
-fi
+KERNEL_BACKUP=$(ls -t "$BACKUP_DIR"/Kernel.php.bak_* 2>/dev/null | head -n1)
+if [ -n "$KERNEL_BACKUP" ]; then
+    cp "$KERNEL_BACKUP" "$KERNEL_PATH"
+    echo "✅ Kernel restored from backup: $KERNEL_BACKUP"
+else
+    echo "⚠️ No Kernel backup found, creating fresh Kernel..."
+    # Create fresh Kernel file
+    cat > "$KERNEL_PATH" << 'KERNELEOF'
+<?php
 
-# Remove view composer registration
-COMPOSER_PROVIDER_PATH="/var/www/pterodactyl/app/Providers/ViewServiceProvider.php"
-if [ -f "$COMPOSER_PROVIDER_PATH" ]; then
-    # Remove composer registration
-    awk '!/view()->composer.*NodeComposer::class/' "$COMPOSER_PROVIDER_PATH" > "/tmp/composer_fixed.php"
-    mv "/tmp/composer_fixed.php" "$COMPOSER_PROVIDER_PATH"
-    echo "✅ View composer registration removed"
+namespace Pterodactyl\Http;
+
+use Illuminate\Foundation\Http\Kernel as HttpKernel;
+
+class Kernel extends HttpKernel
+{
+    /**
+     * The application's global HTTP middleware stack.
+     */
+    protected $middleware = [
+        \Pterodactyl\Http\Middleware\MaintenanceMiddleware::class,
+        \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
+        \Pterodactyl\Http\Middleware\TrimStrings::class,
+        \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        \Pterodactyl\Http\Middleware\TrustProxies::class,
+    ];
+
+    /**
+     * The application's route middleware groups.
+     */
+    protected $middlewareGroups = [
+        'web' => [
+            \Pterodactyl\Http\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Pterodactyl\Http\Middleware\VerifyCsrfToken::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \Pterodactyl\Http\Middleware\LanguageMiddleware::class,
+        ],
+        'api' => [
+            'throttle:60,1',
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \Pterodactyl\Http\Middleware\Api\SetSessionDriver::class,
+        ],
+        'client-api' => [
+            \Pterodactyl\Http\Middleware\Api\AuthenticateIPAccess::class,
+            'throttle:60,1',
+            \Pterodactyl\Http\Middleware\Api\AuthenticateKey::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        ],
+        'daemon' => [
+            'throttle:60,1',
+            \Pterodactyl\Http\Middleware\Daemon\DaemonAuthenticate::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        ],
+    ];
+
+    /**
+     * The application's route middleware.
+     */
+    protected $routeMiddleware = [
+        'auth' => \Pterodactyl\Http\Middleware\Authenticate::class,
+        'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
+        'bindings' => \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        'can' => \Illuminate\Auth\Middleware\Authorize::class,
+        'guest' => \Pterodactyl\Http\Middleware\RedirectIfAuthenticated::class,
+        'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
+    ];
+
+    /**
+     * The priority-sorted list of middleware.
+     */
+    protected $middlewarePriority = [
+        \Pterodactyl\Http\Middleware\MaintenanceMiddleware::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Pterodactyl\Http\Middleware\Authenticate::class,
+        \Illuminate\Routing\Middleware\ThrottleRequests::class,
+        \Illuminate\Session\Middleware\AuthenticateSession::class,
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        \Illuminate\Auth\Middleware\Authorize::class,
+    ];
+}
+?>
+KERNELEOF
+    echo "✅ Fresh Kernel created"
 fi
 
 # Restore original routes from backup
 ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
-if [ -f "$BACKUP_DIR/admin_routes.php.bak_$TIMESTAMP" ]; then
-    cp "$BACKUP_DIR/admin_routes.php.bak_$TIMESTAMP" "$ROUTES_PATH"
-    echo "✅ Routes restored from backup"
+ROUTES_BACKUP=$(ls -t "$BACKUP_DIR"/admin_routes.php.bak_* 2>/dev/null | head -n1)
+if [ -n "$ROUTES_BACKUP" ]; then
+    cp "$ROUTES_BACKUP" "$ROUTES_PATH"
+    echo "✅ Routes restored from backup: $ROUTES_BACKUP"
 else
-    # Remove middleware from routes manually
-    if [ -f "$ROUTES_PATH" ]; then
-        sed -i "/->middleware(\['node.access'\]);/d" "$ROUTES_PATH"
-        echo "✅ Middleware removed from routes"
-    fi
+    echo "⚠️ No routes backup found, perlu restore manual routes admin.php"
 fi
 
-# Restore other files from backup
-echo "🔄 Restoring original files from backup..."
-for backup_file in "$BACKUP_DIR"/*.bak_*; do
-    if [ -f "$backup_file" ]; then
-        filename=$(basename "$backup_file")
-        original_name=$(echo "$filename" | sed 's/\.bak_[0-9]*//')
-        
-        case "$original_name" in
-            "Kernel.php")
-                cp "$backup_file" "/var/www/pterodactyl/app/Http/Kernel.php"
-                echo "✅ Restored Kernel.php from backup"
-                ;;
-            "admin_routes.php")
-                cp "$backup_file" "/var/www/pterodactyl/routes/admin.php"
-                echo "✅ Restored admin routes from backup"
-                ;;
-            "ViewServiceProvider.php")
-                cp "$backup_file" "/var/www/pterodactyl/app/Providers/ViewServiceProvider.php"
-                echo "✅ Restored ViewServiceProvider from backup"
-                ;;
-        esac
+# Restore original layout from backup
+LAYOUT_PATH="/var/www/pterodactyl/resources/views/layouts/admin.blade.php"
+LAYOUT_BACKUP=$(ls -t "$BACKUP_DIR"/admin_layout.blade.php.bak_* 2>/dev/null | head -n1)
+if [ -n "$LAYOUT_BACKUP" ]; then
+    cp "$LAYOUT_BACKUP" "$LAYOUT_PATH"
+    echo "✅ Layout restored from backup: $LAYOUT_BACKUP"
+else
+    # Remove CSS from layout manually
+    if [ -f "$LAYOUT_PATH" ]; then
+        sed -i '/security-panel.css/d' "$LAYOUT_PATH"
+        echo "✅ CSS reference removed from layout"
     fi
-done
+fi
 
 # Remove security CSS
 SECURITY_CSS_PATH="/var/www/pterodactyl/public/themes/pterodactyl/css/security-panel.css"
 if [ -f "$SECURITY_CSS_PATH" ]; then
     rm -f "$SECURITY_CSS_PATH"
     echo "✅ Security CSS removed"
-fi
-
-# Remove CSS from layout
-LAYOUT_PATH="/var/www/pterodactyl/resources/views/layouts/admin.blade.php"
-if [ -f "$LAYOUT_PATH" ]; then
-    sed -i '/security-panel.css/d' "$LAYOUT_PATH"
-    echo "✅ CSS reference removed from layout"
 fi
 
 # Clear all caches
@@ -102,13 +144,10 @@ php /var/www/pterodactyl/artisan route:clear
 # Test PHP syntax
 echo "🔍 Testing PHP syntax..."
 php -l "$KERNEL_PATH"
-if [ -f "$COMPOSER_PROVIDER_PATH" ]; then
-    php -l "$COMPOSER_PROVIDER_PATH"
-fi
 php -l "$ROUTES_PATH"
 
 echo ""
 echo "♻️ Uninstall proteksi nodes selesai!"
 echo "🔓 Semua fitur nodes sekarang dapat diakses normal oleh semua admin"
 echo "📁 Backup files tersimpan di: $BACKUP_DIR"
-echo "✅ Semua file sudah di-test syntax PHP-nya"
+echo "✅ Semua file sudah di-restore ke original"
