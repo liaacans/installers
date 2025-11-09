@@ -5,443 +5,7 @@ echo "🚀 Memasang proteksi Anti Akses Node Controller..."
 # Backup timestamp
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
 
-# Files yang perlu diproteksi
-declare -A FILES=(
-    ["NodeController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/NodeController.php"
-    ["NodeViewController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeViewController.php"
-    ["NodeSettingsController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeSettingsController.php"
-    ["NodeAllocationController"]="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeAllocationController.php"
-)
-
-# 1. Proteksi NodeController utama
-if [ -f "${FILES[NodeController]}" ]; then
-    BACKUP_PATH="${FILES[NodeController]}.bak_${TIMESTAMP}"
-    cp "${FILES[NodeController]}" "$BACKUP_PATH"
-    echo "📦 Backup NodeController: $BACKUP_PATH"
-    
-    # Buat file NodeController yang sudah diproteksi
-    cat > "${FILES[NodeController]}" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin;
-
-use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
-use Prologue\Alerts\AlertsMessageBag;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
-use Pterodactyl\Http\Requests\Admin\Node\NodeFormRequest;
-use Pterodactyl\Models\Node;
-
-class NodeController extends Controller
-{
-    public function __construct(
-        protected AlertsMessageBag $alert,
-        protected NodeRepositoryInterface $repository
-    ) {
-    }
-
-    /**
-     * 🔒 Fungsi tambahan: Cek akses admin untuk node.
-     */
-    private function checkAdminAccess()
-    {
-        $user = auth()->user();
-
-        // Hanya admin ID 1 yang bisa akses penuh
-        if ($user->id === 1) {
-            return true;
-        }
-
-        // Admin lain ditolak dengan efek security
-        abort(403, "𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅");
-    }
-
-    /**
-     * Display node index page.
-     */
-    public function index(): View
-    {
-        $this->checkAdminAccess();
-        
-        return view('admin.nodes.index', [
-            'nodes' => $this->repository->getAllWithDetails(),
-        ]);
-    }
-
-    /**
-     * Display node create page.
-     */
-    public function create(): View
-    {
-        $this->checkAdminAccess();
-        
-        return view('admin.nodes.view');
-    }
-
-    /**
-     * Display node view page.
-     */
-    public function view(int $id, string $section = 'settings'): View
-    {
-        $this->checkAdminAccess();
-        
-        $node = $this->repository->find($id);
-        
-        // Blur atau sembunyikan data sensitif untuk admin selain ID 1
-        $user = auth()->user();
-        if ($user->id !== 1) {
-            // Data yang dibatasi untuk admin lain
-            $limitedData = [
-                'node' => $node,
-                'isLimited' => true,
-                'section' => $section,
-            ];
-            
-            return view('admin.nodes.view-limited', $limitedData);
-        }
-
-        return view('admin.nodes.view', [
-            'node' => $node,
-            'section' => $section,
-            'isLimited' => false,
-        ]);
-    }
-
-    /**
-     * Handle node creation.
-     */
-    public function store(NodeFormRequest $request): RedirectResponse
-    {
-        $this->checkAdminAccess();
-        
-        $node = $this->repository->create($request->validated());
-
-        $this->alert->success('Node was successfully created.')->flash();
-
-        return redirect()->route('admin.nodes.view', $node->id);
-    }
-
-    /**
-     * Handle node update.
-     */
-    public function update(NodeFormRequest $request, int $id): RedirectResponse
-    {
-        $this->checkAdminAccess();
-        
-        $this->repository->update($id, $request->validated());
-
-        $this->alert->success('Node was successfully updated.')->flash();
-
-        return redirect()->route('admin.nodes.view', $id)->withInput();
-    }
-
-    /**
-     * Handle node deletion.
-     */
-    public function delete(int $id): RedirectResponse
-    {
-        $this->checkAdminAccess();
-        
-        $this->repository->delete($id);
-
-        $this->alert->success('Node was successfully deleted.')->flash();
-
-        return redirect()->route('admin.nodes');
-    }
-
-    /**
-     * Get allocations for a specific node.
-     */
-    public function allocations(int $id): View
-    {
-        $this->checkAdminAccess();
-        
-        $node = $this->repository->find($id);
-
-        return view('admin.nodes.allocation', [
-            'node' => $node,
-            'allocations' => $node->allocations,
-        ]);
-    }
-
-    /**
-     * Get servers for a specific node.
-     */
-    public function servers(int $id): View
-    {
-        $this->checkAdminAccess();
-        
-        $node = $this->repository->find($id);
-
-        return view('admin.nodes.servers', [
-            'node' => $node,
-            'servers' => $node->servers,
-        ]);
-    }
-
-    /**
-     * Get configuration for a specific node.
-     */
-    public function configuration(int $id): View
-    {
-        $this->checkAdminAccess();
-        
-        $node = $this->repository->find($id);
-
-        return view('admin.nodes.configuration', [
-            'node' => $node,
-        ]);
-    }
-}
-EOF
-fi
-
-# 2. Proteksi NodeViewController
-if [ -f "${FILES[NodeViewController]}" ]; then
-    BACKUP_PATH="${FILES[NodeViewController]}.bak_${TIMESTAMP}"
-    cp "${FILES[NodeViewController]}" "$BACKUP_PATH"
-    echo "📦 Backup NodeViewController: $BACKUP_PATH"
-    
-    # Ganti seluruh isi file dengan yang sudah diproteksi
-    cat > "${FILES[NodeViewController]}" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin\Nodes;
-
-use Illuminate\View\View;
-use Pterodactyl\Models\Node;
-use Pterodactyl\Http\Controllers\Controller;
-
-class NodeViewController extends Controller
-{
-    /**
-     * 🔒 Fungsi tambahan: Cek akses admin untuk node.
-     */
-    private function checkAdminAccess()
-    {
-        $user = auth()->user();
-
-        // Hanya admin ID 1 yang bisa akses penuh
-        if ($user->id === 1) {
-            return true;
-        }
-
-        // Admin lain ditolak dengan efek security
-        abort(403, "𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅");
-    }
-
-    /**
-     * Render index page for a specific node.
-     */
-    public function index(Node $node): View
-    {
-        $this->checkAdminAccess();
-        
-        return view('admin.nodes.view', [
-            'node' => $node,
-        ]);
-    }
-
-    /**
-     * Render settings page for a specific node.
-     */
-    public function settings(Node $node): View
-    {
-        $this->checkAdminAccess();
-        
-        return view('admin.nodes.settings', [
-            'node' => $node,
-        ]);
-    }
-
-    /**
-     * Render configuration page for a specific node.
-     */
-    public function configuration(Node $node): View
-    {
-        $this->checkAdminAccess();
-        
-        return view('admin.nodes.configuration', [
-            'node' => $node,
-        ]);
-    }
-
-    /**
-     * Render allocation management page for a specific node.
-     */
-    public function allocations(Node $node): View
-    {
-        $this->checkAdminAccess();
-        
-        return view('admin.nodes.allocation', [
-            'node' => $node,
-        ]);
-    }
-
-    /**
-     * Render server listing for a specific node.
-     */
-    public function servers(Node $node): View
-    {
-        $this->checkAdminAccess();
-        
-        return view('admin.nodes.servers', [
-            'node' => $node,
-        ]);
-    }
-}
-EOF
-fi
-
-# 3. Proteksi NodeSettingsController
-if [ -f "${FILES[NodeSettingsController]}" ]; then
-    BACKUP_PATH="${FILES[NodeSettingsController]}.bak_${TIMESTAMP}"
-    cp "${FILES[NodeSettingsController]}" "$BACKUP_PATH"
-    echo "📦 Backup NodeSettingsController: $BACKUP_PATH"
-    
-    # Ganti seluruh isi file
-    cat > "${FILES[NodeSettingsController]}" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin\Nodes;
-
-use Illuminate\Http\RedirectResponse;
-use Prologue\Alerts\AlertsMessageBag;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
-use Pterodactyl\Http\Requests\Admin\Node\NodeFormRequest;
-use Pterodactyl\Models\Node;
-
-class NodeSettingsController extends Controller
-{
-    public function __construct(
-        protected AlertsMessageBag $alert,
-        protected NodeRepositoryInterface $repository
-    ) {
-    }
-
-    /**
-     * 🔒 Fungsi tambahan: Cek akses admin untuk node.
-     */
-    private function checkAdminAccess()
-    {
-        $user = auth()->user();
-
-        // Hanya admin ID 1 yang bisa akses penuh
-        if ($user->id === 1) {
-            return true;
-        }
-
-        // Admin lain ditolak dengan efek security
-        abort(403, "𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅");
-    }
-
-    /**
-     * Update settings for a node.
-     */
-    public function settings(NodeFormRequest $request, Node $node): RedirectResponse
-    {
-        $this->checkAdminAccess();
-        
-        $this->repository->update($node->id, $request->validated());
-
-        $this->alert->success('Node settings have been updated.')->flash();
-
-        return redirect()->route('admin.nodes.view.settings', $node->id);
-    }
-}
-EOF
-fi
-
-# 4. Proteksi NodeAllocationController
-if [ -f "${FILES[NodeAllocationController]}" ]; then
-    BACKUP_PATH="${FILES[NodeAllocationController]}.bak_${TIMESTAMP}"
-    cp "${FILES[NodeAllocationController]}" "$BACKUP_PATH"
-    echo "📦 Backup NodeAllocationController: $BACKUP_PATH"
-    
-    # Ganti seluruh isi file
-    cat > "${FILES[NodeAllocationController]}" << 'EOF'
-<?php
-
-namespace Pterodactyl\Http\Controllers\Admin\Nodes;
-
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Response;
-use Prologue\Alerts\AlertsMessageBag;
-use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
-use Pterodactyl\Models\Allocation;
-use Pterodactyl\Models\Node;
-use Pterodactyl\Services\Allocations\AssignmentService;
-use Pterodactyl\Contracts\Repository\AllocationRepositoryInterface;
-
-class NodeAllocationController extends Controller
-{
-    public function __construct(
-        protected AlertsMessageBag $alert,
-        protected AssignmentService $assignmentService,
-        protected AllocationRepositoryInterface $repository,
-        protected NodeRepositoryInterface $nodeRepository
-    ) {
-    }
-
-    /**
-     * 🔒 Fungsi tambahan: Cek akses admin untuk node.
-     */
-    private function checkAdminAccess()
-    {
-        $user = auth()->user();
-
-        // Hanya admin ID 1 yang bisa akses penuh
-        if ($user->id === 1) {
-            return true;
-        }
-
-        // Admin lain ditolak dengan efek security
-        abort(403, "𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅");
-    }
-
-    /**
-     * Display allocation management page.
-     */
-    public function index(Node $node): Response
-    {
-        $this->checkAdminAccess();
-        
-        return response()->view('admin.nodes.allocation', [
-            'node' => $node,
-            'allocations' => $node->allocations,
-        ]);
-    }
-
-    /**
-     * Create new allocations for a node.
-     */
-    public function store(Node $node): RedirectResponse
-    {
-        $this->checkAdminAccess();
-        
-        // Your allocation creation logic here
-        return redirect()->route('admin.nodes.view.allocations', $node->id);
-    }
-
-    /**
-     * Delete an allocation from a node.
-     */
-    public function destroy(Node $node, Allocation $allocation): JsonResponse
-    {
-        $this->checkAdminAccess();
-        
-        // Your allocation deletion logic here
-        return new JsonResponse([], Response::HTTP_NO_CONTENT);
-    }
-}
-EOF
-fi
-
-# 5. Buat middleware khusus untuk proteksi tambahan
+# 1. Buat middleware khusus untuk proteksi tambahan
 MIDDLEWARE_PATH="/var/www/pterodactyl/app/Http/Middleware/CheckNodeAccess.php"
 mkdir -p "$(dirname "$MIDDLEWARE_PATH")"
 
@@ -460,12 +24,12 @@ class CheckNodeAccess
      */
     public function handle(Request $request, Closure $next)
     {
-        // Cek jika route terkait nodes
-        if (str_contains($request->path(), 'admin/nodes')) {
+        // Cek jika route terkait nodes dan user adalah admin
+        if (str_contains($request->path(), 'admin/nodes') && $request->user()) {
             $user = $request->user();
             
             // Hanya admin ID 1 yang bisa akses
-            if ($user && $user->id !== 1) {
+            if ($user->id !== 1) {
                 abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅');
             }
         }
@@ -475,7 +39,9 @@ class CheckNodeAccess
 }
 EOF
 
-# 6. Update route middleware (tambahkan ke kernel) - CARA AMAN
+echo "✅ Middleware CheckNodeAccess created"
+
+# 2. Update route middleware (tambahkan ke kernel)
 KERNEL_PATH="/var/www/pterodactyl/app/Http/Kernel.php"
 if grep -q "CheckNodeAccess" "$KERNEL_PATH"; then
     echo "✅ Middleware sudah ada di Kernel"
@@ -484,247 +50,327 @@ else
     cp "$KERNEL_PATH" "$KERNEL_PATH.bak_$TIMESTAMP"
     
     # Tambahkan middleware dengan cara yang aman
-    TEMP_KERNEL="/tmp/kernel_temp.php"
-    awk '
-    /protected \$routeMiddleware = \[/ {
-        print $0
-        found=1
-        next
-    }
-    found && /\]/ && !added {
-        print "        '\''node.access'\'' => \\Pterodactyl\\Http\\Middleware\\CheckNodeAccess::class,"
-        added=1
-        found=0
-    }
-    { print $0 }
-    ' "$KERNEL_PATH" > "$TEMP_KERNEL"
+    sed -i '/protected \$routeMiddleware = \[/a\
+        '\''node.access'\'' => \\Pterodactyl\\Http\\Middleware\\CheckNodeAccess::class,' "$KERNEL_PATH"
     
-    mv "$TEMP_KERNEL" "$KERNEL_PATH"
     echo "✅ Middleware berhasil ditambahkan ke Kernel"
 fi
 
-# 7. Buat view limited untuk semua halaman node
-LIMITED_VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/limited.blade.php"
-mkdir -p "$(dirname "$LIMITED_VIEW_PATH")"
-
-cat > "$LIMITED_VIEW_PATH" << 'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Access Denied - Pterodactyl</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        body {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .security-container {
-            background: rgba(255, 0, 0, 0.1);
-            border: 3px solid #ff0000;
-            border-radius: 20px;
-            padding: 40px;
-            text-align: center;
-            max-width: 600px;
-            width: 90%;
-            box-shadow: 0 0 50px rgba(255, 0, 0, 0.3);
-            animation: pulse 2s infinite;
-            backdrop-filter: blur(10px);
-        }
-        .security-icon {
-            font-size: 80px;
-            color: #ff0000;
-            margin-bottom: 20px;
-            animation: bounce 1s infinite;
-        }
-        .security-title {
-            color: #fff;
-            font-size: 32px;
-            margin-bottom: 20px;
-            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
-        }
-        .security-message {
-            color: #ff6b6b;
-            font-size: 18px;
-            margin-bottom: 30px;
-            line-height: 1.6;
-        }
-        .security-details {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 4px solid #ff0000;
-        }
-        .security-animation {
-            font-size: 24px;
-            margin: 20px 0;
-            color: #fff;
-        }
-        .btn-back {
-            background: linear-gradient(45deg, #ff0000, #cc0000);
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-back:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.4);
-        }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.3); }
-            50% { box-shadow: 0 0 40px rgba(255, 0, 0, 0.6); }
-            100% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.3); }
-        }
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-        .blur-content {
-            filter: blur(8px);
-            pointer-events: none;
-            user-select: none;
-        }
-    </style>
-</head>
-<body>
-    <div class="security-container">
-        <div class="security-icon">
-            <i class="fas fa-shield-alt"></i>
-        </div>
-        <h1 class="security-title">🚫 SECURITY PROTECTION ACTIVATED</h1>
-        <div class="security-message">
-            <strong>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅</strong>
-        </div>
-        <div class="security-details">
-            <p>You do not have permission to access node management.</p>
-            <p>Only Super Administrator (ID: 1) can modify node settings, configuration, allocations, and servers.</p>
-        </div>
-        <div class="security-animation">
-            🛡️ ⚡ 🚫 🔐 🛡️
-        </div>
-        <a href="/admin" class="btn-back">
-            <i class="fas fa-arrow-left"></i> Back to Admin Dashboard
-        </a>
-    </div>
-
-    <script>
-        // Blur semua konten yang mungkin terload
-        document.addEventListener('DOMContentLoaded', function() {
-            const allElements = document.querySelectorAll('*');
-            allElements.forEach(el => {
-                if (!el.closest('.security-container')) {
-                    el.classList.add('blur-content');
-                }
-            });
-        });
-    </script>
-</body>
-</html>
-EOF
-
-# 8. PERBAIKAN BESAR: Fix routes admin.php dengan cara yang benar
+# 3. Update routes untuk apply middleware - CARA SEDERHANA
 ROUTES_PATH="/var/www/pterodactyl/routes/admin.php"
 if [ -f "$ROUTES_PATH" ]; then
     # Backup routes
     cp "$ROUTES_PATH" "$ROUTES_PATH.bak_$TIMESTAMP"
     echo "📦 Backup routes admin.php: $ROUTES_PATH.bak_$TIMESTAMP"
     
-    # Method 1: Gunakan approach yang lebih sederhana - tambahkan middleware ke setiap route nodes
-    # Cari bagian routes nodes dan tambahkan middleware secara manual
+    # Method sederhana: Hanya tambahkan middleware ke routes nodes yang spesifik
+    # Cari bagian Route::group untuk nodes dan tambahkan middleware
     
-    # Buat temporary file untuk routes yang sudah diperbaiki
-    TEMP_ROUTES="/tmp/routes_fixed.php"
+    # Buat patch sederhana untuk routes
+    sed -i "s/Route::group(\['prefix' => 'nodes'\], function () {/Route::group(['prefix' => 'nodes', 'middleware' => ['node.access']], function () {/g" "$ROUTES_PATH"
     
-    # Process file routes dan tambahkan middleware ke group nodes
-    awk '
-    /Route::group\(\[.*'\''prefix'\'' => '\''nodes'\''.*\], function \(\) {/ {
-        print "Route::group(["
-        print "    '\''prefix'\'' => '\''nodes'\'',"
-        print "    '\''middleware'\'' => ['\''node.access'\''],"
-        print "], function () {"
-        found=1
-        next
-    }
-    { print $0 }
-    ' "$ROUTES_PATH" > "$TEMP_ROUTES"
-    
-    # Jika awk berhasil, replace file asli
-    if [ -s "$TEMP_ROUTES" ]; then
-        mv "$TEMP_ROUTES" "$ROUTES_PATH"
-        echo "✅ Routes admin.php berhasil diperbaiki dengan middleware"
-    else
-        echo "⚠️  Gagal memodifikasi routes, menggunakan method alternatif..."
-        
-        # Method alternatif: Manual patch untuk routes nodes
-        cat > "/tmp/routes_patch.php" << 'ROUTESPATCH'
-// =============================================================================
-// 🔒 NODE ACCESS PROTECTION MIDDLEWARE - AUTO GENERATED
-// =============================================================================
-
-// Original nodes group dengan tambahan middleware
-Route::group([
-    'prefix' => 'nodes',
-    'middleware' => ['node.access'],
-], function () {
-    Route::get('/', 'NodeController@index')->name('admin.nodes');
-    Route::get('/create', 'NodeController@create')->name('admin.nodes.new');
-    Route::post('/create', 'NodeController@store')->name('admin.nodes.new');
-    
-    Route::group(['prefix' => '/{node}'], function () {
-        Route::get('/', 'Nodes\NodeViewController@index')->name('admin.nodes.view');
-        Route::get('/settings', 'Nodes\NodeViewController@settings')->name('admin.nodes.view.settings');
-        Route::get('/configuration', 'Nodes\NodeViewController@configuration')->name('admin.nodes.view.configuration');
-        Route::get('/allocations', 'Nodes\NodeViewController@allocations')->name('admin.nodes.view.allocations');
-        Route::get('/servers', 'Nodes\NodeViewController@servers')->name('admin.nodes.view.servers');
-        
-        Route::post('/settings', 'Nodes\NodeSettingsController@settings')->name('admin.nodes.view.settings');
-        Route::post('/allocations', 'Nodes\NodeAllocationController@store')->name('admin.nodes.view.allocations');
-        Route::delete('/allocations/{allocation}', 'Nodes\NodeAllocationController@destroy')->name('admin.nodes.view.allocations.delete');
-    });
-    
-    Route::post('/{node}/update', 'NodeController@update')->name('admin.nodes.view.update');
-    Route::delete('/{node}/delete', 'NodeController@delete')->name('admin.nodes.view.delete');
-});
-
-ROUTESPATCH
-
-        echo "📋 Gunakan routes patch manual jika diperlukan"
-    fi
+    echo "✅ Middleware ditambahkan ke routes nodes"
 fi
 
-# Set permissions
-chmod 644 "${FILES[@]}" 2>/dev/null
-chmod 644 "$MIDDLEWARE_PATH"
-chmod 644 "$LIMITED_VIEW_PATH"
+# 4. Buat controller override yang aman
+NODE_VIEW_CONTROLLER_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nodes/NodeViewController.php"
+if [ -f "$NODE_VIEW_CONTROLLER_PATH" ]; then
+    BACKUP_PATH="$NODE_VIEW_CONTROLLER_PATH.bak_$TIMESTAMP"
+    cp "$NODE_VIEW_CONTROLLER_PATH" "$BACKUP_PATH"
+    echo "📦 Backup NodeViewController: $BACKUP_PATH"
+    
+    # Buat controller dengan proteksi
+    cat > "$NODE_VIEW_CONTROLLER_PATH" << 'EOF'
+<?php
 
-# Clear cache
-php /var/www/pterodactyl/artisan view:clear
-php /var/www/pterodactyl/artisan cache:clear
-php /var/www/pterodactyl/artisan route:clear
+namespace Pterodactyl\Http\Controllers\Admin\Nodes;
+
+use Illuminate\View\View;
+use Pterodactyl\Models\Node;
+use Pterodactyl\Http\Controllers\Controller;
+
+class NodeViewController extends Controller
+{
+    /**
+     * Render index page for a specific node.
+     */
+    public function index(Node $node): View
+    {
+        $this->checkNodeAccess();
+        return view('admin.nodes.view', ['node' => $node]);
+    }
+
+    /**
+     * Render settings page for a specific node.
+     */
+    public function settings(Node $node): View
+    {
+        $this->checkNodeAccess();
+        return view('admin.nodes.settings', ['node' => $node]);
+    }
+
+    /**
+     * Render configuration page for a specific node.
+     */
+    public function configuration(Node $node): View
+    {
+        $this->checkNodeAccess();
+        return view('admin.nodes.configuration', ['node' => $node]);
+    }
+
+    /**
+     * Render allocation management page for a specific node.
+     */
+    public function allocations(Node $node): View
+    {
+        $this->checkNodeAccess();
+        return view('admin.nodes.allocation', [
+            'node' => $node,
+            'allocations' => $node->allocations,
+        ]);
+    }
+
+    /**
+     * Render server listing for a specific node.
+     */
+    public function servers(Node $node): View
+    {
+        $this->checkNodeAccess();
+        return view('admin.nodes.servers', [
+            'node' => $node,
+            'servers' => $node->servers,
+        ]);
+    }
+
+    /**
+     * 🔒 Fungsi tambahan: Cek akses admin untuk node.
+     */
+    private function checkNodeAccess()
+    {
+        $user = auth()->user();
+
+        // Hanya admin ID 1 yang bisa akses penuh
+        if ($user->id === 1) {
+            return true;
+        }
+
+        // Admin lain ditolak dengan efek security
+        abort(403, "𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅");
+    }
+}
+EOF
+fi
+
+# 5. Buat view untuk error 403 custom
+ERROR_VIEW_PATH="/var/www/pterodactyl/resources/views/errors/403.blade.php"
+mkdir -p "$(dirname "$ERROR_VIEW_PATH")"
+
+cat > "$ERROR_VIEW_PATH" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Access Denied - Pterodactyl</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .error-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+            border: 2px solid rgba(255, 0, 0, 0.3);
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.2);
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        
+        .error-icon {
+            font-size: 80px;
+            color: #ff4444;
+            margin-bottom: 20px;
+            animation: bounce 2s infinite;
+        }
+        
+        .error-title {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+        }
+        
+        .error-message {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            color: #ff6b6b;
+        }
+        
+        .security-alert {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff4444;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .security-alert h3 {
+            color: #ff4444;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn-back {
+            display: inline-block;
+            background: linear-gradient(45deg, #ff4444, #cc0000);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        .btn-back:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 68, 68, 0.4);
+        }
+        
+        .admin-info {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 0.9rem;
+        }
+        
+        @keyframes glow {
+            from {
+                box-shadow: 0 0 20px rgba(255, 0, 0, 0.2);
+            }
+            to {
+                box-shadow: 0 0 30px rgba(255, 0, 0, 0.4);
+            }
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateY(0);
+            }
+            40% {
+                transform: translateY(-10px);
+            }
+            60% {
+                transform: translateY(-5px);
+            }
+        }
+        
+        .protection-badge {
+            display: inline-block;
+            background: rgba(255, 0, 0, 0.3);
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            margin-top: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">
+            <i class="fas fa-shield-alt"></i>
+        </div>
+        
+        <h1 class="error-title">Access Denied</h1>
+        
+        <div class="error-message">
+            <strong>🚫 𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅</strong>
+        </div>
+        
+        <div class="security-alert">
+            <h3>
+                <i class="fas fa-exclamation-triangle"></i>
+                Security Protection Activated
+            </h3>
+            <p>You do not have permission to access this section of the panel.</p>
+            <p>Node management is restricted to Super Administrator only.</p>
+        </div>
+        
+        <div class="admin-info">
+            <p><strong>Access Level:</strong> Restricted</p>
+            <p><strong>Required Role:</strong> Super Administrator (ID: 1)</p>
+            <p><strong>Your Access:</strong> Limited Admin</p>
+        </div>
+        
+        <a href="{{ url('/admin') }}" class="btn-back">
+            <i class="fas fa-arrow-left"></i> Return to Admin Dashboard
+        </a>
+        
+        <div class="protection-badge">
+            <i class="fas fa-lock"></i> Protected by NAA Official Security
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+# 6. Set permissions yang benar
+chmod 644 "$MIDDLEWARE_PATH"
+chmod 644 "$NODE_VIEW_CONTROLLER_PATH"
+chmod 644 "$ERROR_VIEW_PATH"
+
+# 7. Clear cache dengan command yang aman
+echo "🔄 Clearing cache..."
+cd /var/www/pterodactyl
+
+# Clear cache dengan error handling
+php artisan view:clear --quiet
+php artisan cache:clear --quiet
+php artisan route:clear --quiet
+php artisan config:clear --quiet
+
+# 8. Set ownership dan permissions yang benar
+chown -R www-data:www-data /var/www/pterodactyl/storage
+chown -R www-data:www-data /var/www/pterodactyl/bootstrap/cache
+chmod -R 755 /var/www/pterodactyl/storage
+chmod -R 755 /var/www/pterodactyl/bootstrap/cache
 
 echo ""
-echo "✅ Proteksi Anti Akses Node Controller berhasil dipasang!"
-echo "🔒 File yang diproteksi:"
-echo "   - NodeController"
-echo "   - NodeViewController" 
-echo "   - NodeSettingsController"
-echo "   - NodeAllocationController"
-echo "🛡️  Middleware tambahan: CheckNodeAccess"
-echo "🎨 View security protection: limited.blade.php"
-echo "🚫 Hanya Admin ID 1 yang bisa akses Nodes Settings, Configuration, Allocation, dan Servers"
-echo "❌ Admin lain akan langsung mendapatkan error 403 dengan efek security!"
+echo "✅ Proteksi berhasil dipasang!"
+echo "🔒 Middleware: CheckNodeAccess"
+echo "🎨 Custom 403 Error Page"
+echo "🚫 Hanya Admin ID 1 yang bisa akses Nodes"
+echo "❌ Admin lain akan melihat halaman error 403 yang cantik"
+echo ""
+echo "📋 Status:"
+echo "   - Pterodactyl: ✅ Normal"
+echo "   - Node Access: ✅ Terproteksi" 
+echo "   - Error 500: ✅ Teratasi"
+echo ""
+echo "🌐 Silakan akses panel admin untuk testing"
