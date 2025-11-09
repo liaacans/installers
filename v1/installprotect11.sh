@@ -194,6 +194,7 @@ class NodeController extends Controller
         ]);
     }
 }
+?>
 EOF
 fi
 
@@ -291,6 +292,7 @@ class NodeViewController extends Controller
         ]);
     }
 }
+?>
 EOF
 fi
 
@@ -351,6 +353,7 @@ class NodeSettingsController extends Controller
         return redirect()->route('admin.nodes.view.settings', $node->id);
     }
 }
+?>
 EOF
 fi
 
@@ -438,6 +441,7 @@ class NodeAllocationController extends Controller
         return new JsonResponse([], Response::HTTP_NO_CONTENT);
     }
 }
+?>
 EOF
 fi
 
@@ -473,6 +477,7 @@ class CheckNodeAccess
         return $next($request);
     }
 }
+?>
 EOF
 
 # 6. Update route middleware (tambahkan ke kernel) - CARA AMAN
