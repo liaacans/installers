@@ -4,7 +4,7 @@ REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/NodesViewController
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
 BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
-echo "🚀 Memasang proteksi Security Panel Admin Nodes View..."
+echo "🚀 Memasang proteksi Specific Routes Admin Nodes View..."
 
 if [ -f "$REMOTE_PATH" ]; then
   mv "$REMOTE_PATH" "$BACKUP_PATH"
@@ -43,32 +43,38 @@ class NodesViewController extends Controller
     ) {}
 
     /**
-     * 🔒 Fungsi utama: Cek akses security panel
+     * 🔒 Fungsi: Cek akses untuk route spesifik node 1
      */
-    private function checkSecurityAccess($request)
+    private function checkNode1Access($request)
     {
         $user = $request->user();
+        $nodeId = $request->route('node');
 
-        // Hanya Admin (user id = 1) yang bisa akses
+        // Jika bukan node ID 1, izinkan akses
+        if ($nodeId != 1) {
+            return true;
+        }
+
+        // Jika admin ID 1, izinkan akses
         if ($user->id === 1) {
             return true;
         }
 
-        // Blokir SEMUA akses untuk admin lain
-        $this->renderSecurityPanel();
+        // Untuk admin lain, tolak akses dengan style keren
+        $this->showAccessDenied();
         return false;
     }
 
     /**
-     * 🔒 Render security panel effect
+     * 🔒 Tampilkan pesan akses ditolak
      */
-    private function renderSecurityPanel()
+    private function showAccessDenied()
     {
         http_response_code(403);
         
         echo '
         <!DOCTYPE html>
-        <html lang="id">
+        <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -81,189 +87,89 @@ class NodesViewController extends Controller
                 }
                 
                 body {
-                    background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 50%, #2d2d2d 100%);
+                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
                     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
                     min-height: 100vh;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: #ffffff;
-                    overflow: hidden;
+                    color: #ecf0f1;
                 }
                 
-                .security-container {
+                .denied-container {
                     text-align: center;
-                    padding: 30px;
-                    max-width: 700px;
-                    width: 95%;
-                    position: relative;
-                    z-index: 10;
+                    padding: 40px;
+                    max-width: 600px;
+                    width: 90%;
                 }
                 
-                .security-panel {
-                    background: rgba(15, 15, 20, 0.95);
-                    border: 3px solid #ff4444;
+                .denied-panel {
+                    background: rgba(23, 25, 35, 0.95);
+                    border: 3px solid #e74c3c;
                     border-radius: 20px;
                     padding: 50px 40px;
                     box-shadow: 
-                        0 0 80px rgba(255, 68, 68, 0.6),
-                        inset 0 0 40px rgba(255, 68, 68, 0.1);
+                        0 0 60px rgba(231, 76, 60, 0.4),
+                        inset 0 0 30px rgba(231, 76, 60, 0.1);
                     position: relative;
                     overflow: hidden;
-                    backdrop-filter: blur(15px);
+                    backdrop-filter: blur(10px);
                 }
                 
-                .security-panel::before {
-                    content: "";
-                    position: absolute;
-                    top: -100%;
-                    left: -100%;
-                    width: 300%;
-                    height: 300%;
-                    background: linear-gradient(45deg, 
-                        transparent 0%, 
-                        rgba(255, 68, 68, 0.1) 50%, 
-                        transparent 100%);
-                    animation: matrix 8s infinite linear;
-                    z-index: 1;
+                .denied-icon {
+                    font-size: 80px;
+                    margin-bottom: 30px;
+                    animation: shake 0.5s ease-in-out infinite alternate;
+                    filter: drop-shadow(0 0 20px rgba(231, 76, 60, 0.6));
                 }
                 
-                @keyframes matrix {
-                    0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-                    100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+                @keyframes shake {
+                    0% { transform: translateX(-5px) rotate(-5deg); }
+                    100% { transform: translateX(5px) rotate(5deg); }
                 }
                 
-                .security-icon {
-                    font-size: 90px;
-                    margin-bottom: 25px;
-                    animation: iconPulse 2s infinite ease-in-out;
-                    filter: drop-shadow(0 0 25px rgba(255, 68, 68, 0.8));
-                    position: relative;
-                    z-index: 2;
-                }
-                
-                @keyframes iconPulse {
-                    0%, 100% { 
-                        transform: scale(1) rotate(0deg); 
-                        color: #ff4444;
-                    }
-                    50% { 
-                        transform: scale(1.15) rotate(5deg); 
-                        color: #ff6666;
-                    }
-                }
-                
-                .security-title {
+                .denied-title {
                     font-size: 36px;
-                    font-weight: 900;
-                    margin-bottom: 15px;
-                    background: linear-gradient(45deg, #ff4444, #ff6666, #ff4444);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                    background-clip: text;
-                    text-shadow: 0 0 40px rgba(255, 68, 68, 0.7);
-                    position: relative;
-                    z-index: 2;
-                    letter-spacing: 1px;
+                    font-weight: 800;
+                    margin-bottom: 20px;
+                    color: #e74c3c;
+                    text-shadow: 0 0 30px rgba(231, 76, 60, 0.5);
                 }
                 
-                .security-subtitle {
-                    font-size: 24px;
-                    font-weight: 700;
-                    margin-bottom: 25px;
-                    color: #ff4444;
-                    position: relative;
-                    z-index: 2;
-                    animation: textGlow 1.5s ease-in-out infinite alternate;
-                }
-                
-                @keyframes textGlow {
-                    from { text-shadow: 0 0 10px #ff4444; }
-                    to { text-shadow: 0 0 20px #ff6666, 0 0 30px #ff4444; }
-                }
-                
-                .security-message {
-                    font-size: 18px;
-                    line-height: 1.7;
-                    margin-bottom: 35px;
-                    opacity: 0.9;
-                    position: relative;
-                    z-index: 2;
-                }
-                
-                .security-details {
-                    background: rgba(0, 0, 0, 0.7);
-                    border: 1px solid #333;
-                    border-radius: 15px;
-                    padding: 25px;
-                    margin: 30px 0;
-                    text-align: left;
-                    position: relative;
-                    z-index: 2;
-                    box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
-                }
-                
-                .detail-item {
-                    margin-bottom: 12px;
-                    font-family: "Courier New", monospace;
-                    font-size: 15px;
-                    color: #ff4444;
-                    display: flex;
-                    align-items: center;
-                }
-                
-                .detail-item:last-child {
-                    margin-bottom: 0;
-                }
-                
-                .detail-icon {
-                    margin-right: 12px;
-                    font-size: 16px;
-                }
-                
-                .security-footer {
-                    margin-top: 30px;
-                    font-size: 14px;
-                    opacity: 0.8;
-                    position: relative;
-                    z-index: 2;
-                }
-                
-                .access-code {
-                    background: rgba(255, 68, 68, 0.1);
-                    border: 1px solid #ff4444;
-                    border-radius: 10px;
-                    padding: 15px;
-                    margin: 20px 0;
-                    font-family: "Courier New", monospace;
-                    font-size: 13px;
-                    color: #ff6666;
-                    position: relative;
-                    z-index: 2;
-                }
-                
-                .floating-elements {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    pointer-events: none;
-                    z-index: 1;
-                }
-                
-                .floating-element {
-                    position: absolute;
+                .denied-message {
                     font-size: 20px;
-                    color: rgba(255, 68, 68, 0.3);
-                    animation: float 15s infinite linear;
+                    line-height: 1.6;
+                    margin-bottom: 30px;
+                    opacity: 0.9;
                 }
                 
-                @keyframes float {
-                    0% { transform: translateY(100%) rotate(0deg); opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { transform: translateY(-100%) rotate(360deg); opacity: 0; }
+                .denied-protection {
+                    background: rgba(0, 0, 0, 0.6);
+                    border: 1px solid #34495e;
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin: 25px 0;
+                    font-family: "Courier New", monospace;
+                    font-size: 16px;
+                    color: #e74c3c;
+                    text-align: center;
+                    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+                }
+                
+                .glowing-text {
+                    color: #e74c3c;
+                    animation: glow 1.5s ease-in-out infinite alternate;
+                    font-weight: bold;
+                    font-size: 24px;
+                }
+                
+                @keyframes glow {
+                    from { 
+                        text-shadow: 0 0 10px #e74c3c, 0 0 20px #e74c3c; 
+                    }
+                    to { 
+                        text-shadow: 0 0 15px #ff7979, 0 0 30px #ff7979; 
+                    }
                 }
                 
                 .scan-line {
@@ -271,176 +177,67 @@ class NodesViewController extends Controller
                     top: 0;
                     left: 0;
                     width: 100%;
-                    height: 3px;
-                    background: linear-gradient(90deg, 
-                        transparent, 
-                        #ff4444, 
-                        #ff6666, 
-                        #ff4444, 
-                        transparent);
-                    animation: scan 4s linear infinite;
-                    z-index: 3;
-                    box-shadow: 0 0 20px #ff4444;
+                    height: 2px;
+                    background: linear-gradient(90deg, transparent, #e74c3c, transparent);
+                    animation: scan 2s linear infinite;
                 }
                 
                 @keyframes scan {
-                    0% { top: 0%; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0; }
+                    0% { top: 0%; }
+                    100% { top: 100%; }
                 }
                 
-                .binary-rain {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    pointer-events: none;
-                    z-index: 0;
+                .pulse-effect {
+                    animation: pulse 2s infinite;
                 }
                 
-                .binary-digit {
-                    position: absolute;
-                    color: rgba(0, 255, 0, 0.3);
-                    font-family: "Courier New", monospace;
-                    font-size: 14px;
-                    animation: fall 10s infinite linear;
-                }
-                
-                @keyframes fall {
-                    0% { transform: translateY(-100%); opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { transform: translateY(1000%); opacity: 0; }
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.7; }
                 }
             </style>
         </head>
         <body>
-            <!-- Binary Rain Background -->
-            <div class="binary-rain" id="binaryRain"></div>
-            
-            <div class="security-container">
-                <div class="security-panel">
+            <div class="denied-container">
+                <div class="denied-panel">
                     <div class="scan-line"></div>
+                    <div class="denied-icon">🚫</div>
+                    <h1 class="denied-title">ACCESS DENIED</h1>
                     
-                    <!-- Floating Elements -->
-                    <div class="floating-elements">
-                        <div class="floating-element" style="left:10%; animation-delay: 0s;">🚫</div>
-                        <div class="floating-element" style="left:20%; animation-delay: 1s;">🔒</div>
-                        <div class="floating-element" style="left:30%; animation-delay: 2s;">⚡</div>
-                        <div class="floating-element" style="left:40%; animation-delay: 3s;">🛡️</div>
-                        <div class="floating-element" style="left:50%; animation-delay: 4s;">🚷</div>
-                        <div class="floating-element" style="left:60%; animation-delay: 5s;">📛</div>
-                        <div class="floating-element" style="left:70%; animation-delay: 6s;">🚨</div>
-                        <div class="floating-element" style="left:80%; animation-delay: 7s;">🔐</div>
-                        <div class="floating-element" style="left:90%; animation-delay: 8s;">🚫</div>
+                    <div class="denied-message">
+                        <p class="pulse-effect">✖️ akses ditolak, hanya admin id 1 yang bisa melihat!</p>
                     </div>
                     
-                    <div class="security-icon">✖️</div>
-                    <h1 class="security-title">ACCESS DENIED</h1>
-                    <div class="security-subtitle">✖️ Akses Ditolak</div>
-                    
-                    <div class="security-message">
-                        <p><strong>Anda tidak memiliki izin untuk mengakses halaman ini!</strong></p>
-                        <p>Hanya <strong>Administrator Utama (ID 1)</strong> yang dapat mengakses panel nodes.</p>
+                    <div class="denied-protection">
+                        <div class="glowing-text">- protect by @andinofficial -</div>
                     </div>
                     
-                    <div class="security-details">
-                        <div class="detail-item">
-                            <span class="detail-icon">🔒</span>
-                            <strong>Status:</strong> Akses Ditolak - Security Restriction Active
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-icon">🚫</span>
-                            <strong>Pesan:</strong> ✖️ Akses ditolak, hanya admin id 1 yang bisa melihat!
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-icon">🛡️</span>
-                            <strong>Protection:</strong> protect by @andinofficial
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-icon">⚡</span>
-                            <strong>Level:</strong> Maximum Security Restriction
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-icon">📛</span>
-                            <strong>Violation:</strong> Unauthorized Access Attempt
-                        </div>
-                    </div>
-                    
-                    <div class="access-code">
-                        [SECURITY_BREACH_DETECTED] :: ADMIN_NODES_ACCESS_VIOLATION :: RESTRICTED_AREA
-                    </div>
-                    
-                    <div class="security-footer">
-                        © ' . date('Y') . ' Pterodactyl Panel Security System | All access attempts are logged
+                    <div style="margin-top: 30px; opacity: 0.7;">
+                        <p>Node ID: <strong>1</strong> • Restricted Area • Admin Only</p>
                     </div>
                 </div>
             </div>
             
             <script>
-                // Binary rain effect
-                function createBinaryRain() {
-                    const binaryRain = document.getElementById("binaryRain");
-                    const chars = "01";
-                    
-                    for (let i = 0; i < 50; i++) {
-                        const binaryDigit = document.createElement("div");
-                        binaryDigit.className = "binary-digit";
-                        binaryDigit.textContent = chars.charAt(Math.floor(Math.random() * chars.length));
-                        binaryDigit.style.left = Math.random() * 100 + "%";
-                        binaryDigit.style.animationDelay = Math.random() * 10 + "s";
-                        binaryDigit.style.animationDuration = (5 + Math.random() * 10) + "s";
-                        binaryRain.appendChild(binaryDigit);
-                    }
-                }
-                
-                // Typing effect for title
-                function typeWriter() {
-                    const titles = [
-                        "✖️ AKSES DITOLAK",
-                        "🚫 ACCESS DENIED", 
-                        "🔒 SECURITY LOCK",
-                        "🛡️ PROTECTED AREA"
+                document.addEventListener("DOMContentLoaded", function() {
+                    const messages = [
+                        "✖️ akses ditolak, hanya admin id 1 yang bisa melihat!",
+                        "🚫 Unauthorized Access Attempt",
+                        "🔒 Restricted Area - Node 1"
                     ];
                     
-                    let currentIndex = 0;
-                    const titleElement = document.querySelector(".security-title");
+                    let currentMessage = 0;
+                    const messageElement = document.querySelector(".denied-message p");
                     
                     setInterval(() => {
-                        titleElement.style.opacity = "0";
+                        messageElement.style.opacity = "0";
                         
                         setTimeout(() => {
-                            titleElement.textContent = titles[currentIndex];
-                            titleElement.style.opacity = "1";
-                            currentIndex = (currentIndex + 1) % titles.length;
+                            messageElement.textContent = messages[currentMessage];
+                            messageElement.style.opacity = "1";
+                            currentMessage = (currentMessage + 1) % messages.length;
                         }, 500);
                     }, 3000);
-                }
-                
-                // Hover effects
-                document.addEventListener("DOMContentLoaded", function() {
-                    createBinaryRain();
-                    typeWriter();
-                    
-                    const panel = document.querySelector(".security-panel");
-                    
-                    panel.addEventListener("mouseenter", function() {
-                        this.style.transform = "scale(1.02)";
-                        this.style.boxShadow = "0 0 100px rgba(255, 68, 68, 0.8)";
-                    });
-                    
-                    panel.addEventListener("mouseleave", function() {
-                        this.style.transform = "scale(1)";
-                        this.style.boxShadow = "0 0 80px rgba(255, 68, 68, 0.6)";
-                    });
-                    
-                    // Add click sound effect (optional)
-                    panel.addEventListener("click", function() {
-                        const audio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQ");
-                        audio.play().catch(() => {});
-                    });
                 });
             </script>
         </body>
@@ -448,14 +245,72 @@ class NodesViewController extends Controller
         exit();
     }
 
-    // ==================== SEMUA METHOD DIPROTEKSI ====================
+    /**
+     * ==============================================
+     * 🔒 ROUTE YANG DIPROTEKSI - HANYA NODE ID 1
+     * ==============================================
+     */
 
-    public function index(Request $request)
+    public function settings(Request $request, Node $node)
     {
-        if (!$this->checkSecurityAccess($request)) {
+        if (!$this->checkNode1Access($request)) {
             return;
         }
 
+        // Original settings logic
+        return view('admin.nodes.settings', [
+            'node' => $node,
+        ]);
+    }
+
+    public function configuration(Request $request, Node $node)
+    {
+        if (!$this->checkNode1Access($request)) {
+            return;
+        }
+
+        // Original configuration logic
+        return response()->json([
+            'config' => $node->getConfiguration(),
+        ]);
+    }
+
+    public function allocation(Request $request, Node $node)
+    {
+        if (!$this->checkNode1Access($request)) {
+            return;
+        }
+
+        // Original allocation logic
+        $this->updateService->handle($node, $request->validated());
+
+        return redirect()->route('admin.nodes.view', $node->id)
+            ->with('success', 'Alokasi berhasil diperbarui');
+    }
+
+    public function servers(Request $request, Node $node)
+    {
+        if (!$this->checkNode1Access($request)) {
+            return;
+        }
+
+        // Original servers logic
+        $servers = $node->servers()->with('user')->get();
+
+        return view('admin.nodes.servers', [
+            'node' => $node,
+            'servers' => $servers,
+        ]);
+    }
+
+    /**
+     * ==============================================
+     * ✅ ROUTE YANG TIDAK DIPROTEKSI - SEMUA NODE
+     * ==============================================
+     */
+
+    public function index(Request $request)
+    {
         $nodes = $this->repository->getAllNodesWithServers();
 
         return view('admin.nodes.index', [
@@ -465,10 +320,6 @@ class NodesViewController extends Controller
 
     public function view(Request $request, Node $node)
     {
-        if (!$this->checkSecurityAccess($request)) {
-            return;
-        }
-
         $allocations = $node->allocations()->with('server')->get();
         $servers = $node->servers;
 
@@ -481,10 +332,6 @@ class NodesViewController extends Controller
 
     public function update(NodeFormRequest $request, Node $node)
     {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
         $this->updateService->handle($node, $request->validated());
 
         return redirect()->route('admin.nodes.view', $node->id)
@@ -493,19 +340,11 @@ class NodesViewController extends Controller
 
     public function create()
     {
-        if (!$this->checkSecurityAccess(request())) {
-            return;
-        }
-
         return view('admin.nodes.create');
     }
 
     public function store(NodeFormRequest $request)
     {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
         $node = $this->creationService->handle($request->validated());
 
         return redirect()->route('admin.nodes.view', $node->id)
@@ -514,74 +353,15 @@ class NodesViewController extends Controller
 
     public function delete(Request $request, Node $node)
     {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
         $this->deletionService->handle($node);
 
         return redirect()->route('admin.nodes')
             ->with('success', 'Node berhasil dihapus');
     }
 
-    public function allocation(Request $request, Node $node)
-    {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
-        // Original allocation logic here
-        return view('admin.nodes.allocation', [
-            'node' => $node,
-        ]);
-    }
-
-    public function configuration(Request $request, Node $node)
-    {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
-        // Original configuration logic here
-        return view('admin.nodes.configuration', [
-            'node' => $node,
-        ]);
-    }
-
-    public function settings(Request $request, Node $node)
-    {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
-        // Original settings logic here
-        return view('admin.nodes.settings', [
-            'node' => $node,
-        ]);
-    }
-
-    public function servers(Request $request, Node $node)
-    {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
-        // Original servers logic here
-        $servers = $node->servers()->with('user')->get();
-
-        return view('admin.nodes.servers', [
-            'node' => $node,
-            'servers' => $servers,
-        ]);
-    }
-
     public function about(Request $request, Node $node)
     {
-        if (!$this->checkSecurityAccess($request)) {
-            return new JsonResponse(['error' => '✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'], 403);
-        }
-
-        // Original about logic here
+        // Original about logic
         return view('admin.nodes.about', [
             'node' => $node,
         ]);
@@ -590,88 +370,142 @@ class NodesViewController extends Controller
 ?>
 EOF
 
-# Proteksi route routes/web.php jika perlu
-ROUTES_PATH="/var/www/pterodactyl/routes/web.php"
-if [ -f "$ROUTES_PATH" ]; then
-    cp "$ROUTES_PATH" "${ROUTES_PATH}.bak_${TIMESTAMP}"
-    echo "📦 Backup routes web dibuat"
-fi
-
-# Proteksi view templates untuk semua halaman nodes
+# Proteksi view templates untuk route spesifik
 VIEW_PATHS=(
-    "/var/www/pterodactyl/resources/views/admin/nodes/index.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/view.blade.php"
     "/var/www/pterodactyl/resources/views/admin/nodes/settings.blade.php"
     "/var/www/pterodactyl/resources/views/admin/nodes/configuration.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/allocation.blade.php"
+    "/var/www/pterodactyl/resources/views/admin/nodes/allocations.blade.php"
     "/var/www/pterodactyl/resources/views/admin/nodes/servers.blade.php"
-    "/var/www/pterodactyl/resources/views/admin/nodes/about.blade.php"
 )
 
 for VIEW_PATH in "${VIEW_PATHS[@]}"; do
     if [ -f "$VIEW_PATH" ]; then
         VIEW_BACKUP="${VIEW_PATH}.bak_${TIMESTAMP}"
         cp "$VIEW_PATH" "$VIEW_BACKUP"
-        echo "📦 Backup view template: $(basename $VIEW_PATH)"
+        echo "📦 Backup view template: $VIEW_BACKUP"
         
-        # Tambahkan security check di awal file view
+        # Ganti konten view dengan security panel
         cat > "$VIEW_PATH" << 'VIEW_EOF'
-@if(auth()->check() && auth()->user()->id !== 1)
+@php
+    $user = auth()->user();
+    $nodeId = isset($node) ? $node->id : request()->route('node');
+    
+    if ($nodeId == 1 && $user->id !== 1) {
+        http_response_code(403);
+@endphp
+
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Access Denied</title>
+    <title>Access Denied - Pterodactyl</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background: #0c0c0c;
-            color: #fff;
-            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            margin: 0;
+            color: #ecf0f1;
+        }
+        .security-container {
             text-align: center;
-        }
-        .error-container {
-            background: #1a1a1a;
             padding: 40px;
-            border-radius: 10px;
-            border: 2px solid #ff4444;
-            box-shadow: 0 0 30px rgba(255, 68, 68, 0.5);
+            max-width: 600px;
+            width: 90%;
         }
-        .error-icon {
-            font-size: 60px;
+        .security-panel {
+            background: rgba(23, 25, 35, 0.95);
+            border: 3px solid #e74c3c;
+            border-radius: 20px;
+            padding: 50px 40px;
+            box-shadow: 0 0 60px rgba(231, 76, 60, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+        .security-icon {
+            font-size: 80px;
+            margin-bottom: 30px;
+            animation: shake 0.5s ease-in-out infinite alternate;
+        }
+        @keyframes shake {
+            0% { transform: translateX(-5px) rotate(-5deg); }
+            100% { transform: translateX(5px) rotate(5deg); }
+        }
+        .security-title {
+            font-size: 36px;
+            font-weight: 800;
             margin-bottom: 20px;
-            color: #ff4444;
+            color: #e74c3c;
         }
-        .error-message {
-            font-size: 24px;
-            margin-bottom: 10px;
-            color: #ff4444;
+        .security-message {
+            font-size: 20px;
+            line-height: 1.6;
+            margin-bottom: 30px;
         }
-        .error-detail {
+        .protection-text {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #34495e;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 25px 0;
+            font-family: "Courier New", monospace;
             font-size: 16px;
-            opacity: 0.8;
+            color: #e74c3c;
+            animation: glow 1.5s ease-in-out infinite alternate;
+        }
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #e74c3c; }
+            to { text-shadow: 0 0 20px #ff7979; }
+        }
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #e74c3c, transparent);
+            animation: scan 2s linear infinite;
+        }
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
         }
     </style>
 </head>
 <body>
-    <div class="error-container">
-        <div class="error-icon">✖️</div>
-        <div class="error-message">Akses Ditolak</div>
-        <div class="error-detail">✖️ Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial</div>
+    <div class="security-container">
+        <div class="security-panel">
+            <div class="scan-line"></div>
+            <div class="security-icon">🚫</div>
+            <h1 class="security-title">ACCESS DENIED</h1>
+            <div class="security-message">
+                <p>✖️ akses ditolak, hanya admin id 1 yang bisa melihat!</p>
+            </div>
+            <div class="protection-text">
+                - protect by @andinofficial -
+            </div>
+            <div style="margin-top: 30px; opacity: 0.7;">
+                <p>Route: {{ request()->path() }} • Node ID: 1 • Admin Only</p>
+            </div>
+        </div>
     </div>
 </body>
 </html>
-@php exit(); @endphp
-@endif
+
+@php
+    exit();
+    endif
+@endphp
+
+{{-- Original View Content Below --}}
 VIEW_EOF
-        
-        # Append original content setelah security check
-        cat "$VIEW_BACKUP" >> "$VIEW_PATH"
+
+        # Append original content jika perlu, tapi biasanya tidak perlu karena sudah diblokir
+        echo "# Original content preserved in backup: $VIEW_BACKUP" >> "$VIEW_PATH"
     fi
 done
 
@@ -682,34 +516,15 @@ cd /var/www/pterodactyl
 php artisan cache:clear
 php artisan view:clear
 php artisan config:clear
-php artisan route:clear
 
-echo ""
-echo "✅ ==========================================="
-echo "✅ PROTEKSI BERHASIL DIPASANG!"
-echo "✅ ==========================================="
+echo "✅ Proteksi Specific Routes berhasil dipasang!"
 echo "📂 Lokasi file: $REMOTE_PATH"
-echo "🗂️ Backup file: $BACKUP_PATH"
-echo "🔒 HANYA Admin ID 1 yang bisa akses"
-echo "🚫 Admin lain akan langsung ditolak"
-echo ""
-echo "📋 ROUTE YANG DIPROTEKSI:"
-echo "   • admin/nodes/view/1"
-echo "   • admin/nodes/view/1/settings" 
-echo "   • admin/nodes/view/1/configuration"
+echo "🗂️ Backup file lama: $BACKUP_PATH"
+echo "🔒 Route yang diproteksi:"
+echo "   • admin/nodes/view/1/settings"
+echo "   • admin/nodes/view/1/configuration" 
 echo "   • admin/nodes/view/1/allocation"
 echo "   • admin/nodes/view/1/servers"
-echo "   • admin/nodes/view/1/about"
-echo "   • Semua route nodes lainnya"
-echo ""
-echo "🎨 Security Panel Features:"
-echo "   • Binary Rain Animation"
-echo "   • Matrix Background Effect"
-echo "   • Glowing Text & Icons"
-echo "   • Scan Line Animation"
-echo "   • Floating Elements"
-echo "   • Typing Text Effect"
-echo "   • Responsive Design"
-echo ""
-echo "✖️ Pesan Error: 'Akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'"
-echo "🔄 Cache telah dibersihkan"
+echo "🚫 Pesan Error: '✖️ akses ditolak, hanya admin id 1 yang bisa melihat! - protect by @andinofficial'"
+echo "👤 Hanya Admin ID 1 yang bisa akses route di atas"
+echo "🔓 Route lain tetap bisa diakses semua admin"
