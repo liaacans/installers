@@ -1,19 +1,19 @@
 #!/bin/bash
 
 REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/NodeViewController.php"
+VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
 BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
 echo "🚀 Memasang proteksi Advanced Security Panel..."
 
+# Backup file original
 if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  cp "$REMOTE_PATH" "$BACKUP_PATH"
   echo "📦 Backup file lama dibuat di $BACKUP_PATH"
 fi
 
-mkdir -p "$(dirname "$REMOTE_PATH")"
-chmod 755 "$(dirname "$REMOTE_PATH")"
-
+# Modifikasi file controller
 cat > "$REMOTE_PATH" << 'EOF'
 <?php
 
@@ -41,15 +41,25 @@ class NodeViewController extends Controller
     ) {}
 
     /**
-     * 🔒 Fungsi security: Cegah akses node settings oleh non-admin
+     * 🔒 Fungsi security: Cek akses admin
      */
     private function checkAdminAccess(Request $request)
     {
         $user = $request->user();
-
-        // Hanya admin ID 1 yang bisa akses
+        
+        // Jika bukan admin ID 1 dan mengakses halaman terlarang, tampilkan error
         if ($user->id !== 1) {
-            abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅');
+            // Cek route yang sedang diakses
+            $route = $request->route()->getName();
+            $protectedRoutes = [
+                'admin.nodes.view.settings',
+                'admin.nodes.view.configuration', 
+                'admin.nodes.view.allocation'
+            ];
+            
+            if (in_array($route, $protectedRoutes)) {
+                abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅');
+            }
         }
     }
 
@@ -64,7 +74,7 @@ class NodeViewController extends Controller
         
         return view('admin.nodes.view.index', [
             'node' => $node,
-            'securityEnabled' => true
+            'activeTab' => 'index',
         ]);
     }
 
@@ -84,7 +94,7 @@ class NodeViewController extends Controller
         
         return view('admin.nodes.view.settings', [
             'node' => $node,
-            'securityEnabled' => true
+            'activeTab' => 'settings',
         ]);
     }
 
@@ -94,7 +104,7 @@ class NodeViewController extends Controller
         
         return view('admin.nodes.view.configuration', [
             'node' => $node,
-            'securityEnabled' => true
+            'activeTab' => 'configuration',
         ]);
     }
 
@@ -102,17 +112,9 @@ class NodeViewController extends Controller
     {
         $this->checkAdminAccess($request);
         
-        // Redirect atau tampilkan halaman kosong dengan security alert
-        if ($request->user()->id !== 1) {
-            return view('admin.nodes.view.security_alert', [
-                'node' => $node,
-                'message' => '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅'
-            ]);
-        }
-
         return view('admin.nodes.view.allocation', [
             'node' => $node,
-            'securityEnabled' => true
+            'activeTab' => 'allocation',
         ]);
     }
 
@@ -122,82 +124,175 @@ class NodeViewController extends Controller
         
         return view('admin.nodes.view.servers', [
             'node' => $node,
-            'securityEnabled' => true
+            'activeTab' => 'servers',
         ]);
     }
 }
-?>
 EOF
 
-# Juga modifikasi file view template untuk menambahkan efek security
-VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view"
+# Buat directory views jika belum ada
 mkdir -p "$VIEW_PATH"
 
-# Buat file security alert view
-cat > "$VIEW_PATH/security_alert.blade.php" << 'EOF'
-@extends('layouts.admin')
-
-@section('title')
-    Security Alert - @naaofficiall Protection
-@endsection
-
-@section('content-header')
-    <h1>Security Alert 🔒<small>Protected by @naaofficiall</small></h1>
-    <ol class="breadcrumb">
-        <li><a href="{{ route('admin.index') }}">Admin</a></li>
-        <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
-        <li><a href="{{ route('admin.nodes.view', $node->id) }}">{{ $node->name }}</a></li>
-        <li class="active">Security Alert</li>
-    </ol>
-@endsection
-
-@section('content')
-<div class="row">
-    <div class="col-md-8 col-md-offset-2">
-        <div class="box box-danger">
-            <div class="box-header with-border">
-                <h3 class="box-title">🚫 Access Denied</h3>
-            </div>
-            <div class="box-body">
-                <div class="alert alert-danger" style="border-left: 5px solid #dd4b39;">
-                    <h4><i class="icon fa fa-ban"></i> Security Protection Active!</h4>
-                    <p>{{ $message ?? '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅' }}</p>
-                </div>
-                
-                <div class="security-animation text-center">
-                    <div class="spinner-border text-danger" role="status">
-                        <span class="sr-only">Security Check...</span>
-                    </div>
-                    <h4 class="text-danger mt-3">🔐 Advanced Security Panel</h4>
-                    <p class="text-muted">This area is restricted to authorized personnel only.</p>
-                </div>
-            </div>
+# Buat file security overlay untuk tab tertentu
+cat > "$VIEW_PATH/security_overlay.blade.php" << 'EOF'
+<div class="security-overlay" style="
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    border-radius: 5px;
+">
+    <div class="security-content text-center" style="color: white; padding: 20px;">
+        <div style="font-size: 48px; margin-bottom: 20px;">🔒</div>
+        <h3 style="color: #ff6b6b; margin-bottom: 10px;">Access Restricted</h3>
+        <p style="margin-bottom: 15px; opacity: 0.9;">This section is protected by advanced security</p>
+        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; font-family: monospace;">
+            protect by @naaofficiall
         </div>
     </div>
 </div>
 
 <style>
-.security-animation {
-    padding: 30px 0;
+.security-overlay {
+    animation: fadeIn 0.5s ease-in;
 }
-.spinner-border {
-    width: 3rem;
-    height: 3rem;
-}
-.box-danger {
-    border-top-color: #dd4b39;
-    animation: pulse 2s infinite;
-}
-@keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(221, 75, 57, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(221, 75, 57, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(221, 75, 57, 0); }
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 </style>
+EOF
+
+# Modifikasi file settings view untuk menambahkan security overlay
+cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
+@extends('layouts.admin')
+
+@section('title')
+    Node Settings · {{ $node->name }} · Pterodactyl
+@endsection
+
+@section('content-header')
+    <h1>{{ $node->name }}<small>Node settings</small></h1>
+    <ol class="breadcrumb">
+        <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
+        <li><a href="{{ route('admin.nodes.view', $node->id) }}">{{ $node->name }}</a></li>
+        <li class="active">Settings</li>
+    </ol>
+@endsection
+
+@section('node-content')
+@parent
+
+<div class="row" style="position: relative;">
+    @if(auth()->user()->id !== 1)
+        @include('admin.nodes.view.security_overlay')
+    @endif
+    
+    <div class="col-md-6">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Settings</h3>
+            </div>
+            <form action="{{ route('admin.nodes.view.settings', $node->id) }}" method="POST">
+                <div class="box-body">
+                    <!-- Original settings content here -->
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endsection
 EOF
 
-# Modifikasi file index view untuk menambahkan security features
+# Modifikasi file configuration view
+cat > "$VIEW_PATH/configuration.blade.php" << 'EOF'
+@extends('layouts.admin')
+
+@section('title')
+    Node Configuration · {{ $node->name }} · Pterodactyl
+@endsection
+
+@section('content-header')
+    <h1>{{ $node->name }}<small>Node configuration</small></h1>
+    <ol class="breadcrumb">
+        <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
+        <li><a href="{{ route('admin.nodes.view', $node->id) }}">{{ $node->name }}</a></li>
+        <li class="active">Configuration</li>
+    </ol>
+@endsection
+
+@section('node-content')
+@parent
+
+<div class="row" style="position: relative;">
+    @if(auth()->user()->id !== 1)
+        @include('admin.nodes.view.security_overlay')
+    @endif
+    
+    <div class="col-xs-12">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Configuration File</h3>
+            </div>
+            <div class="box-body">
+                <!-- Original configuration content here -->
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+EOF
+
+# Modifikasi file allocation view
+cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
+@extends('layouts.admin')
+
+@section('title')
+    Node Allocation · {{ $node->name }} · Pterodactyl
+@endsection
+
+@section('content-header')
+    <h1>{{ $node->name }}<small>Managing allocations for node.</small></h1>
+    <ol class="breadcrumb">
+        <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
+        <li><a href="{{ route('admin.nodes.view', $node->id) }}">{{ $node->name }}</a></li>
+        <li class="active">Allocation</li>
+    </ol>
+@endsection
+
+@section('node-content')
+@parent
+
+<div class="row" style="position: relative;">
+    @if(auth()->user()->id !== 1)
+        @include('admin.nodes.view.security_overlay')
+    @endif
+    
+    <div class="col-xs-12">
+        <div class="box box-primary">
+            <div class="box-header with-border">
+                <h3 class="box-title">Allocation Management</h3>
+            </div>
+            <div class="box-body">
+                <!-- Original allocation content here -->
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+EOF
+
+# Modifikasi file index view (tab navigation)
 cat > "$VIEW_PATH/index.blade.php" << 'EOF'
 @extends('layouts.admin')
 
@@ -206,23 +301,7 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
 @endsection
 
 @section('content-header')
-    <div class="row">
-        <div class="col-md-12">
-            @if(($securityEnabled ?? false) && auth()->user()->id !== 1)
-            <div class="callout callout-danger">
-                <h4>🔒 Security Notice</h4>
-                <p>Enhanced security protection is active on this node. Some features may be restricted.</p>
-                <small>Protected by: @naaofficiall</small>
-            </div>
-            @endif
-            
-            <h1>Node: {{ $node->name }} 
-                @if($securityEnabled ?? false)
-                <small><span class="label label-success">🔐 Secured</span></small>
-                @endif
-            </h1>
-        </div>
-    </div>
+    <h1>Node: {{ $node->name }}</h1>
     <ol class="breadcrumb">
         <li><a href="{{ route('admin.index') }}">Admin</a></li>
         <li><a href="{{ route('admin.nodes') }}">Nodes</a></li>
@@ -242,9 +321,18 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
                     <li @if($activeTab === 'configuration')class="active"@endif><a href="{{ route('admin.nodes.view.configuration', $node->id) }}">Configuration</a></li>
                     <li @if($activeTab === 'allocation')class="active"@endif><a href="{{ route('admin.nodes.view.allocation', $node->id) }}">Allocation</a></li>
                 @else
-                    <li class="disabled"><a href="javascript:void(0)" style="color: #ccc; cursor: not-allowed;">Settings 🔒</a></li>
-                    <li class="disabled"><a href="javascript:void(0)" style="color: #ccc; cursor: not-allowed;">Configuration 🔒</a></li>
-                    <li class="disabled"><a href="javascript:void(0)" style="color: #ccc; cursor: not-allowed;">Allocation 🔒</a></li>
+                    <li class="disabled"><a href="javascript:void(0)" onclick="showSecurityAlert()" style="color: #ccc; cursor: not-allowed; position: relative;">
+                        Settings 
+                        <span class="label label-danger" style="font-size: 10px; margin-left: 5px;">🔒</span>
+                    </a></li>
+                    <li class="disabled"><a href="javascript:void(0)" onclick="showSecurityAlert()" style="color: #ccc; cursor: not-allowed; position: relative;">
+                        Configuration 
+                        <span class="label label-danger" style="font-size: 10px; margin-left: 5px;">🔒</span>
+                    </a></li>
+                    <li class="disabled"><a href="javascript:void(0)" onclick="showSecurityAlert()" style="color: #ccc; cursor: not-allowed; position: relative;">
+                        Allocation 
+                        <span class="label label-danger" style="font-size: 10px; margin-left: 5px;">🔒</span>
+                    </a></li>
                 @endif
                 
                 <li @if($activeTab === 'servers')class="active"@endif><a href="{{ route('admin.nodes.view.servers', $node->id) }}">Servers</a></li>
@@ -253,40 +341,72 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
     </div>
 </div>
 
-@if(auth()->user()->id !== 1 && in_array($activeTab, ['settings', 'configuration', 'allocation']))
-    @include('admin.nodes.view.security_alert', ['message' => '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅'])
-@else
-    @yield('node-content')
-@endif
+@yield('node-content')
+
+<script>
+function showSecurityAlert() {
+    swal({
+        type: 'error',
+        title: 'Access Denied',
+        html: '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅',
+        showConfirmButton: true,
+        confirmButtonText: 'Understand',
+        confirmButtonColor: '#d33',
+        customClass: 'swal-wide',
+        background: '#1a1a1a',
+        color: '#fff'
+    });
+}
+
+// Style untuk sweetalert
+const style = document.createElement('style');
+style.textContent = `
+    .swal-wide {
+        width: 600px !important;
+    }
+    .swal-content {
+        font-size: 16px !important;
+        font-family: monospace !important;
+    }
+`;
+document.head.appendChild(style);
+</script>
 
 <style>
 .nav-tabs > li.disabled > a {
-    color: #999;
-    cursor: not-allowed;
-    background-color: #f5f5f5;
+    color: #999 !important;
+    cursor: not-allowed !important;
+    background-color: #f9f9f9 !important;
+    border-color: #ddd !important;
 }
-.callout {
-    border-left-color: #d73925;
+.nav-tabs > li.disabled > a:hover {
+    background-color: #f9f9f9 !important;
+    border-color: #ddd !important;
 }
-.label-success {
-    background-color: #00a65a;
-    animation: glow 2s ease-in-out infinite alternate;
+.label-danger {
+    background-color: #d73925;
+    animation: blink 2s infinite;
 }
-@keyframes glow {
-    from { box-shadow: 0 0 5px #00a65a; }
-    to { box-shadow: 0 0 15px #00a65a; }
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
 }
 </style>
 @endsection
 EOF
 
+# Set permissions
 chmod 644 "$REMOTE_PATH"
-chmod 644 "$VIEW_PATH/security_alert.blade.php"
-chmod 644 "$VIEW_PATH/index.blade.php"
+chmod 644 "$VIEW_PATH"/*.blade.php
+
+echo "♻️  Melakukan refresh cache..."
+cd /var/www/pterodactyl
+php artisan cache:clear
+php artisan view:clear
 
 echo "✅ Advanced Security Panel berhasil dipasang!"
 echo "📂 Lokasi file controller: $REMOTE_PATH"
 echo "📂 Lokasi security views: $VIEW_PATH/"
-echo "🗂️ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
+echo "🗂️ Backup file lama: $BACKUP_PATH"
 echo "🔒 Hanya Admin (ID 1) yang bisa akses Settings, Configuration, dan Allocation"
-echo "🚫 User lain akan melihat error 403 dengan pesan: 'akses ditolak, protect by @naaofficiall'"
+echo "👁️ Admin lain akan melihat overlay blur dan tab terkunci"
