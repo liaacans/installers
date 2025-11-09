@@ -24,14 +24,12 @@ fi
 
 # Hapus view files yang diproteksi
 VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view"
-VIEW_FILES=("index.blade.php" "settings.blade.php" "configuration.blade.php" "allocation.blade.php" "servers.blade.php")
+VIEW_FILES=("settings.blade.php" "configuration.blade.php" "allocation.blade.php" "servers.blade.php")
 
 for view_file in "${VIEW_FILES[@]}"; do
     if [ -f "$VIEW_PATH/$view_file" ]; then
         rm "$VIEW_PATH/$view_file"
         echo "✅ View file dihapus: $view_file"
-    else
-        echo "ℹ️  View file tidak ditemukan: $view_file"
     fi
 done
 
@@ -40,8 +38,8 @@ echo "🧹 Membersihkan cache views..."
 cd /var/www/pterodactyl
 php artisan view:clear 2>/dev/null || echo "⚠️ Gagal clear view cache"
 php artisan cache:clear 2>/dev/null || echo "⚠️ Gagal clear cache"
-php artisan route:clear 2>/dev/null || echo "⚠️ Gagal clear route cache"
+php artisan config:clear 2>/dev/null || echo "⚠️ Gagal clear config cache"
 
 echo "🎉 Uninstall proteksi berhasil diselesaikan!"
 echo "🔓 Semua admin sekarang bisa mengakses halaman nodes view normal"
-echo "💡 Jangan lupa restart worker queue jika diperlukan: php artisan queue:restart"
+echo "💡 Jika perlu, restart worker queue: php artisan queue:restart"
