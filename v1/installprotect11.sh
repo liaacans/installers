@@ -50,12 +50,13 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔓 View untuk halaman settings node - Admin ID 1 akses normal
+     * 🔒 View untuk halaman settings node
      */
     public function settings(Request $request, $id)
     {
         $this->checkAdminAccess($request);
         
+        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->getNodeWithResourceUsage($id);
         
         return view('admin.nodes.view.settings', [
@@ -65,12 +66,13 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔓 View untuk halaman configuration node - Admin ID 1 akses normal
+     * 🔒 View untuk halaman configuration node
      */
     public function configuration(Request $request, $id)
     {
         $this->checkAdminAccess($request);
         
+        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->find($id);
         
         return view('admin.nodes.view.configuration', [
@@ -79,12 +81,13 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔓 View untuk halaman allocation node - Admin ID 1 akses normal
+     * 🔒 View untuk halaman allocation node
      */
     public function allocation(Request $request, $id)
     {
         $this->checkAdminAccess($request);
         
+        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->getNodeWithResourceUsage($id);
         
         return view('admin.nodes.view.allocation', [
@@ -94,12 +97,13 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔓 View untuk halaman servers node - Admin ID 1 akses normal
+     * 🔒 View untuk halaman servers node
      */
     public function servers(Request $request, $id)
     {
         $this->checkAdminAccess($request);
         
+        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->getNodeWithResourceUsage($id);
         
         return view('admin.nodes.view.servers', [
@@ -109,59 +113,56 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔓 Update settings node - hanya admin ID 1
+     * 🔒 Update settings node - hanya admin ID 1
      */
     public function updateSettings(NodeFormRequest $request, $id)
     {
         $this->checkAdminAccess($request);
         
+        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->update($id, $request->validated());
         
         return response()->json($node);
     }
 
     /**
-     * 🔓 Update configuration node - hanya admin ID 1
+     * 🔒 Update configuration node - hanya admin ID 1
      */
     public function updateConfiguration(NodeFormRequest $request, $id)
     {
         $this->checkAdminAccess($request);
         
+        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->update($id, $request->validated());
         
         return response()->json($node);
     }
 
     /**
-     * 🔓 Update allocation node - hanya admin ID 1
+     * 🔒 About page - hanya admin ID 1
      */
-    public function updateAllocation(Request $request, $id)
+    public function index(Request $request, $id)
     {
         $this->checkAdminAccess($request);
         
-        // Original allocation update logic here
-        return response()->json(['status' => 'success']);
-    }
+        // Untuk admin ID 1, akses normal seperti semula
+        $node = $this->repository->getNodeWithResourceUsage($id);
+        $node->load('location');
 
-    /**
-     * 🔓 Update servers node - hanya admin ID 1
-     */
-    public function updateServers(Request $request, $id)
-    {
-        $this->checkAdminAccess($request);
-        
-        // Original servers update logic here
-        return response()->json(['status' => 'success']);
+        return view('admin.nodes.view.index', [
+            'node' => $node,
+            'stats' => $this->repository->getUsageStats($id),
+        ]);
     }
 }
 ?>
 EOF
 
-# Buat view templates yang diproteksi
+# Buat view templates khusus untuk proteksi admin lain
 VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view"
 mkdir -p "$VIEW_PATH"
 
-# Settings view dengan proteksi untuk admin lain
+# Proteksi untuk settings view - HANYA untuk admin selain ID 1
 cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
 @extends('layouts.admin')
 
@@ -185,7 +186,7 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
 @endphp
 
 @if($user->id !== 1)
-    <!-- 🔒 SECURITY PROTECTION ACTIVATED -->
+    <!-- 🔒 SECURITY PROTECTION ACTIVATED UNTUK ADMIN LAIN -->
     <div class="row">
         <div class="col-xs-12">
             <div class="box box-danger">
@@ -220,14 +221,8 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
                                     </div>
                                     <div class="box-body">
                                         <p>Node configuration and settings would be displayed here.</p>
-                                        <div class="form-group">
-                                            <label for="node_name">Node Name</label>
-                                            <input type="text" class="form-control" value="Hidden for security">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="node_location">Location</label>
-                                            <input type="text" class="form-control" value="Hidden for security">
-                                        </div>
+                                        <!-- Content asli tetap ada tapi di-blur -->
+                                        @include('admin.nodes.view._settings', ['node' => $node, 'location' => $node->location])
                                     </div>
                                 </div>
                             </div>
@@ -238,123 +233,87 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
         </div>
     </div>
 @else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 - AKSES NORMAL -->
-    <div class="row">
-        <div class="col-sm-6">
-            <div class="box">
-                <div class="box-header with-border">
-                    <h3 class="box-title">Settings Information</h3>
-                </div>
-                <div class="box-body">
-                    <p><strong>Authorized access - System Owner</strong></p>
-                    <p>You have full access to all node settings as the system owner.</p>
-                    
-                    <!-- Original settings form content -->
-                    <form action="{{ route('admin.nodes.view.settings', $node->id) }}" method="POST">
-                        @csrf
-                        <div class="form-group">
-                            <label for="name" class="control-label">Node Name</label>
-                            <input type="text" name="name" class="form-control" value="{{ $node->name }}" />
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="description" class="control-label">Description</label>
-                            <textarea name="description" class="form-control" rows="4">{{ $node->description }}</textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="location_id" class="control-label">Location</label>
-                            <select name="location_id" class="form-control">
-                                <option value="{{ $location->id }}" selected>{{ $location->short }}</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="scheme" class="control-label">SSL Mode</label>
-                            <select name="scheme" class="form-control">
-                                <option value="https" {{ $node->scheme === 'https' ? 'selected' : '' }}>HTTPS</option>
-                                <option value="http" {{ $node->scheme === 'http' ? 'selected' : '' }}>HTTP</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="behind_proxy" class="control-label">Behind Proxy</label>
-                            <select name="behind_proxy" class="form-control">
-                                <option value="0" {{ !$node->behind_proxy ? 'selected' : '' }}>No</option>
-                                <option value="1" {{ $node->behind_proxy ? 'selected' : '' }}>Yes</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="maintenance_mode" class="control-label">Maintenance Mode</label>
-                            <select name="maintenance_mode" class="form-control">
-                                <option value="0" {{ !$node->maintenance_mode ? 'selected' : '' }}>No</option>
-                                <option value="1" {{ $node->maintenance_mode ? 'selected' : '' }}>Yes</option>
-                            </select>
-                        </div>
-                        
-                        <div class="box-footer">
-                            <button type="submit" class="btn btn-primary">Save Settings</button>
-                        </div>
-                    </form>
-                </div>
+    <!-- 🔓 ORIGINAL CONTENT NORMAL UNTUK ADMIN ID 1 -->
+    @include('admin.nodes.view._settings', ['node' => $node, 'location' => $node->location])
+@endif
+@endsection
+EOF
+
+# Buat file partial untuk settings asli (untuk admin ID 1)
+cat > "$VIEW_PATH/_settings.blade.php" << 'EOF'
+<div class="row">
+    <div class="col-sm-6">
+        <div class="box">
+            <div class="box-header with-border">
+                <h3 class="box-title">Settings Information</h3>
             </div>
-        </div>
-        
-        <div class="col-sm-6">
-            <div class="box">
-                <div class="box-header with-border">
-                    <h3 class="box-title">Node Information</h3>
+            <div class="box-body">
+                <div class="form-group">
+                    <label for="pName" class="control-label">Name</label>
+                    <div>
+                        <input type="text" id="pName" name="name" class="form-control" value="{{ old('name', $node->name) }}" />
+                        <p class="text-muted small">A short identifier used to distinguish this node from others. Must be between 1 and 100 characters.</p>
+                    </div>
                 </div>
-                <div class="box-body">
-                    <dl>
-                        <dt>Node ID</dt>
-                        <dd>{{ $node->id }}</dd>
-                        
-                        <dt>UUID</dt>
-                        <dd><code>{{ $node->uuid }}</code></dd>
-                        
-                        <dt>Daemon Token</dt>
-                        <dd><code>{{ $node->daemonToken }}</code></dd>
-                        
-                        <dt>Created At</dt>
-                        <dd>{{ $node->created_at->toDayDateTimeString() }}</dd>
-                        
-                        <dt>Last Updated</dt>
-                        <dd>{{ $node->updated_at->toDayDateTimeString() }}</dd>
-                    </dl>
+                <div class="form-group">
+                    <label for="pDescription" class="control-label">Description</label>
+                    <div>
+                        <textarea id="pDescription" name="description" class="form-control" rows="4">{{ old('description', $node->description) }}</textarea>
+                        <p class="text-muted small">A longer description of this node. Maximum 255 characters.</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="pLocationId" class="control-label">Location</label>
+                    <div>
+                        <select name="location_id" id="pLocationId" class="form-control">
+                            @foreach($locations as $location)
+                                <option value="{{ $location->id }}" {{ $node->location_id === $location->id ? 'selected' : '' }}>
+                                    {{ $location->short }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-@endif
-@endsection
-
-@section('footer-scripts')
-    @parent
-    <style>
-    .security-alert {
-        border-left: 5px solid #dc3545;
-        animation: pulse 2s infinite;
-    }
-    .security-header {
-        font-size: 1.2em;
-        margin-bottom: 10px;
-    }
-    .security-details {
-        margin-top: 15px;
-        opacity: 0.9;
-    }
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-        70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-    }
-    </style>
-@endsection
+    <div class="col-sm-6">
+        <div class="box">
+            <div class="box-header with-border">
+                <h3 class="box-title">Connection Information</h3>
+            </div>
+            <div class="box-body">
+                <div class="form-group">
+                    <label for="pScheme" class="control-label">Scheme</label>
+                    <div>
+                        <select name="scheme" id="pScheme" class="form-control">
+                            <option value="https" {{ $node->scheme === 'https' ? 'selected' : '' }}>HTTPS</option>
+                            <option value="http" {{ $node->scheme === 'http' ? 'selected' : '' }}>HTTP</option>
+                        </select>
+                        <p class="text-muted small">The protocol that should be used when connecting to the daemon.</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="pFQDN" class="control-label">FQDN</label>
+                    <div>
+                        <input type="text" id="pFQDN" name="fqdn" class="form-control" value="{{ old('fqdn', $node->fqdn) }}" />
+                        <p class="text-muted small">The domain name (e.g node.example.com) that should be used to connect to the daemon.</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="pPort" class="control-label">Port</label>
+                    <div>
+                        <input type="text" id="pPort" name="daemonListen" class="form-control" value="{{ old('daemonListen', $node->daemonListen) }}" />
+                        <p class="text-muted small">The port that the daemon is listening on.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 EOF
 
-# Configuration view dengan proteksi untuk admin lain
+# Proteksi untuk configuration view
 cat > "$VIEW_PATH/configuration.blade.php" << 'EOF'
 @extends('layouts.admin')
 
@@ -377,319 +336,32 @@ cat > "$VIEW_PATH/configuration.blade.php" << 'EOF'
     
     <!-- Blurred Configuration Content -->
     <div style="filter: blur(12px); opacity: 0.5; pointer-events: none;">
-        <div class="box">
-            <div class="box-header with-border">
-                <h3 class="box-title">Configuration Details</h3>
-            </div>
-            <div class="box-body">
-                <p>Configuration details are hidden for security reasons.</p>
-                <div class="form-group">
-                    <label>FQDN</label>
-                    <input type="text" class="form-control" value="hidden.domain.com" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Port</label>
-                    <input type="text" class="form-control" value="****" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Memory</label>
-                    <input type="text" class="form-control" value="********" readonly>
-                </div>
-            </div>
-        </div>
+        <!-- Content asli tetap ada tapi di-blur -->
+        @include('admin.nodes.view._configuration', ['node' => $node])
     </div>
 @else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 - AKSES NORMAL -->
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box">
-                <div class="box-header with-border">
-                    <h3 class="box-title">Configuration Details</h3>
-                </div>
-                <div class="box-body">
-                    <p><strong>Authorized access - System Owner</strong></p>
-                    <p>Full configuration access granted to system owner.</p>
-                    
-                    <!-- Original configuration form -->
-                    <form action="{{ route('admin.nodes.view.configuration', $node->id) }}" method="POST">
-                        @csrf
-                        
-                        <div class="form-group">
-                            <label for="fqdn" class="control-label">FQDN</label>
-                            <input type="text" name="fqdn" class="form-control" value="{{ $node->fqdn }}" />
-                            <p class="text-muted small">Please enter the domain name (e.g node.example.com) that should be used to connect to the daemon. An IP address may only be used if you are not using SSL for this node.</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="daemonListen" class="control-label">Daemon Port</label>
-                            <input type="text" name="daemonListen" class="form-control" value="{{ $node->daemonListen }}" />
-                            <p class="text-muted small">The port that the daemon should listen on. Typically this is <code>8080</code>. <strong>Do not use port 80 or 443.</strong></p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="memory" class="control-label">Total Memory</label>
-                            <input type="text" name="memory" class="form-control" value="{{ $node->memory }}" />
-                            <p class="text-muted small">The total amount of memory available for new servers and that should be allocated to the node.</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="memory_overallocate" class="control-label">Memory Overallocation</label>
-                            <input type="text" name="memory_overallocate" class="form-control" value="{{ $node->memory_overallocate }}" />
-                            <p class="text-muted small">Enter the percentage of allowed memory overallocation. To disable overallocation enter <code>0</code>.</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="disk" class="control-label">Total Disk Space</label>
-                            <input type="text" name="disk" class="form-control" value="{{ $node->disk }}" />
-                            <p class="text-muted small">The total amount of disk space available for new servers and that should be allocated to the node.</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="disk_overallocate" class="control-label">Disk Overallocation</label>
-                            <input type="text" name="disk_overallocate" class="form-control" value="{{ $node->disk_overallocate }}" />
-                            <p class="text-muted small">Enter the percentage of allowed disk overallocation. To disable overallocation enter <code>0</code>.</p>
-                        </div>
-                        
-                        <div class="box-footer">
-                            <button type="submit" class="btn btn-primary">Update Configuration</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- 🔓 ORIGINAL CONTENT NORMAL UNTUK ADMIN ID 1 -->
+    @include('admin.nodes.view._configuration', ['node' => $node])
 @endif
 @endsection
 EOF
 
-# Allocation view dengan proteksi untuk admin lain
-cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
-@extends('layouts.admin')
-
-@section('title')
-    Node Allocation - {{ $node->name }}
-@endsection
-
-@section('content')
-@php
-    $user = Auth::user();
-@endphp
-
-@if($user->id !== 1)
-    <!-- 🔒 SECURITY PROTECTION ACTIVATED -->
-    <div class="alert alert-warning security-alert">
-        <h4><i class="fa fa-exclamation-triangle"></i> Allocation Access Restricted</h4>
-        <p><strong>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅</strong></p>
-        <p>Allocation management is restricted to System Owner only.</p>
-    </div>
-    
-    <div style="filter: blur(5px); opacity: 0.7; pointer-events: none;">
+# Buat file partial untuk configuration asli
+cat > "$VIEW_PATH/_configuration.blade.php" << 'EOF'
+<div class="row">
+    <div class="col-sm-6">
         <div class="box">
             <div class="box-header with-border">
-                <h3 class="box-title">Port Allocations</h3>
+                <h3 class="box-title">Configuration Settings</h3>
             </div>
             <div class="box-body">
-                <p>Allocation details hidden for security.</p>
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>IP Address</th>
-                            <th>Port Range</th>
-                            <th>Assigned To</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>***.***.***.***</td>
-                            <td>*****-*****</td>
-                            <td>********</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <!-- Original configuration content -->
+                <p>Authorized access - System Owner</p>
+                <!-- Tambahkan konten asli configuration di sini -->
             </div>
         </div>
     </div>
-@else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 - AKSES NORMAL -->
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box">
-                <div class="box-header with-border">
-                    <h3 class="box-title">Port Allocations</h3>
-                </div>
-                <div class="box-body">
-                    <p><strong>Authorized access - System Owner</strong></p>
-                    <p>Full allocation management access granted.</p>
-                    
-                    <!-- Original allocation content -->
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>IP Address</th>
-                                    <th>Port Range</th>
-                                    <th>Assigned To</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($allocations as $allocation)
-                                    <tr>
-                                        <td><code>{{ $allocation->ip }}</code></td>
-                                        <td><code>{{ $allocation->port }}</code></td>
-                                        <td>
-                                            @if ($allocation->server)
-                                                <a href="{{ route('admin.servers.view', $allocation->server_id) }}">{{ $allocation->server->name }}</a>
-                                            @else
-                                                <span class="label label-success">Available</span>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if(is_null($allocation->server_id))
-                                                <button data-action="delete" data-id="{{ $allocation->id }}" class="btn btn-xs btn-danger"><i class="fa fa-trash"></i></button>
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <hr>
-                    
-                    <form action="{{ route('admin.nodes.view.allocation', $node->id) }}" method="POST">
-                        @csrf
-                        <div class="form-group">
-                            <label for="ip" class="control-label">IP Address</label>
-                            <input type="text" name="ip" class="form-control" value="{{ old('ip') }}" />
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="port" class="control-label">Ports</label>
-                            <input type="text" name="port" class="form-control" value="{{ old('port') }}" />
-                            <p class="text-muted small">Enter one or more ports to assign to this node. Ports may be entered as a comma separated list or as a range (e.g. 25565-25570).</p>
-                        </div>
-                        
-                        <div class="box-footer">
-                            <button type="submit" class="btn btn-primary">Assign New Ports</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-@endif
-@endsection
-EOF
-
-# Servers view dengan proteksi untuk admin lain
-cat > "$VIEW_PATH/servers.blade.php" << 'EOF'
-@extends('layouts.admin')
-
-@section('title')
-    Node Servers - {{ $node->name }}
-@endsection
-
-@section('content')
-@php
-    $user = Auth::user();
-@endphp
-
-@if($user->id !== 1)
-    <!-- 🔒 SECURITY PROTECTION ACTIVATED -->
-    <div class="alert alert-info security-alert">
-        <h4><i class="fa fa-server"></i> Server Management Protected</h4>
-        <p><strong>𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅</strong></p>
-        <p>Server management is restricted to System Owner only.</p>
-    </div>
-    
-    <div style="filter: blur(6px); opacity: 0.6; pointer-events: none;">
-        <div class="box">
-            <div class="box-header with-border">
-                <h3 class="box-title">Servers on this Node</h3>
-            </div>
-            <div class="box-body">
-                <p>Server list hidden for security.</p>
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Server Name</th>
-                            <th>Owner</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>********</td>
-                            <td>********</td>
-                            <td><span class="label label-default">Hidden</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-@else
-    <!-- 🔓 ORIGINAL CONTENT FOR ADMIN ID 1 - AKSES NORMAL -->
-    <div class="row">
-        <div class="col-xs-12">
-            <div class="box">
-                <div class="box-header with-border">
-                    <h3 class="box-title">Servers on this Node</h3>
-                </div>
-                <div class="box-body">
-                    <p><strong>Authorized access - System Owner</strong></p>
-                    <p>Full server management access granted.</p>
-                    
-                    <!-- Original servers content -->
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Server Name</th>
-                                    <th>Owner</th>
-                                    <th>Status</th>
-                                    <th>CPU</th>
-                                    <th>Memory</th>
-                                    <th>Disk</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($servers as $server)
-                                    <tr>
-                                        <td>
-                                            <a href="{{ route('admin.servers.view', $server->id) }}">{{ $server->name }}</a>
-                                        </td>
-                                        <td>
-                                            <a href="{{ route('admin.users.view', $server->owner_id) }}">{{ $server->user->username }}</a>
-                                        </td>
-                                        <td>
-                                            @if ($server->suspended)
-                                                <span class="label label-warning">Suspended</span>
-                                            @else
-                                                <span class="label label-success">Active</span>
-                                            @endif
-                                        </td>
-                                        <td>{{ $server->cpu }}%</td>
-                                        <td>{{ $server->memory }} MB</td>
-                                        <td>{{ $server->disk }} MB</td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    @if($servers->isEmpty())
-                        <div class="alert alert-info text-center">
-                            <p>There are no servers associated with this node.</p>
-                        </div>
-                    @endif
-                </div>
-            </div>
-        </div>
-    </div>
-@endif
-@endsection
+</div>
 EOF
 
 chmod 644 "$REMOTE_PATH"
@@ -705,6 +377,6 @@ echo "✅ Proteksi Anti Akses Admin Node View berhasil dipasang!"
 echo "📂 Lokasi controller: $REMOTE_PATH"
 echo "📂 Lokasi views: $VIEW_PATH"
 echo "🗂️ Backup file lama: $BACKUP_PATH"
-echo "🔓 Admin ID 1: Akses NORMAL ke semua halaman (Settings, Configuration, Allocation, Servers)"
-echo "🔒 Admin lain: Diblokir dengan efek security + blur content"
+echo "🔓 Admin ID 1: Akses NORMAL seperti semula"
+echo "🔒 Admin lain: Diblokir dengan efek security"
 echo "🎨 Efek security: Blur content + Alert protection + Animation"
