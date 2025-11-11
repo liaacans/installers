@@ -13,12 +13,11 @@ if [ -n "$LATEST_BACKUP" ]; then
     mv "$LATEST_BACKUP" "$REMOTE_PATH"
     echo "✅ Backup berhasil dikembalikan: $(basename $LATEST_BACKUP)"
 else
-    echo "⚠️  Tidak ada backup file ditemukan, menghapus file proteksi..."
+    echo "⚠️  Tidak ada backup file ditemukan..."
+    echo "ℹ️  File akan dihapus dan panel akan menggunakan controller default"
     if [ -f "$REMOTE_PATH" ]; then
-        rm "$REMOTE_PATH"
+        rm -f "$REMOTE_PATH"
         echo "✅ File proteksi controller dihapus"
-    else
-        echo "ℹ️  File proteksi controller tidak ditemukan"
     fi
 fi
 
@@ -29,24 +28,18 @@ VIEW_FILES=("index.blade.php" "settings.blade.php" "configuration.blade.php" "al
 echo "🗑️  Menghapus view files proteksi..."
 for view_file in "${VIEW_FILES[@]}"; do
     if [ -f "$VIEW_PATH/$view_file" ]; then
-        rm "$VIEW_PATH/$view_file"
+        rm -f "$VIEW_PATH/$view_file"
         echo "✅ View file dihapus: $view_file"
-    else
-        echo "ℹ️  View file tidak ditemukan: $view_file"
     fi
 done
 
-# Clear view cache
-echo "🧹 Membersihkan cache views..."
+# Clear cache
+echo "🧹 Membersihkan cache..."
 cd /var/www/pterodactyl
-php artisan view:clear 2>/dev/null && echo "✅ View cache cleared" || echo "⚠️ Gagal clear view cache"
-php artisan cache:clear 2>/dev/null && echo "✅ Application cache cleared" || echo "⚠️ Gagal clear cache"
-php artisan config:clear 2>/dev/null && echo "✅ Config cache cleared" || echo "⚠️ Gagal clear config cache"
+php artisan view:clear 2>/dev/null && echo "✅ View cache cleared" 
+php artisan cache:clear 2>/dev/null && echo "✅ Application cache cleared"
+php artisan route:clear 2>/dev/null && echo "✅ Route cache cleared"
 
 echo ""
 echo "🎉 Uninstall proteksi berhasil diselesaikan!"
 echo "🔓 Semua admin sekarang bisa mengakses halaman nodes view normal"
-echo "💡 Jika ada masalah, restart worker: php artisan queue:restart"
-echo ""
-echo "📊 Halaman yang dikembalikan:"
-echo "   ✅ About • Settings • Configuration • Allocation • Servers"
