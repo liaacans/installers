@@ -190,6 +190,7 @@ class NodeViewController extends Controller
         return new JsonResponse([], 204);
     }
 }
+?>
 EOF
 
 # Buat view templates
