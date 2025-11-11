@@ -1,44 +1,26 @@
 #!/bin/bash
 
-echo "🗑️  Menghapus proteksi Anti Akses Admin Node View..."
-
 REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/NodeViewController.php"
 BACKUP_PATTERN="${REMOTE_PATH}.bak_*"
 
-# Cari backup file terbaru
+echo "🗑️  Menghapus proteksi Anti Akses Admin Node View..."
+
 LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n1)
 
 if [ -n "$LATEST_BACKUP" ]; then
-    echo "🔄 Mengembalikan backup file..."
     mv "$LATEST_BACKUP" "$REMOTE_PATH"
-    echo "✅ Backup berhasil dikembalikan: $(basename $LATEST_BACKUP)"
+    echo "✅ Backup dikembalikan: $(basename $LATEST_BACKUP)"
 else
-    echo "⚠️  Tidak ada backup file ditemukan, menghapus file proteksi..."
-    if [ -f "$REMOTE_PATH" ]; then
-        rm "$REMOTE_PATH"
-        echo "✅ File proteksi dihapus"
-    else
-        echo "ℹ️  File proteksi tidak ditemukan"
-    fi
+    [ -f "$REMOTE_PATH" ] && rm "$REMOTE_PATH"
+    echo "✅ File proteksi dihapus"
 fi
 
-# Hapus view files yang diproteksi
+# Hapus view files
 VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view"
-VIEW_FILES=("settings.blade.php" "configuration.blade.php" "allocation.blade.php" "servers.blade.php")
+rm -f "$VIEW_PATH/settings.blade.php" "$VIEW_PATH/configuration.blade.php" "$VIEW_PATH/allocation.blade.php" "$VIEW_PATH/servers.blade.php"
 
-for view_file in "${VIEW_FILES[@]}"; do
-    if [ -f "$VIEW_PATH/$view_file" ]; then
-        rm "$VIEW_PATH/$view_file"
-        echo "✅ View file dihapus: $view_file"
-    fi
-done
+echo "🧹 Membersihkan cache..."
+cd /var/www/pterodactyl && php artisan view:clear >/dev/null 2>&1
 
-# Clear view cache
-echo "🧹 Membersihkan cache views..."
-cd /var/www/pterodactyl
-php artisan view:clear 2>/dev/null || echo "⚠️ Gagal clear view cache"
-php artisan cache:clear 2>/dev/null || echo "⚠️ Gagal clear cache"
-
-echo "🎉 Uninstall proteksi berhasil diselesaikan!"
-echo "🔓 Semua admin sekarang bisa mengakses halaman nodes view normal"
-echo "💡 Jangan lupa restart worker queue jika diperlukan"
+echo "🎉 Uninstall proteksi berhasil!"
+echo "🔓 Semua admin sekarang bisa akses normal"
