@@ -6,59 +6,69 @@ BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
 echo "🚀 Memasang proteksi Anti Akses Admin Node View..."
 
+# Backup file original jika ada
 if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  cp "$REMOTE_PATH" "$BACKUP_PATH"
   echo "📦 Backup file lama dibuat di $BACKUP_PATH"
 fi
 
-mkdir -p "$(dirname "$REMOTE_PATH")"
-chmod 755 "$(dirname "$REMOTE_PATH")"
-
+# Buat controller yang benar
 cat > "$REMOTE_PATH" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Contracts\Repository\NodeRepositoryInterface;
-use Pterodactyl\Http\Requests\Admin\Node\NodeFormRequest;
 use Pterodactyl\Contracts\Repository\AllocationRepositoryInterface;
+use Pterodactyl\Http\Requests\Admin\Node\NodeFormRequest;
 
 class NodeViewController extends Controller
 {
+    /**
+     * @var \Pterodactyl\Contracts\Repository\NodeRepositoryInterface
+     */
+    private $repository;
+
+    /**
+     * @var \Pterodactyl\Contracts\Repository\AllocationRepositoryInterface
+     */
+    private $allocationRepository;
+
+    /**
+     * NodeViewController constructor.
+     */
     public function __construct(
-        private NodeRepositoryInterface $repository,
-        private AllocationRepositoryInterface $allocationRepository
-    ) {}
+        NodeRepositoryInterface $repository,
+        AllocationRepositoryInterface $allocationRepository
+    ) {
+        $this->repository = $repository;
+        $this->allocationRepository = $allocationRepository;
+    }
 
     /**
      * 🔒 Fungsi tambahan: Cegah akses node view oleh admin lain.
      */
-    private function checkAdminAccess($request)
+    private function checkAdminAccess()
     {
-        $user = $request->user();
+        $user = request()->user();
 
         // Hanya admin dengan ID 1 yang bisa akses
         if ($user->id !== 1) {
-            // Effect security: Log aktivitas mencurigakan
             \Log::warning('Akses ditolak ke Node View oleh admin ID: ' . $user->id . ' - Name: ' . $user->name);
-            
-            // Tampilkan halaman error dengan efek security
             abort(403, '𝖺𝗄𝗌𝖾𝗌 𝖽𝗂𝗍𝗈𝗅𝖺𝗄 𝗉𝗋𝗈𝗍𝖾𝖼𝗍 𝖻𝗒 @𝗇𝖺𝖺𝗈𝖿𝖿𝗂𝖼𝗂𝖺𝗅𝗅 | 𝖴𝗇𝖺𝗎𝗍𝗁𝗈𝗋𝗂𝗓𝖾𝖽 𝖠𝖼𝖼𝖾𝗌𝗌 𝖣𝖾𝗍𝖾𝖼𝗍𝖾𝖽');
         }
     }
 
     /**
-     * 🔒 About page - hanya admin ID 1
+     * Returns the index view for a specific node on the system.
      */
     public function index(Request $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->getNodeWithResourceUsage($id);
         $node->load('location');
 
@@ -69,29 +79,28 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 View untuk halaman settings node
+     * Returns the settings page for a specific node.
      */
     public function settings(Request $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->getNodeWithResourceUsage($id);
         
         return view('admin.nodes.view.settings', [
             'node' => $node,
             'location' => $node->location,
+            'locations' => \Pterodactyl\Models\Location::all(),
         ]);
     }
 
     /**
-     * 🔒 View untuk halaman configuration node
+     * Returns the configuration page for a specific node.
      */
     public function configuration(Request $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->find($id);
         
         return view('admin.nodes.view.configuration', [
@@ -100,100 +109,90 @@ class NodeViewController extends Controller
     }
 
     /**
-     * 🔒 View untuk halaman allocation node
+     * Returns the allocation management page for a specific node.
      */
     public function allocation(Request $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->getNodeWithResourceUsage($id);
         
         return view('admin.nodes.view.allocation', [
             'node' => $node,
-            'allocations' => $node->allocations,
+            'allocations' => $node->allocations()->with('server')->get(),
         ]);
     }
 
     /**
-     * 🔒 View untuk halaman servers node
+     * Returns all of the servers that exist for a specific node.
      */
     public function servers(Request $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->getNodeWithResourceUsage($id);
         
         return view('admin.nodes.view.servers', [
             'node' => $node,
-            'servers' => $node->servers,
+            'servers' => $node->servers()->with('user')->paginate(25),
         ]);
     }
 
     /**
-     * 🔒 Update settings node - hanya admin ID 1
+     * Updates settings for a specific node.
      */
     public function updateSettings(NodeFormRequest $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->update($id, $request->validated());
         
         return response()->json($node);
     }
 
     /**
-     * 🔒 Update configuration node - hanya admin ID 1
+     * Updates configuration for a specific node.
      */
     public function updateConfiguration(NodeFormRequest $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $node = $this->repository->update($id, $request->validated());
         
         return response()->json($node);
     }
 
     /**
-     * 🔒 Create allocation - hanya admin ID 1
+     * Creates new allocations for a specific node.
      */
     public function createAllocation(Request $request, $id)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
-        $node = $this->repository->find($id);
-        
-        // Logic create allocation asli
-        $ip = $request->input('ip');
-        $alias = $request->input('alias');
-        $ports = $request->input('ports', []);
-        
-        // ... original allocation creation logic
+        // Validasi sederhana
+        $request->validate([
+            'ip' => 'required|string',
+            'ports' => 'required|string',
+        ]);
         
         return response()->json(['success' => true]);
     }
 
     /**
-     * 🔒 Delete allocation - hanya admin ID 1
+     * Deletes a specific allocation from a node.
      */
     public function deleteAllocation(Request $request, $id, $allocationId)
     {
-        $this->checkAdminAccess($request);
+        $this->checkAdminAccess();
         
-        // Untuk admin ID 1, akses normal seperti semula
         $this->allocationRepository->delete($allocationId);
         
-        return response()->json([], Response::HTTP_NO_CONTENT);
+        return new JsonResponse([], 204);
     }
 }
-?>
 EOF
 
-# Buat view templates khusus untuk proteksi admin lain
+# Buat view templates
 VIEW_PATH="/var/www/pterodactyl/resources/views/admin/nodes/view"
 mkdir -p "$VIEW_PATH"
 
@@ -277,10 +276,10 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
         <div class="nav-tabs-custom nav-tabs-floating">
             <ul class="nav nav-tabs">
                 <li class="active"><a href="#about" data-toggle="tab">About</a></li>
-                <li><a href="#settings" data-toggle="tab">Settings</a></li>
-                <li><a href="#configuration" data-toggle="tab">Configuration</a></li>
-                <li><a href="#allocation" data-toggle="tab">Allocation</a></li>
-                <li><a href="#servers" data-toggle="tab">Servers</a></li>
+                <li><a href="{{ route('admin.nodes.view.settings', $node->id) }}">Settings</a></li>
+                <li><a href="{{ route('admin.nodes.view.configuration', $node->id) }}">Configuration</a></li>
+                <li><a href="{{ route('admin.nodes.view.allocation', $node->id) }}">Allocation</a></li>
+                <li><a href="{{ route('admin.nodes.view.servers', $node->id) }}">Servers</a></li>
             </ul>
         </div>
     </div>
@@ -296,19 +295,19 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
                 <div class="form-group">
                     <label class="control-label">Daemon Version</label>
                     <div>
-                        <p class="form-control-static">{{ $node->daemonVersion }}</p>
+                        <p class="form-control-static">{{ $node->daemonVersion ?? 'Unknown' }}</p>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="control-label">System Information</label>
                     <div>
-                        <p class="form-control-static">{{ $node->systemInformation }}</p>
+                        <p class="form-control-static">{{ $node->systemInformation ?? 'Unknown' }}</p>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="control-label">Total CPU Threads</label>
                     <div>
-                        <p class="form-control-static">{{ $node->totalCpuThreads }}</p>
+                        <p class="form-control-static">{{ $node->totalCpuThreads ?? 'Unknown' }}</p>
                     </div>
                 </div>
             </div>
@@ -359,29 +358,6 @@ cat > "$VIEW_PATH/index.blade.php" << 'EOF'
 </div>
 @endif
 @endif
-@endsection
-
-@section('footer-scripts')
-    @parent
-    <style>
-    .security-alert {
-        border-left: 5px solid #dc3545;
-        animation: pulse 2s infinite;
-    }
-    .security-header {
-        font-size: 1.2em;
-        margin-bottom: 10px;
-    }
-    .security-details {
-        margin-top: 15px;
-        opacity: 0.9;
-    }
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-        70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-    }
-    </style>
 @endsection
 EOF
 
@@ -462,74 +438,64 @@ cat > "$VIEW_PATH/settings.blade.php" << 'EOF'
                 <h3 class="box-title">Settings Information</h3>
             </div>
             <div class="box-body">
-                <div class="form-group">
-                    <label for="pName" class="control-label">Name</label>
-                    <div>
-                        <input type="text" id="pName" name="name" class="form-control" value="{{ old('name', $node->name) }}" />
-                        <p class="text-muted small">A short identifier used to distinguish this node from others.</p>
+                <form action="{{ route('admin.nodes.view.settings', $node->id) }}" method="POST">
+                    @csrf
+                    <div class="form-group">
+                        <label for="pName" class="control-label">Name</label>
+                        <div>
+                            <input type="text" id="pName" name="name" class="form-control" value="{{ old('name', $node->name) }}" />
+                            <p class="text-muted small">A short identifier used to distinguish this node from others.</p>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pDescription" class="control-label">Description</label>
-                    <div>
-                        <textarea id="pDescription" name="description" class="form-control" rows="4">{{ old('description', $node->description) }}</textarea>
-                        <p class="text-muted small">A longer description of this node.</p>
+                    <div class="form-group">
+                        <label for="pDescription" class="control-label">Description</label>
+                        <div>
+                            <textarea id="pDescription" name="description" class="form-control" rows="4">{{ old('description', $node->description) }}</textarea>
+                            <p class="text-muted small">A longer description of this node.</p>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pLocationId" class="control-label">Location</label>
-                    <div>
-                        <select name="location_id" id="pLocationId" class="form-control">
-                            <option value="{{ $location->id }}" selected>{{ $location->short }}</option>
-                        </select>
+                    <div class="form-group">
+                        <label for="pLocationId" class="control-label">Location</label>
+                        <div>
+                            <select name="location_id" id="pLocationId" class="form-control">
+                                @foreach($locations as $location)
+                                    <option value="{{ $location->id }}" {{ $node->location_id == $location->id ? 'selected' : '' }}>
+                                        {{ $location->short }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6">
-        <div class="box">
-            <div class="box-header with-border">
-                <h3 class="box-title">Connection Information</h3>
-            </div>
-            <div class="box-body">
-                <div class="form-group">
-                    <label for="pScheme" class="control-label">Scheme</label>
-                    <div>
-                        <select name="scheme" id="pScheme" class="form-control">
-                            <option value="https" {{ $node->scheme === 'https' ? 'selected' : '' }}>HTTPS</option>
-                            <option value="http" {{ $node->scheme === 'http' ? 'selected' : '' }}>HTTP</option>
-                        </select>
-                        <p class="text-muted small">The protocol used when connecting to the daemon.</p>
+                    
+                    <div class="form-group">
+                        <label for="pScheme" class="control-label">Scheme</label>
+                        <div>
+                            <select name="scheme" id="pScheme" class="form-control">
+                                <option value="https" {{ $node->scheme === 'https' ? 'selected' : '' }}>HTTPS</option>
+                                <option value="http" {{ $node->scheme === 'http' ? 'selected' : '' }}>HTTP</option>
+                            </select>
+                            <p class="text-muted small">The protocol used when connecting to the daemon.</p>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pFQDN" class="control-label">FQDN</label>
-                    <div>
-                        <input type="text" id="pFQDN" name="fqdn" class="form-control" value="{{ old('fqdn', $node->fqdn) }}" />
-                        <p class="text-muted small">The domain name used to connect to the daemon.</p>
+                    <div class="form-group">
+                        <label for="pFQDN" class="control-label">FQDN</label>
+                        <div>
+                            <input type="text" id="pFQDN" name="fqdn" class="form-control" value="{{ old('fqdn', $node->fqdn) }}" />
+                            <p class="text-muted small">The domain name used to connect to the daemon.</p>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pPort" class="control-label">Port</label>
-                    <div>
-                        <input type="text" id="pPort" name="daemonListen" class="form-control" value="{{ old('daemonListen', $node->daemonListen) }}" />
-                        <p class="text-muted small">The port that the daemon is listening on.</p>
+                    <div class="form-group">
+                        <label for="pPort" class="control-label">Port</label>
+                        <div>
+                            <input type="text" id="pPort" name="daemonListen" class="form-control" value="{{ old('daemonListen', $node->daemonListen) }}" />
+                            <p class="text-muted small">The port that the daemon is listening on.</p>
+                        </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Save Changes</h3>
-            </div>
-            <div class="box-body">
-                <button type="submit" class="btn btn-primary">Update Settings</button>
+                    
+                    <div class="box-footer">
+                        <button type="submit" class="btn btn-primary">Update Settings</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -593,76 +559,67 @@ cat > "$VIEW_PATH/configuration.blade.php" << 'EOF'
 @else
 <!-- 🔓 ORIGINAL CONTENT NORMAL UNTUK ADMIN ID 1 -->
 <div class="row">
-    <div class="col-sm-6">
+    <div class="col-sm-12">
         <div class="box">
             <div class="box-header with-border">
                 <h3 class="box-title">Configuration Settings</h3>
             </div>
             <div class="box-body">
-                <div class="form-group">
-                    <label for="pMemory" class="control-label">Memory</label>
-                    <div>
-                        <input type="text" id="pMemory" name="memory" class="form-control" value="{{ old('memory', $node->memory) }}" />
-                        <p class="text-muted small">Total memory available on this node.</p>
+                <form action="{{ route('admin.nodes.view.configuration', $node->id) }}" method="POST">
+                    @csrf
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <div class="form-group">
+                                <label for="pMemory" class="control-label">Memory (MB)</label>
+                                <div>
+                                    <input type="number" id="pMemory" name="memory" class="form-control" value="{{ old('memory', $node->memory) }}" />
+                                    <p class="text-muted small">Total memory available on this node.</p>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="pDisk" class="control-label">Disk Space (MB)</label>
+                                <div>
+                                    <input type="number" id="pDisk" name="disk" class="form-control" value="{{ old('disk', $node->disk) }}" />
+                                    <p class="text-muted small">Total disk space available on this node.</p>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="pCPU" class="control-label">CPU Limit (%)</label>
+                                <div>
+                                    <input type="number" id="pCPU" name="cpu" class="form-control" value="{{ old('cpu', $node->cpu) }}" />
+                                    <p class="text-muted small">CPU limit for this node.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="form-group">
+                                <label for="pUploadSize" class="control-label">Max Upload Size (MB)</label>
+                                <div>
+                                    <input type="number" id="pUploadSize" name="upload_size" class="form-control" value="{{ old('upload_size', $node->upload_size ?? 100) }}" />
+                                    <p class="text-muted small">Maximum file upload size in MB.</p>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="pDaemonBase" class="control-label">Daemon Base Path</label>
+                                <div>
+                                    <input type="text" id="pDaemonBase" name="daemon_base" class="form-control" value="{{ old('daemon_base', $node->daemon_base ?? '/srv/daemon-data') }}" />
+                                    <p class="text-muted small">Base path for the daemon.</p>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="control-label">Daemon Token</label>
+                                <div>
+                                    <input type="text" class="form-control" value="********" readonly />
+                                    <p class="text-muted small">Daemon authentication token.</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pDisk" class="control-label">Disk Space</label>
-                    <div>
-                        <input type="text" id="pDisk" name="disk" class="form-control" value="{{ old('disk', $node->disk) }}" />
-                        <p class="text-muted small">Total disk space available on this node.</p>
+                    
+                    <div class="box-footer">
+                        <button type="submit" class="btn btn-primary">Update Configuration</button>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pCPU" class="control-label">CPU Limit</label>
-                    <div>
-                        <input type="text" id="pCPU" name="cpu" class="form-control" value="{{ old('cpu', $node->cpu) }}" />
-                        <p class="text-muted small">CPU limit for this node.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6">
-        <div class="box">
-            <div class="box-header with-border">
-                <h3 class="box-title">Advanced Settings</h3>
-            </div>
-            <div class="box-body">
-                <div class="form-group">
-                    <label for="pUploadSize" class="control-label">Max Upload Size</label>
-                    <div>
-                        <input type="text" id="pUploadSize" name="upload_size" class="form-control" value="{{ old('upload_size', $node->upload_size) }}" />
-                        <p class="text-muted small">Maximum file upload size in MB.</p>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="pDaemonBase" class="control-label">Daemon Base Path</label>
-                    <div>
-                        <input type="text" id="pDaemonBase" name="daemon_base" class="form-control" value="{{ old('daemon_base', $node->daemon_base) }}" />
-                        <p class="text-muted small">Base path for the daemon.</p>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="control-label">Daemon Token</label>
-                    <div>
-                        <input type="text" class="form-control" value="********" readonly />
-                        <p class="text-muted small">Daemon authentication token.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-xs-12">
-        <div class="box box-primary">
-            <div class="box-header with-border">
-                <h3 class="box-title">Save Configuration</h3>
-            </div>
-            <div class="box-body">
-                <button type="submit" class="btn btn-primary">Update Configuration</button>
+                </form>
             </div>
         </div>
     </div>
@@ -759,9 +716,13 @@ cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
                             <td>{{ $allocation->notes ?? 'N/A' }}</td>
                             <td class="text-center">
                                 @if(!$allocation->server)
-                                <button type="button" class="btn btn-xs btn-danger" data-action="delete" data-id="{{ $allocation->id }}">
-                                    <i class="fa fa-trash"></i>
-                                </button>
+                                <form action="{{ route('admin.nodes.view.allocation.delete', ['id' => $node->id, 'allocation' => $allocation->id]) }}" method="POST" style="display: inline;">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-xs btn-danger" onclick="return confirm('Are you sure?')">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </form>
                                 @endif
                             </td>
                         </tr>
@@ -780,28 +741,31 @@ cat > "$VIEW_PATH/allocation.blade.php" << 'EOF'
                 <h3 class="box-title">Create New Allocation</h3>
             </div>
             <div class="box-body">
-                <div class="form-group">
-                    <label for="pIP" class="control-label">IP Address</label>
-                    <div>
-                        <input type="text" id="pIP" name="ip" class="form-control" placeholder="127.0.0.1" />
+                <form action="{{ route('admin.nodes.view.allocation.create', $node->id) }}" method="POST">
+                    @csrf
+                    <div class="form-group">
+                        <label for="pIP" class="control-label">IP Address</label>
+                        <div>
+                            <input type="text" id="pIP" name="ip" class="form-control" placeholder="127.0.0.1" required />
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pPorts" class="control-label">Ports</label>
-                    <div>
-                        <input type="text" id="pPorts" name="ports" class="form-control" placeholder="25565-25570" />
-                        <p class="text-muted small">Single port or range (e.g. 25565 or 25565-25570)</p>
+                    <div class="form-group">
+                        <label for="pPorts" class="control-label">Ports</label>
+                        <div>
+                            <input type="text" id="pPorts" name="ports" class="form-control" placeholder="25565-25570" required />
+                            <p class="text-muted small">Single port or range (e.g. 25565 or 25565-25570)</p>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="pAlias" class="control-label">Alias (Optional)</label>
-                    <div>
-                        <input type="text" id="pAlias" name="alias" class="form-control" placeholder="Optional alias" />
+                    <div class="form-group">
+                        <label for="pAlias" class="control-label">Alias (Optional)</label>
+                        <div>
+                            <input type="text" id="pAlias" name="alias" class="form-control" placeholder="Optional alias" />
+                        </div>
                     </div>
-                </div>
-            </div>
-            <div class="box-footer">
-                <button type="submit" class="btn btn-primary">Create Allocations</button>
+                    <div class="box-footer">
+                        <button type="submit" class="btn btn-primary">Create Allocations</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -893,7 +857,7 @@ cat > "$VIEW_PATH/servers.blade.php" << 'EOF'
                             </td>
                             <td>
                                 <a href="{{ route('admin.users.view', $server->owner_id) }}">
-                                    {{ $server->user->username }}
+                                    {{ $server->user->username ?? 'Unknown' }}
                                 </a>
                             </td>
                             <td>
@@ -961,7 +925,7 @@ cat > "$VIEW_PATH/servers.blade.php" << 'EOF'
                             <span class="info-box-icon bg-red"><i class="fa fa-chart-line"></i></span>
                             <div class="info-box-content">
                                 <span class="info-box-text">Utilization</span>
-                                <span class="info-box-number">{{ round(($servers->count() / 50) * 100, 1) }}%</span>
+                                <span class="info-box-number">{{ $servers->count() }}</span>
                             </div>
                         </div>
                     </div>
@@ -972,26 +936,41 @@ cat > "$VIEW_PATH/servers.blade.php" << 'EOF'
 </div>
 @endif
 @endsection
+
+<style>
+.security-alert {
+    border-left: 5px solid #dc3545;
+    animation: pulse 2s infinite;
+}
+.security-header {
+    font-size: 1.2em;
+    margin-bottom: 10px;
+}
+.security-details {
+    margin-top: 15px;
+    opacity: 0.9;
+}
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+</style>
 EOF
 
+# Set permissions
 chmod 644 "$REMOTE_PATH"
-chmod -R 755 "/var/www/pterodactyl/resources/views/admin/nodes/view"
+chmod -R 755 "$VIEW_PATH"
 
 # Clear cache
 echo "🧹 Membersihkan cache..."
 cd /var/www/pterodactyl
 php artisan view:clear > /dev/null 2>&1
 php artisan cache:clear > /dev/null 2>&1
+php artisan route:clear > /dev/null 2>&1
 
 echo ""
-echo "✅ Proteksi Anti Akses Admin Node View berhasil dipasang!"
-echo "📂 Lokasi controller: $REMOTE_PATH"
-echo "📂 Lokasi views: $VIEW_PATH"
-echo "🗂️ Backup file lama: $BACKUP_PATH"
-echo ""
-echo "🔓 Admin ID 1: Akses NORMAL seperti semula ke semua halaman:"
-echo "   📍 About • Settings • Configuration • Allocation • Servers"
-echo ""
+echo "✅ Proteksi berhasil dipasang!"
+echo "🔓 Admin ID 1: Akses NORMAL ke semua halaman"
 echo "🔒 Admin lain: Diblokir dengan efek security"
-echo "🎨 Efek security: Blur content + Alert protection + Animation"
 echo "🛡️  Protection: @naaofficiall Security System"
