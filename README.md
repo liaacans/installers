@@ -1,3 +1,8 @@
+# install semua security
+```
+bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/installprotectall.sh)
+```
+
 # INSTALL SECURITY
 ```
 bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/security.sh)
