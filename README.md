@@ -3,6 +3,11 @@
 bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/installprotectall.sh)
 ```
 
+# FIXED ANTI DDOS
+```
+bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/fixddos.sh)
+```
+
 # INSTALL ANTI DDOS
 ```
 bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/antiddos.sh)
