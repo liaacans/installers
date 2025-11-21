@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}Error: Please run as root (sudo ./pterodactyl-antiddos.sh)${NC}"
+    echo -e "${RED}Error: Please run as root (sudo ./antiddos.sh)${NC}"
     exit 1
 fi
 
@@ -610,6 +610,7 @@ while true; do
             ;;
         6)
             echo -e "${GREEN}[+] Thank you for using Pterodactyl Anti-DDoS Tools!${NC}"
+            echo -e "${GREEN}[+] Thanks for watching: Allah Swt || Nabi Muhammad || Aulia Rahman || Andin Official${NC}"
             exit 0
             ;;
         *)
