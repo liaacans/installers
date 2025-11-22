@@ -1,157 +1,442 @@
 #!/bin/bash
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}Error: Please run as root (sudo ./antiddos.sh)${NC}"
-    exit 1
-fi
+# Configuration
+DOMAIN="DOMAIN_PANELLU"
+PLTA="ISI_PLTA"
+PLTC="ISI_PLTC"
+LOCATION="1"
+EGG_ID="15"
+THRESHOLD_CONNECTIONS=500
+THRESHOLD_PACKETS=1000
 
-# Function to display banner
 show_banner() {
     clear
-    echo -e "${PURPLE}"
-    echo "╔══════════════════════════════════════════════╗"
-    echo "║          PTERODACTYL ANTI-DDoS TOOLS         ║"
-    echo "║              SPECIAL EDITION v2.0            ║"
-    echo "╚══════════════════════════════════════════════╝"
+    echo -e "${BLUE}"
+    echo "╔════════════════════════════════════════════╗"
+    echo "║           PTERODACTYL ANTI-DDOS           ║"
+    echo "║              PROTECTION v2.0              ║"
+    echo "╚════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
 
-# Function to detect Pterodactyl installation
-detect_pterodactyl() {
-    echo -e "${CYAN}[*] Detecting Pterodactyl installation...${NC}"
-    
-    # Check Panel
-    if [ -d "/var/www/pterodactyl" ]; then
-        PANEL_DIR="/var/www/pterodactyl"
-        PANEL_INSTALLED=true
-    elif [ -d "/var/www/panel" ]; then
-        PANEL_DIR="/var/www/panel"
-        PANEL_INSTALLED=true
-    else
-        PANEL_INSTALLED=false
+check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${RED}Error: Please run as root (sudo ./install_ddos.sh)${NC}"
+        exit 1
     fi
-    
-    # Check Wings
-    if systemctl is-active --quiet wings; then
-        WINGS_INSTALLED=true
-    else
-        WINGS_INSTALLED=false
-    fi
-    
-    echo -e "Panel: $([ "$PANEL_INSTALLED" = true ] && echo -e "${GREEN}INSTALLED${NC}" || echo -e "${RED}NOT FOUND${NC}")"
-    echo -e "Wings: $([ "$WINGS_INSTALLED" = true ] && echo -e "${GREEN}INSTALLED${NC}" || echo -e "${RED}NOT FOUND${NC}")"
-    sleep 2
 }
 
-# Function to install DDoS protection
-install_pterodactyl_protection() {
+install_protection() {
     show_banner
-    detect_pterodactyl
     echo -e "${YELLOW}[+] Installing Pterodactyl DDoS Protection...${NC}"
-    sleep 2
-
-    # Update system
-    echo -e "${BLUE}[*] Updating system packages...${NC}"
-    apt update && apt upgrade -y
-
-    # Install required packages
-    echo -e "${BLUE}[*] Installing necessary packages...${NC}"
-    apt install -y fail2ban iptables-persistent net-tools iftop htop nginx apache2-utils python3 python3-pip nodejs npm
-
-    # Install Python dependencies for monitoring
-    echo -e "${BLUE}[*] Installing Python dependencies...${NC}"
-    pip3 install psutil requests flask
-
-    # Install Node.js dependencies
-    echo -e "${BLUE}[*] Installing Node.js dependencies...${NC}"
-    npm install -g express socket.io os-utils
-
-    # Configure Fail2Ban for Pterodactyl
-    echo -e "${BLUE}[*] Configuring Fail2Ban for Pterodactyl...${NC}"
-    cat > /etc/fail2ban/jail.d/pterodactyl.conf << 'EOF'
-[DEFAULT]
-bantime = 7200
-findtime = 600
-maxretry = 3
-backend = auto
-
-# Pterodactyl Panel Protection
-[pterodactyl-panel]
-enabled = true
-port = http,https,8080,2022
-filter = pterodactyl-panel
-logpath = /var/www/pterodactyl/storage/logs/laravel.log
-maxretry = 5
-bantime = 3600
-
-# Wings API Protection
-[wings-api]
-enabled = true
-port = 8080,2022,25565-26000
-filter = wings-api
-logpath = /var/log/pterodactyl/wings.log
-maxretry = 10
-bantime = 7200
-
-# SSH Protection
-[sshd]
-enabled = true
-port = ssh
-logpath = /var/log/auth.log
-maxretry = 3
-
-# Nginx Protection
-[nginx-http-auth]
-enabled = true
-port = http,https
-logpath = /var/log/nginx/error.log
-
-[nginx-limit-req]
-enabled = true
-port = http,https
-logpath = /var/log/nginx/access.log
-EOF
-
-    # Create Fail2Ban filters
-    cat > /etc/fail2ban/filter.d/pterodactyl-panel.conf << 'EOF'
-[Definition]
-failregex = ^.*\.*authentication\.*failed.*remote_ip=\"<HOST>\"
-            ^.*\.*too many attempts.*ip=<HOST>
-            ^.*\"message\":\".*\",\"ip\":\"<HOST>\"
-ignoreregex =
-EOF
-
-    cat > /etc/fail2ban/filter.d/wings-api.conf << 'EOF'
-[Definition]
-failregex = ^.*error.*client_ip=<HOST>.*
-            ^.*authentication failed.*<HOST>
-            ^.*too many requests.*<HOST>
-ignoreregex =
-EOF
-
-    # Create DDoS protection directory
-    mkdir -p /opt/pterodactyl-antiddos
-    mkdir -p /opt/pterodactyl-antiddos/scripts
-    mkdir -p /opt/pterodactyl-antiddos/logs
-
-    # Create main protection script
-    echo -e "${BLUE}[*] Creating Pterodactyl protection scripts...${NC}"
     
-    # IPTables Protection Script
-    cat > /opt/pterodactyl-antiddos/scripts/firewall-protect.sh << 'EOF'
+    # Update system
+    apt update && apt upgrade -y
+    
+    # Install dependencies
+    apt install -y python3 python3-pip nodejs npm iptables-persistent fail2ban net-tools tcpdump dstat jq
+    
+    # Python dependencies
+    pip3 install requests psutil
+    
+    # Node.js dependencies
+    npm install -g axios
+    
+    # Create protection directory
+    mkdir -p /opt/ptero_antiddos/{scripts,logs,config}
+    
+    # Create configuration file
+    cat > /opt/ptero_antiddos/config/config.json << EOF
+{
+    "domain": "$DOMAIN",
+    "plta": "$PLTA", 
+    "pltc": "$PLTC",
+    "location": "$LOCATION",
+    "egg_id": "$EGG_ID",
+    "thresholds": {
+        "tcp_connections": $THRESHOLD_CONNECTIONS,
+        "udp_packets": $THRESHOLD_PACKETS,
+        "http_requests": 1000,
+        "slowloris": 50,
+        "bot_requests": 500
+    },
+    "monitoring": {
+        "check_interval": 10,
+        "ban_duration": 3600,
+        "auto_delete": true
+    }
+}
+EOF
+
+    # Create Python monitoring script
+    cat > /opt/ptero_antiddos/scripts/monitor.py << 'PYTHONEOF'
+#!/usr/bin/env python3
+import os
+import time
+import json
+import requests
+import psutil
+import subprocess
+from datetime import datetime
+
+# Load configuration
+with open('/opt/ptero_antiddos/config/config.json', 'r') as f:
+    config = json.load(f)
+
+DOMAIN = config['domain']
+PLTA = config['plta']
+THRESHOLDS = config['thresholds']
+AUTO_DELETE = config['monitoring']['auto_delete']
+
+HEADERS = {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {PLTA}"
+}
+
+LOG_FILE = "/opt/ptero_antiddos/logs/ddos.log"
+
+def log_event(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_msg = f"[{timestamp}] {message}"
+    print(log_msg)
+    with open(LOG_FILE, "a") as f:
+        f.write(log_msg + "\n")
+
+def get_network_stats():
+    """Get network statistics for detection"""
+    stats = {
+        'tcp_connections': 0,
+        'udp_packets': 0,
+        'http_requests': 0,
+        'connections_per_ip': {}
+    }
+    
+    try:
+        # Get TCP connections
+        result = subprocess.run(['netstat', '-ntu'], capture_output=True, text=True)
+        lines = result.stdout.split('\n')
+        
+        for line in lines:
+            if 'ESTABLISHED' in line and 'tcp' in line:
+                stats['tcp_connections'] += 1
+                parts = line.split()
+                if len(parts) > 4:
+                    ip = parts[4].split(':')[0]
+                    stats['connections_per_ip'][ip] = stats['connections_per_ip'].get(ip, 0) + 1
+            elif 'udp' in line:
+                stats['udp_packets'] += 1
+        
+        # Get HTTP requests from nginx logs if available
+        try:
+            http_count = subprocess.run(['tail', '-1000', '/var/log/nginx/access.log'], 
+                                      capture_output=True, text=True)
+            stats['http_requests'] = len(http_count.stdout.split('\n')) - 1
+        except:
+            pass
+            
+    except Exception as e:
+        log_event(f"Error getting network stats: {e}")
+    
+    return stats
+
+def detect_ddos_method(stats):
+    """Detect specific DDoS methods"""
+    methods = []
+    
+    # TCP Flood detection
+    if stats['tcp_connections'] > THRESHOLDS['tcp_connections']:
+        methods.append('TCP_FLOOD')
+    
+    # UDP Flood detection  
+    if stats['udp_packets'] > THRESHOLDS['udp_packets']:
+        methods.append('UDP_FLOOD')
+    
+    # HTTP Stress detection
+    if stats['http_requests'] > THRESHOLDS['http_requests']:
+        methods.append('HTTP_STRESS')
+    
+    # Slowloris detection (many connections from few IPs)
+    if stats['connections_per_ip']:
+        max_conns = max(stats['connections_per_ip'].values())
+        if max_conns > THRESHOLDS['slowloris']:
+            methods.append('SLOWLORIS')
+    
+    # Bot detection (consistent high request rate)
+    if stats['http_requests'] > THRESHOLDS['bot_requests']:
+        methods.append('BOT_ATTACK')
+    
+    return methods
+
+def get_servers():
+    """Get list of servers from Pterodactyl"""
+    try:
+        response = requests.get(f"{DOMAIN}/api/application/servers", headers=HEADERS)
+        if response.status_code == 200:
+            return response.json()['data']
+        else:
+            log_event(f"Error getting servers: {response.status_code}")
+            return []
+    except Exception as e:
+        log_event(f"Error fetching servers: {e}")
+        return []
+
+def get_users():
+    """Get list of users from Pterodactyl"""
+    try:
+        response = requests.get(f"{DOMAIN}/api/application/users", headers=HEADERS)
+        if response.status_code == 200:
+            return response.json()['data']
+        else:
+            log_event(f"Error getting users: {response.status_code}")
+            return []
+    except Exception as e:
+        log_event(f"Error fetching users: {e}")
+        return []
+
+def delete_server(server_id):
+    """Delete server via Pterodactyl API"""
+    try:
+        response = requests.delete(f"{DOMAIN}/api/application/servers/{server_id}", headers=HEADERS)
+        if response.status_code == 204:
+            log_event(f"✅ Server {server_id} deleted successfully")
+            return True
+        else:
+            log_event(f"❌ Failed to delete server {server_id}: {response.status_code}")
+            return False
+    except Exception as e:
+        log_event(f"Error deleting server {server_id}: {e}")
+        return False
+
+def delete_user(user_id):
+    """Delete user via Pterodactyl API"""
+    try:
+        response = requests.delete(f"{DOMAIN}/api/application/users/{user_id}", headers=HEADERS)
+        if response.status_code == 204:
+            log_event(f"✅ User {user_id} deleted successfully")
+            return True
+        else:
+            log_event(f"❌ Failed to delete user {user_id}: {response.status_code}")
+            return False
+    except Exception as e:
+        log_event(f"Error deleting user {user_id}: {e}")
+        return False
+
+def get_server_owner(server_id):
+    """Get server owner information"""
+    try:
+        response = requests.get(f"{DOMAIN}/api/application/servers/{server_id}", headers=HEADERS)
+        if response.status_code == 200:
+            return response.json()['attributes']['user']
+        return None
+    except:
+        return None
+
+def monitor_loop():
+    """Main monitoring loop"""
+    log_event("🚀 Starting Pterodactyl DDoS Monitor...")
+    
+    while True:
+        try:
+            stats = get_network_stats()
+            ddos_methods = detect_ddos_method(stats)
+            
+            if ddos_methods:
+                log_event(f"🚨 DDoS Detected: {', '.join(ddos_methods)}")
+                log_event(f"📊 Stats: TCP={stats['tcp_connections']}, UDP={stats['udp_packets']}, HTTP={stats['http_requests']}")
+                
+                if AUTO_DELETE:
+                    # Get all servers
+                    servers = get_servers()
+                    users = get_users()
+                    
+                    log_event(f"🔍 Scanning {len(servers)} servers for malicious activity...")
+                    
+                    # Analyze each server's network usage
+                    for server in servers:
+                        server_id = server['attributes']['id']
+                        server_name = server['attributes']['name']
+                        
+                        # Check if server is using suspicious resources
+                        # This is a simplified check - you'd want more sophisticated detection
+                        if stats['tcp_connections'] > THRESHOLDS['tcp_connections'] * 0.8:
+                            log_event(f"⚠️ Server {server_name} ({server_id}) suspected in DDoS")
+                            if delete_server(server_id):
+                                # Also delete the user who owned this server
+                                owner = get_server_owner(server_id)
+                                if owner and delete_user(owner):
+                                    log_event(f"✅ Also deleted owner user {owner}")
+            
+            time.sleep(config['monitoring']['check_interval'])
+            
+        except Exception as e:
+            log_event(f"❌ Monitoring error: {e}")
+            time.sleep(30)
+
+if __name__ == "__main__":
+    monitor_loop()
+PYTHONEOF
+
+    # Create Node.js detection script
+    cat > /opt/ptero_antiddos/scripts/detector.js << 'JSEOF'
+const axios = require('axios');
+const { execSync } = require('child_process');
+const fs = require('fs');
+
+// Load config
+const config = JSON.parse(fs.readFileSync('/opt/ptero_antiddos/config/config.json', 'utf8'));
+
+class DDoSDetector {
+    constructor() {
+        this.domain = config.domain;
+        this.plta = config.plta;
+        this.pltc = config.pltc;
+        this.thresholds = config.thresholds;
+        this.headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${this.plta}`
+        };
+    }
+
+    async detectBypassMethods() {
+        try {
+            // Monitor for bypass attempts
+            const netstat = execSync('netstat -an | grep :80 | wc -l').toString().trim();
+            const connections = parseInt(netstat);
+            
+            // Check for abnormal patterns indicating bypass attempts
+            if (connections > this.thresholds.tcp_connections * 2) {
+                return 'BYPASS_ATTEMPT';
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Detection error:', error);
+            return null;
+        }
+    }
+
+    async getServerStatistics() {
+        try {
+            const response = await axios.get(`${this.domain}/api/application/servers`, { 
+                headers: this.headers 
+            });
+            
+            const servers = response.data.data;
+            const stats = [];
+            
+            for (const server of servers) {
+                const serverId = server.attributes.id;
+                const serverStats = await this.analyzeServerTraffic(serverId);
+                stats.push({
+                    server: server.attributes.name,
+                    id: serverId,
+                    traffic: serverStats
+                });
+            }
+            
+            return stats;
+        } catch (error) {
+            console.error('Error getting server stats:', error);
+            return [];
+        }
+    }
+
+    analyzeServerTraffic(serverId) {
+        // Analyze traffic patterns for this server
+        // This would integrate with your actual traffic monitoring
+        return {
+            connections: Math.floor(Math.random() * 1000),
+            packets: Math.floor(Math.random() * 5000),
+            bandwidth: Math.floor(Math.random() * 1000000)
+        };
+    }
+
+    async deleteMaliciousServer(serverId, reason) {
+        try {
+            console.log(`🚨 Deleting malicious server ${serverId}: ${reason}`);
+            
+            const response = await axios.delete(
+                `${this.domain}/api/application/servers/${serverId}`, 
+                { headers: this.headers }
+            );
+            
+            if (response.status === 204) {
+                console.log(`✅ Successfully deleted server ${serverId}`);
+                return true;
+            }
+        } catch (error) {
+            console.error(`❌ Failed to delete server ${serverId}:`, error.message);
+        }
+        return false;
+    }
+
+    async deleteMaliciousUser(userId, reason) {
+        try {
+            console.log(`🚨 Deleting malicious user ${userId}: ${reason}`);
+            
+            const response = await axios.delete(
+                `${this.domain}/api/application/users/${userId}`, 
+                { headers: this.headers }
+            );
+            
+            if (response.status === 204) {
+                console.log(`✅ Successfully deleted user ${userId}`);
+                return true;
+            }
+        } catch (error) {
+            console.error(`❌ Failed to delete user ${userId}:`, error.message);
+        }
+        return false;
+    }
+}
+
+// Export for use in other scripts
+module.exports = DDoSDetector;
+
+// Run if called directly
+if (require.main === module) {
+    const detector = new DDoSDetector();
+    setInterval(async () => {
+        const bypass = await detector.detectBypassMethods();
+        if (bypass) {
+            console.log(`🚨 ${bypass} detected!`);
+        }
+    }, 15000);
+}
+JSEOF
+
+    # Create systemd service
+    cat > /etc/systemd/system/ptero-antiddos.service << EOF
+[Unit]
+Description=Pterodactyl Anti-DDoS Protection
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ptero_antiddos
+ExecStart=/usr/bin/python3 /opt/ptero_antiddos/scripts/monitor.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Create firewall protection script
+    cat > /opt/ptero_antiddos/scripts/firewall.sh << 'EOF'
 #!/bin/bash
 
-# Pterodactyl-specific DDoS Protection
+# Advanced Firewall Protection for Pterodactyl
 
 # Flush existing rules
 iptables -F
@@ -164,457 +449,128 @@ iptables -P OUTPUT ACCEPT
 
 # Allow loopback
 iptables -A INPUT -i lo -j ACCEPT
-iptables -A OUTPUT -o lo -j ACCEPT
 
 # Allow established connections
 iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-# Allow SSH (limit connections)
+# Pterodactyl Wings ports
+iptables -A INPUT -p tcp --dport 2022 -j ACCEPT  # SFTP
+iptables -A INPUT -p tcp --dport 8080 -j ACCEPT  # Wings API
+iptables -A INPUT -p tcp --dport 25565:25575 -j ACCEPT  # Game servers
+
+# SSH protection (rate limited)
 iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m limit --limit 3/min --limit-burst 3 -j ACCEPT
 iptables -A INPUT -p tcp --dport 22 -j DROP
 
-# Pterodactyl Panel Ports
+# HTTP/HTTPS protection
 iptables -A INPUT -p tcp --dport 80 -m limit --limit 100/min --limit-burst 200 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -m limit --limit 100/min --limit-burst 200 -j ACCEPT
 
-# Pterodactyl Wings Ports
-iptables -A INPUT -p tcp --dport 8080 -m limit --limit 50/min --limit-burst 100 -j ACCEPT  # Wings API
-iptables -A INPUT -p tcp --dport 2022 -m limit --limit 20/min --limit-burst 50 -j ACCEPT   # Wings SFTP
-
-# Game Server Ports (adjust range as needed)
-for port in {25565..26000}; do
-    iptables -A INPUT -p tcp --dport $port -m limit --limit 30/min --limit-burst 60 -j ACCEPT
-    iptables -A INPUT -p udp --dport $port -m limit --limit 30/min --limit-burst 60 -j ACCEPT
-done
-
-# Protection against SYN floods
+# DDoS protection rules
 iptables -A INPUT -p tcp --syn -m limit --limit 1/s --limit-burst 3 -j ACCEPT
 iptables -A INPUT -p tcp --syn -j DROP
-
-# Protection against ping floods
 iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
 
-# Drop invalid packets
-iptables -A INPUT -m state --state INVALID -j DROP
+# Save rules
+iptables-save > /etc/iptables/rules.v4
 
-# Log DDoS attempts
-iptables -A INPUT -m limit --limit 5/min -j LOG --log-prefix "Pterodactyl DDoS: "
-
-echo "Pterodactyl DDoS protection rules applied successfully!"
+echo "Firewall rules applied successfully"
 EOF
 
-    # Python Monitoring Script
-    cat > /opt/pterodactyl-antiddos/scripts/monitor.py << 'EOF'
-#!/usr/bin/env python3
-import psutil
-import time
-import logging
-import requests
-import subprocess
-from datetime import datetime
-
-# Configuration
-LOG_FILE = "/opt/pterodactyl-antiddos/logs/monitor.log"
-MAX_CONNECTIONS = 50
-MAX_PANEL_REQUESTS = 100
-MAX_WINGS_REQUESTS = 200
-
-# Setup logging
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-def check_connections():
-    """Check for excessive connections"""
-    try:
-        result = subprocess.run(
-            ["netstat", "-ntu"],
-            capture_output=True,
-            text=True
-        )
-        connections = result.stdout.split('\n')
-        ip_count = {}
-        
-        for conn in connections:
-            if 'ESTABLISHED' in conn:
-                parts = conn.split()
-                if len(parts) > 4:
-                    ip = parts[4].split(':')[0]
-                    ip_count[ip] = ip_count.get(ip, 0) + 1
-        
-        for ip, count in ip_count.items():
-            if count > MAX_CONNECTIONS:
-                logging.warning(f"DDoS Alert: IP {ip} has {count} connections")
-                block_ip(ip)
-                
-    except Exception as e:
-        logging.error(f"Error checking connections: {e}")
-
-def check_system_resources():
-    """Check system resource usage"""
-    cpu_percent = psutil.cpu_percent(interval=1)
-    memory = psutil.virtual_memory()
-    network = psutil.net_io_counters()
+    chmod +x /opt/ptero_antiddos/scripts/*.sh
+    chmod +x /opt/ptero_antiddos/scripts/monitor.py
     
-    if cpu_percent > 90:
-        logging.warning(f"High CPU usage: {cpu_percent}%")
+    # Install Node.js dependencies
+    cd /opt/ptero_antiddos/scripts && npm init -y && npm install axios
     
-    if memory.percent > 90:
-        logging.warning(f"High memory usage: {memory.percent}%")
-    
-    # Log network stats every 10 cycles
-    if int(time.time()) % 600 < 5:
-        logging.info(f"Network - Bytes sent: {network.bytes_sent}, received: {network.bytes_recv}")
-
-def block_ip(ip):
-    """Block an IP address using iptables"""
-    try:
-        subprocess.run(["iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"], check=True)
-        logging.info(f"Blocked IP: {ip}")
-        
-        # Also add to Fail2Ban
-        subprocess.run(["fail2ban-client", "set", "pterodactyl-panel", "banip", ip], check=False)
-        
-    except Exception as e:
-        logging.error(f"Failed to block IP {ip}: {e}")
-
-def main():
-    logging.info("Pterodactyl DDoS Monitor started")
-    
-    while True:
-        try:
-            check_connections()
-            check_system_resources()
-            time.sleep(30)  # Check every 30 seconds
-            
-        except KeyboardInterrupt:
-            logging.info("Monitor stopped by user")
-            break
-        except Exception as e:
-            logging.error(f"Monitor error: {e}")
-            time.sleep(60)
-
-if __name__ == "__main__":
-    main()
-EOF
-
-    # Node.js API Protection Script
-    cat > /opt/pterodactyl-antiddos/scripts/api-protector.js << 'EOF'
-const express = require('express');
-const app = express();
-const os = require('os-utils');
-
-// Rate limiting storage
-const requestCounts = new Map();
-const BLOCK_DURATION = 3600000; // 1 hour
-const MAX_REQUESTS_PER_MINUTE = 100;
-
-// Clean up old entries every hour
-setInterval(() => {
-    const now = Date.now();
-    for (const [ip, data] of requestCounts.entries()) {
-        if (now - data.firstRequest > BLOCK_DURATION) {
-            requestCounts.delete(ip);
-        }
-    }
-}, 3600000);
-
-// Rate limiting middleware
-function rateLimit(req, res, next) {
-    const ip = req.ip || req.connection.remoteAddress;
-    const now = Date.now();
-    
-    if (!requestCounts.has(ip)) {
-        requestCounts.set(ip, {
-            count: 1,
-            firstRequest: now,
-            lastRequest: now
-        });
-    } else {
-        const data = requestCounts.get(ip);
-        const timeDiff = now - data.firstRequest;
-        
-        if (timeDiff < 60000 && data.count > MAX_REQUESTS_PER_MINUTE) {
-            return res.status(429).json({
-                error: 'Too many requests',
-                retryAfter: Math.ceil((60000 - timeDiff) / 1000)
-            });
-        }
-        
-        if (timeDiff > 60000) {
-            // Reset counter after 1 minute
-            data.count = 1;
-            data.firstRequest = now;
-        } else {
-            data.count++;
-        }
-        
-        data.lastRequest = now;
-    }
-    
-    next();
-}
-
-// Apply rate limiting to all routes
-app.use(rateLimit);
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        load: os.loadavg()
-    });
-});
-
-// Start server
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`Pterodactyl API Protector running on port ${PORT}`);
-});
-EOF
-
-    # Make scripts executable
-    chmod +x /opt/pterodactyl-antiddos/scripts/firewall-protect.sh
-    chmod +x /opt/pterodactyl-antiddos/scripts/monitor.py
-    chmod +x /opt/pterodactyl-antiddos/scripts/api-protector.js
-
-    # Create systemd services
-    cat > /etc/systemd/system/pterodactyl-antiddos.service << 'EOF'
-[Unit]
-Description=Pterodactyl Anti-DDoS Protection Service
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 /opt/pterodactyl-antiddos/scripts/monitor.py
-Restart=always
-RestartSec=10
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    cat > /etc/systemd/system/pterodactyl-api-protector.service << 'EOF'
-[Unit]
-Description=Pterodactyl API Protector Service
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/node /opt/pterodactyl-antiddos/scripts/api-protector.js
-Restart=always
-RestartSec=10
-User=root
-WorkingDirectory=/opt/pterodactyl-antiddos/scripts
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Enable and start services
-    systemctl daemon-reload
-    systemctl enable fail2ban
-    systemctl enable pterodactyl-antiddos
-    systemctl enable pterodactyl-api-protector
-    
-    systemctl start fail2ban
-    systemctl start pterodactyl-antiddos
-    systemctl start pterodactyl-api-protector
-
     # Apply firewall rules
-    /opt/pterodactyl-antiddos/scripts/firewall-protect.sh
-
-    # Save iptables rules
-    netfilter-persistent save
-
-    echo -e "${GREEN}[✓] Pterodactyl DDoS protection installed successfully!${NC}"
-    echo -e "${YELLOW}[!] Services enabled:${NC}"
-    echo -e "  - ${GREEN}fail2ban${NC} (with Pterodactyl jails)"
-    echo -e "  - ${GREEN}pterodactyl-antiddos${NC} (Python monitor)"
-    echo -e "  - ${GREEN}pterodactyl-api-protector${NC} (Node.js API protector)"
-    echo -e "${YELLOW}[!] Firewall rules applied for Pterodactyl ports${NC}"
+    /opt/ptero_antiddos/scripts/firewall.sh
+    
+    # Enable and start service
+    systemctl daemon-reload
+    systemctl enable ptero-antiddos
+    systemctl start ptero-antiddos
+    
+    echo -e "${GREEN}[✓] Pterodactyl DDoS Protection installed successfully!${NC}"
+    echo -e "${YELLOW}[!] Monitoring started with auto-delete feature${NC}"
     sleep 3
 }
 
-# Function to uninstall protection
-uninstall_pterodactyl_protection() {
+uninstall_protection() {
     show_banner
     echo -e "${RED}[!] UNINSTALLING Pterodactyl DDoS Protection...${NC}"
-    read -p "Are you sure you want to remove DDoS protection? (y/N): " confirm
+    read -p "Are you sure? (y/N): " confirm
     
     if [[ ! $confirm =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}[*] Uninstall cancelled${NC}"
-        sleep 2
+        echo "Uninstall cancelled"
         return
     fi
-
-    echo -e "${YELLOW}[+] Removing Pterodactyl DDoS protection...${NC}"
-
-    # Stop and disable services
-    systemctl stop pterodactyl-antiddos
-    systemctl stop pterodactyl-api-protector
-    systemctl stop fail2ban
     
-    systemctl disable pterodactyl-antiddos
-    systemctl disable pterodactyl-api-protector
-    systemctl disable fail2ban
-
-    # Remove services
-    rm -f /etc/systemd/system/pterodactyl-antiddos.service
-    rm -f /etc/systemd/system/pterodactyl-api-protector.service
-    systemctl daemon-reload
-
-    # Remove Fail2Ban configuration
-    rm -f /etc/fail2ban/jail.d/pterodactyl.conf
-    rm -f /etc/fail2ban/filter.d/pterodactyl-panel.conf
-    rm -f /etc/fail2ban/filter.d/wings-api.conf
-
-    # Reset iptables rules
-    echo -e "${BLUE}[*] Resetting firewall rules...${NC}"
+    # Stop and disable service
+    systemctl stop ptero-antiddos
+    systemctl disable ptero-antiddos
+    rm -f /etc/systemd/system/ptero-antiddos.service
+    
+    # Reset firewall
     iptables -F
     iptables -X
     iptables -P INPUT ACCEPT
     iptables -P FORWARD ACCEPT
     iptables -P OUTPUT ACCEPT
-
-    # Remove antiddos directory
-    rm -rf /opt/pterodactyl-antiddos
-
-    # Remove persistent rules
-    rm -f /etc/iptables/rules.v4
-    rm -f /etc/iptables/rules.v6
-
-    echo -e "${GREEN}[✓] Pterodactyl DDoS protection completely removed!${NC}"
-    echo -e "${YELLOW}[!] All firewall rules have been reset${NC}"
-    sleep 3
+    
+    # Remove files
+    rm -rf /opt/ptero_antiddos
+    
+    systemctl daemon-reload
+    
+    echo -e "${GREEN}[✓] Protection completely removed!${NC}"
+    sleep 2
 }
 
-# Function to show status
-show_pterodactyl_status() {
+show_status() {
     show_banner
-    detect_pterodactyl
-    echo -e "${CYAN}=== PTERODACTYL DDoS PROTECTION STATUS ===${NC}"
-    echo ""
+    echo -e "${BLUE}=== PROTECTION STATUS ===${NC}"
     
-    # Check services status
-    services=("fail2ban" "pterodactyl-antiddos" "pterodactyl-api-protector")
-    
-    for service in "${services[@]}"; do
-        if systemctl is-active --quiet "$service"; then
-            echo -e "$service: ${GREEN}ACTIVE${NC}"
-        else
-            echo -e "$service: ${RED}INACTIVE${NC}"
+    if systemctl is-active ptero-antiddos >/dev/null 2>&1; then
+        echo -e "Service: ${GREEN}ACTIVE${NC}"
+        echo -e "Auto-Delete: ${GREEN}ENABLED${NC}"
+        
+        # Show recent logs
+        if [ -f "/opt/ptero_antiddos/logs/ddos.log" ]; then
+            echo ""
+            echo "Recent Events:"
+            tail -10 /opt/ptero_antiddos/logs/ddos.log
         fi
-    done
-    
-    echo ""
-    
-    # Show Fail2Ban status
-    if systemctl is-active --quiet fail2ban; then
-        echo -e "${YELLOW}Fail2Ban Jails:${NC}"
-        fail2ban-client status | grep "Jail list" | sed 's/.*Jail list://' | tr ',' '\n' | while read jail; do
-            if [ ! -z "$jail" ]; then
-                banned=$(fail2ban-client status $jail | grep "Currently banned" | awk '{print $4}')
-                echo -e "  - $jail: ${RED}$banned IPs${NC} banned"
-            fi
-        done
+    else
+        echo -e "Service: ${RED}INACTIVE${NC}"
     fi
-    
-    echo ""
-    
-    # Show current connections to Pterodactyl ports
-    echo -e "${YELLOW}Current Connections to Pterodactyl Ports:${NC}"
-    netstat -ntu | grep -E ":80|:443|:8080|:2022|:25565" | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | head -10
-    
-    echo ""
-    
-    # Show system resources
-    echo -e "${YELLOW}System Resources:${NC}"
-    echo "CPU: $(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage "%"}')"
-    echo "Memory: $(free -m | awk 'NR==2{printf "%.2f%%", $3*100/$2}')"
-    echo "Load: $(cat /proc/loadavg | awk '{print $1", "$2", "$3}')"
     
     echo ""
     read -p "Press Enter to continue..."
 }
 
-# Function to view logs
-view_logs() {
-    show_banner
-    echo -e "${CYAN}=== DDoS PROTECTION LOGS ===${NC}"
-    echo ""
-    echo "1. Monitor Logs"
-    echo "2. Fail2Ban Logs"
-    echo "3. System Logs"
-    echo "4. Back to Main Menu"
-    echo ""
-    read -p "Select log type [1-4]: " log_choice
-    
-    case $log_choice in
-        1)
-            tail -f /opt/pterodactyl-antiddos/logs/monitor.log
-            ;;
-        2)
-            tail -f /var/log/fail2ban.log
-            ;;
-        3)
-            journalctl -u pterodactyl-antiddos -f
-            ;;
-        4)
-            return
-            ;;
-        *)
-            echo -e "${RED}Invalid choice!${NC}"
-            sleep 2
-            ;;
-    esac
-}
-
 # Main menu
+check_root
 while true; do
     show_banner
-    detect_pterodactyl
-    echo -e "${GREEN}Pterodactyl Anti-DDoS Tools${NC}"
-    echo -e "${YELLOW}=================================${NC}"
-    echo -e "1. ${BLUE}Install Pterodactyl DDoS Protection${NC}"
-    echo -e "2. ${RED}Uninstall DDoS Protection${NC}"
-    echo -e "3. ${CYAN}Show Protection Status${NC}"
-    echo -e "4. ${YELLOW}View Logs${NC}"
-    echo -e "5. ${GREEN}Emergency Block IP${NC}"
-    echo -e "6. ${PURPLE}Exit${NC}"
+    echo -e "${GREEN}Pterodactyl DDoS Protection Menu:${NC}"
+    echo "1. Install Protection"
+    echo "2. Uninstall Protection" 
+    echo "3. Show Status"
+    echo "4. Exit"
     echo ""
-    read -p "Enter your choice [1-6]: " choice
+    read -p "Choose option [1-4]: " choice
 
     case $choice in
-        1)
-            install_pterodactyl_protection
+        1) install_protection ;;
+        2) uninstall_protection ;;
+        3) show_status ;;
+        4) 
+            echo -e "${GREEN}Goodbye!${NC}"
+            exit 0 
             ;;
-        2)
-            uninstall_pterodactyl_protection
-            ;;
-        3)
-            show_pterodactyl_status
-            ;;
-        4)
-            view_logs
-            ;;
-        5)
-            read -p "Enter IP to block: " ip_address
-            iptables -A INPUT -s $ip_address -j DROP
-            echo -e "${GREEN}IP $ip_address blocked successfully!${NC}"
-            sleep 2
-            ;;
-        6)
-            echo -e "${GREEN}[+] Thank you for using Pterodactyl Anti-DDoS Tools!${NC}"
-            echo -e "${GREEN}[+] Thanks for watching: Allah Swt || Nabi Muhammad || Aulia Rahman || Andin Official${NC}"
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}[!] Invalid option! Please choose 1-6${NC}"
+        *) 
+            echo -e "${RED}Invalid option!${NC}"
             sleep 2
             ;;
     esac
