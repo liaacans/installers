@@ -1,6 +1,11 @@
-# install semua security
+# install semua security *V1*
 ```
 bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/installprotectall.sh)
+```
+
+### INSTALL SEMUA SECURITY *V2*
+```
+bash <(curl -s https://raw.githubusercontent.com/liaacans/installers/refs/heads/main/installprotectallv2.sh)
 ```
 
 # FIXED ANTI DDOS
