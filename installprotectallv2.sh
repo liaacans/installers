@@ -20,6 +20,7 @@ scripts=(
     'installprotect12.sh'
     'installprotect13.sh'
     'installprotect14.sh'
+    'installprotect15.sh'
 )
 
 # Base URL untuk download script
