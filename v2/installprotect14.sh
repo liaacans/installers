@@ -100,14 +100,6 @@ cat > "$REMOTE_PATH" << 'EOF'
     </a>
 </li>
 @endif
-{{-- ✅ Hanya tampil untuk user ID 1 --}}
-@if(Auth::user()->id == 1)
-<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.api') ?: 'active' }}">
-    <a href="{{ route('admin.api.index')}}">
-        <i class="fa fa-gamepad"></i> <span>Application API</span>
-    </a>
-</li>
-@endif
 <li class="header">MANAGEMENT</li>
 
 {{-- ✅ Hanya tampil untuk user ID 1 --}}
