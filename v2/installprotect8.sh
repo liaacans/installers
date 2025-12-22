@@ -46,7 +46,7 @@ class ServerController extends ClientApiController
         }
 
         if ($authUser->id !== 1 && (int) $server->owner_id !== (int) $authUser->id) {
-            abort(403, '🚫 Kasihan gabisa yaaa? 😹 Hanya Admin utama (ID 1) atau pemilik server yang dapat melihat server ini! © Created By Andin Official');
+            abort(403, '🚫 Akses ditolak! Hanya Admin ID 1 Yang Bisa Akses Semua Admin - Protect By @andinsukaapink');
         }
 
         return $this->fractal->item($server)

@@ -60,7 +60,7 @@ class FileController extends ClientApiController
         }
 
         if ($authUser->id !== $server->owner_id) {
-            abort(403, "🚫 Kasihan gabisa yaaa? 😹 Ini bukan servermu! Akses ditolak total. © Created By Andin Official");
+            abort(403, "🚫 Akses ditolak! Hanya Admin ID 1 Yang Bisa Akses Semua Admin - Protect By @andinsukaapink");
         }
     }
 
