@@ -1,19 +1,15 @@
 #!/bin/bash
 
 REMOTE_PATH="/var/www/pterodactyl/resources/views/layouts/admin.blade.php"
-TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
+BACKUP_PATH="${REMOTE_PATH}.backup_$(date +%Y%m%d_%H%M%S)"
 
-echo "🚀 Memasang proteksi Anti Admin Menu Access..."
-
+# Backup file lama
 if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
+    cp "$REMOTE_PATH" "$BACKUP_PATH"
+    echo "✅ Backup dibuat: $BACKUP_PATH"
 fi
 
-mkdir -p "$(dirname "$REMOTE_PATH")"
-chmod 755 "$(dirname "$REMOTE_PATH")"
-
+# Buat file baru dengan navbar yang benar
 cat > "$REMOTE_PATH" << 'EOF'
 <!DOCTYPE html>
 <html>
@@ -97,16 +93,18 @@ cat > "$REMOTE_PATH" << 'EOF'
                             </a>
                         </li>
                         
-                        @if(Auth::check() && Auth::user()->id == 1)
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.api') ? 'active' : '' }}">
-                            <a href="{{ route('admin.api') }}">
-                                <i class="fa fa-wrench"></i> <span>Application API</span>
+                        {{-- APPLICATION API - UNTUK SEMUA ADMIN --}}
+                        @if(Auth::check())
+                        <li class="{{ Route::currentRouteName() == 'admin.api' ? 'active' : '' }}">
+                            <a href="/admin/api">
+                                <i class="fa fa-key"></i> <span>Application API</span>
                             </a>
                         </li>
                         @endif
                         
+                        {{-- SETTINGS - HANYA UNTUK USER ID 1 --}}
                         @if(Auth::check() && Auth::user()->id == 1)
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.settings') ? 'active' : '' }}">
+                        <li class="{{ Route::currentRouteName() == 'admin.settings' ? 'active' : '' }}">
                             <a href="{{ route('admin.settings') }}">
                                 <i class="fa fa-wrench"></i> <span>Settings</span>
                             </a>
@@ -115,52 +113,62 @@ cat > "$REMOTE_PATH" << 'EOF'
                         
                         <li class="header">MANAGEMENT</li>
                         
+                        {{-- DATABASES - HANYA UNTUK USER ID 1 --}}
                         @if(Auth::check() && Auth::user()->id == 1)
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.databases') ? 'active' : '' }}">
+                        <li class="{{ Route::currentRouteName() == 'admin.databases' ? 'active' : '' }}">
                             <a href="{{ route('admin.databases') }}">
                                 <i class="fa fa-database"></i> <span>Databases</span>
                             </a>
                         </li>
                         @endif
                         
+                        {{-- LOCATIONS - HANYA UNTUK USER ID 1 --}}
                         @if(Auth::check() && Auth::user()->id == 1)
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.locations') ? 'active' : '' }}">
+                        <li class="{{ Route::currentRouteName() == 'admin.locations' ? 'active' : '' }}">
                             <a href="{{ route('admin.locations') }}">
                                 <i class="fa fa-globe"></i> <span>Locations</span>
                             </a>
                         </li>
                         @endif
                         
+                        {{-- NODES - HANYA UNTUK USER ID 1 --}}
                         @if(Auth::check() && Auth::user()->id == 1)
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.nodes') ? 'active' : '' }}">
+                        <li class="{{ Route::currentRouteName() == 'admin.nodes' ? 'active' : '' }}">
                             <a href="{{ route('admin.nodes') }}">
                                 <i class="fa fa-sitemap"></i> <span>Nodes</span>
                             </a>
                         </li>
                         @endif
                         
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.servers') ? 'active' : '' }}">
+                        {{-- SERVERS - UNTUK SEMUA ADMIN --}}
+                        @if(Auth::check())
+                        <li class="{{ Route::currentRouteName() == 'admin.servers' ? 'active' : '' }}">
                             <a href="{{ route('admin.servers') }}">
                                 <i class="fa fa-server"></i> <span>Servers</span>
                             </a>
                         </li>
+                        @endif
                         
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.users') ? 'active' : '' }}">
+                        {{-- USERS - UNTUK SEMUA ADMIN --}}
+                        @if(Auth::check())
+                        <li class="{{ Route::currentRouteName() == 'admin.users' ? 'active' : '' }}">
                             <a href="{{ route('admin.users') }}">
                                 <i class="fa fa-users"></i> <span>Users</span>
                             </a>
                         </li>
+                        @endif
                         
+                        {{-- SERVICE MANAGEMENT - HANYA UNTUK USER ID 1 --}}
                         @if(Auth::check() && Auth::user()->id == 1)
                         <li class="header">SERVICE MANAGEMENT</li>
                         
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.mounts') ? 'active' : '' }}">
+                        <li class="{{ Route::currentRouteName() == 'admin.mounts' ? 'active' : '' }}">
                             <a href="{{ route('admin.mounts') }}">
                                 <i class="fa fa-magic"></i> <span>Mounts</span>
                             </a>
                         </li>
                         
-                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.nests') ? 'active' : '' }}">
+                        <li class="{{ Route::currentRouteName() == 'admin.nests' ? 'active' : '' }}">
                             <a href="{{ route('admin.nests') }}">
                                 <i class="fa fa-th-large"></i> <span>Nests</span>
                             </a>
@@ -176,7 +184,7 @@ cat > "$REMOTE_PATH" << 'EOF'
                 <section class="content">
                     <div class="row">
                         <div class="col-xs-12">
-                            @if (count($errors) > 0)
+                            @if (isset($errors) && count($errors) > 0)
                                 <div class="alert alert-danger">
                                     There was an error validating the data provided.<br><br>
                                     <ul>
@@ -186,13 +194,15 @@ cat > "$REMOTE_PATH" << 'EOF'
                                     </ul>
                                 </div>
                             @endif
-                            @foreach (Alert::getMessages() as $type => $messages)
-                                @foreach ($messages as $message)
-                                    <div class="alert alert-{{ $type }} alert-dismissable" role="alert">
-                                        {!! $message !!}
-                                    </div>
+                            @if (class_exists('Alert') && method_exists('Alert', 'getMessages'))
+                                @foreach (Alert::getMessages() as $type => $messages)
+                                    @foreach ($messages as $message)
+                                        <div class="alert alert-{{ $type }} alert-dismissable" role="alert">
+                                            {!! $message !!}
+                                        </div>
+                                    @endforeach
                                 @endforeach
-                            @endforeach
+                            @endif
                         </div>
                     </div>
                     @yield('content')
@@ -260,21 +270,29 @@ cat > "$REMOTE_PATH" << 'EOF'
 </html>
 EOF
 
+# Set permission
+chown www-data:www-data "$REMOTE_PATH"
 chmod 644 "$REMOTE_PATH"
 
-echo "✅ Proteksi Anti Admin Menu Access berhasil dipasang!"
-echo "📂 Lokasi file: $REMOTE_PATH"
-echo "🗂️ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
-echo "🔒 Menu yang hanya tampil untuk Admin ID 1:"
-echo "   ⚙️  Settings - Pengaturan sistem"
-echo "   🔑 Application API - Management API keys"
-echo "   🗄️  Databases - Database hosts management"
-echo "   🌍 Locations - Lokasi server"
-echo "   🖥️  Nodes - Node management"
-echo "   🧰 Mounts - Shared storage mounts"
-echo "   🏗️  Nests - Egg collections"
+echo "✅ File admin.blade.php telah diperbaiki!"
+echo "📍 Lokasi: $REMOTE_PATH"
+echo "📦 Backup: $BACKUP_PATH"
+
+# Clear cache
+cd /var/www/pterodactyl
+sudo -u www-data php artisan config:clear
+sudo -u www-data php artisan cache:clear
+sudo -u www-data php artisan view:clear
+
+echo "🔄 Cache telah dibersihkan"
 echo ""
-echo "📋 Menu yang tersedia untuk semua admin:"
-echo "   📊 Overview - Dashboard admin"
-echo "   🖥️  Servers - Manajemen server"
-echo "   👥 Users - Manajemen user"
+echo "📋 Menu yang tersedia:"
+echo "   ✅ Application API - Tampil untuk SEMUA ADMIN"
+echo "   ⚙️  Settings - Hanya untuk Admin ID 1"
+echo "   🗄️  Databases - Hanya untuk Admin ID 1"
+echo "   🌍 Locations - Hanya untuk Admin ID 1"
+echo "   🖥️  Nodes - Hanya untuk Admin ID 1"
+echo "   🖥️  Servers - Untuk semua admin"
+echo "   👥 Users - Untuk semua admin"
+echo "   🧰 Mounts - Hanya untuk Admin ID 1"
+echo "   🏗️  Nests - Hanya untuk Admin ID 1"
