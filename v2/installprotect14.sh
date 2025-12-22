@@ -74,10 +74,14 @@ cat > "$REMOTE_PATH" << 'EOF'
                                 </a>
                             </li>
                             <li>
-                                <li><a href="{{ route('index') }}" data-toggle="tooltip" data-placement="bottom" title="Exit Admin Control"><i class="fa fa-server"></i></a></li>
+                                <a href="{{ route('index') }}" data-toggle="tooltip" data-placement="bottom" title="Exit Admin Control">
+                                    <i class="fa fa-server"></i>
+                                </a>
                             </li>
                             <li>
-                                <li><a href="{{ route('auth.logout') }}" id="logoutButton" data-toggle="tooltip" data-placement="bottom" title="Logout"><i class="fa fa-sign-out"></i></a></li>
+                                <a href="{{ route('auth.logout') }}" id="logoutButton" data-toggle="tooltip" data-placement="bottom" title="Logout">
+                                    <i class="fa fa-sign-out"></i>
+                                </a>
                             </li>
                         </ul>
                     </div>
@@ -87,83 +91,81 @@ cat > "$REMOTE_PATH" << 'EOF'
                 <section class="sidebar">
                     <ul class="sidebar-menu">
                         <li class="header">BASIC ADMINISTRATION</li>
-                        <li class="{{ Route::currentRouteName() !== 'admin.index' ?: 'active' }}">
+                        <li class="{{ Route::currentRouteName() == 'admin.index' ? 'active' : '' }}">
                             <a href="{{ route('admin.index') }}">
                                 <i class="fa fa-home"></i> <span>Overview</span>
                             </a>
                         </li>
-    {{-- ✅ Hanya tampil untuk user ID 1 --}}
-@if(Auth::user()->id == 1)
-<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.api') ?: 'active' }}">
-    <a href="{{ route('admin.api') }}">
-        <i class="fa fa-wrench"></i> <span> Application API</span>
-    </a>
-</li>
-@endif
                         
-{{-- ✅ Hanya tampil untuk user ID 1 --}}
-@if(Auth::user()->id == 1)
-<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.settings') ?: 'active' }}">
-    <a href="{{ route('admin.settings') }}">
-        <i class="fa fa-wrench"></i> <span>Settings</span>
-    </a>
-</li>
-@endif
-<li class="header">MANAGEMENT</li>
-
-{{-- ✅ Hanya tampil untuk user ID 1 --}}
-@if(Auth::user()->id == 1)
-<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.databases') ?: 'active' }}">
-    <a href="{{ route('admin.databases') }}">
-        <i class="fa fa-database"></i> <span>Databases</span>
-    </a>
-</li>
-@endif
-
-{{-- ✅ Hanya tampil untuk user ID 1 --}}
-@if(Auth::user()->id == 1)
-<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.locations') ?: 'active' }}">
-    <a href="{{ route('admin.locations') }}">
-        <i class="fa fa-globe"></i> <span>Locations</span>
-    </a>
-</li>
-@endif
-
-{{-- ✅ Hanya tampil untuk user dengan ID 1 --}}
-@if(Auth::user()->id == 1)
-<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.nodes') ?: 'active' }}">
-    <a href="{{ route('admin.nodes') }}">
-        <i class="fa fa-sitemap"></i> <span>Nodes</span>
-    </a>
-</li>
-@endif
-
-                        <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.servers') ?: 'active' }}">
+                        @if(Auth::check() && Auth::user()->id == 1)
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.api') ? 'active' : '' }}">
+                            <a href="{{ route('admin.api') }}">
+                                <i class="fa fa-wrench"></i> <span>Application API</span>
+                            </a>
+                        </li>
+                        @endif
+                        
+                        @if(Auth::check() && Auth::user()->id == 1)
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.settings') ? 'active' : '' }}">
+                            <a href="{{ route('admin.settings') }}">
+                                <i class="fa fa-wrench"></i> <span>Settings</span>
+                            </a>
+                        </li>
+                        @endif
+                        
+                        <li class="header">MANAGEMENT</li>
+                        
+                        @if(Auth::check() && Auth::user()->id == 1)
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.databases') ? 'active' : '' }}">
+                            <a href="{{ route('admin.databases') }}">
+                                <i class="fa fa-database"></i> <span>Databases</span>
+                            </a>
+                        </li>
+                        @endif
+                        
+                        @if(Auth::check() && Auth::user()->id == 1)
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.locations') ? 'active' : '' }}">
+                            <a href="{{ route('admin.locations') }}">
+                                <i class="fa fa-globe"></i> <span>Locations</span>
+                            </a>
+                        </li>
+                        @endif
+                        
+                        @if(Auth::check() && Auth::user()->id == 1)
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.nodes') ? 'active' : '' }}">
+                            <a href="{{ route('admin.nodes') }}">
+                                <i class="fa fa-sitemap"></i> <span>Nodes</span>
+                            </a>
+                        </li>
+                        @endif
+                        
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.servers') ? 'active' : '' }}">
                             <a href="{{ route('admin.servers') }}">
                                 <i class="fa fa-server"></i> <span>Servers</span>
                             </a>
                         </li>
-                        <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.users') ?: 'active' }}">
+                        
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.users') ? 'active' : '' }}">
                             <a href="{{ route('admin.users') }}">
                                 <i class="fa fa-users"></i> <span>Users</span>
                             </a>
                         </li>
-{{-- ✅ Hanya tampil untuk admin utama --}}
-@if(Auth::user()->id == 1)
-    <li class="header">SERVICE MANAGEMENT</li>
-
-    <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.mounts') ?: 'active' }}">
-        <a href="{{ route('admin.mounts') }}">
-            <i class="fa fa-magic"></i> <span>Mounts</span>
-        </a>
-    </li>
-
-    <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.nests') ?: 'active' }}">
-        <a href="{{ route('admin.nests') }}">
-            <i class="fa fa-th-large"></i> <span>Nests</span>
-        </a>
-    </li>
-@endif
+                        
+                        @if(Auth::check() && Auth::user()->id == 1)
+                        <li class="header">SERVICE MANAGEMENT</li>
+                        
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.mounts') ? 'active' : '' }}">
+                            <a href="{{ route('admin.mounts') }}">
+                                <i class="fa fa-magic"></i> <span>Mounts</span>
+                            </a>
+                        </li>
+                        
+                        <li class="{{ str_starts_with(Route::currentRouteName(), 'admin.nests') ? 'active' : '' }}">
+                            <a href="{{ route('admin.nests') }}">
+                                <i class="fa fa-th-large"></i> <span>Nests</span>
+                            </a>
+                        </li>
+                        @endif
                     </ul>
                 </section>
             </aside>
@@ -198,12 +200,13 @@ cat > "$REMOTE_PATH" << 'EOF'
             </div>
             <footer class="main-footer">
                 <div class="pull-right small text-gray" style="margin-right:10px;margin-top:-7px;">
-                    <strong><i class="fa fa-fw {{ $appIsGit ? 'fa-git-square' : 'fa-code-fork' }}"></i></strong> {{ $appVersion }}<br />
+                    <strong><i class="fa fa-fw {{ $appIsGit ?? false ? 'fa-git-square' : 'fa-code-fork' }}"></i></strong> {{ $appVersion ?? 'Unknown' }}<br />
                     <strong><i class="fa fa-fw fa-clock-o"></i></strong> {{ round(microtime(true) - LARAVEL_START, 3) }}s
                 </div>
                 Copyright &copy; 2015 - {{ date('Y') }} <a href="https://pterodactyl.io/">Pterodactyl Software</a>.
             </footer>
         </div>
+        
         @section('footer-scripts')
             <script src="/js/keyboard.polyfill.js" type="application/javascript"></script>
             <script>keyboardeventKeyPolyfill.polyfill();</script>
@@ -218,7 +221,7 @@ cat > "$REMOTE_PATH" << 'EOF'
             {!! Theme::js('js/admin/functions.js?t={cache-version}') !!}
             <script src="/js/autocomplete.js" type="application/javascript"></script>
 
-            @if(Auth::user()->root_admin)
+            @if(Auth::check() && Auth::user()->root_admin)
                 <script>
                     $('#logoutButton').on('click', function (event) {
                         event.preventDefault();
@@ -232,17 +235,18 @@ cat > "$REMOTE_PATH" << 'EOF'
                             cancelButtonColor: '#d33',
                             confirmButtonText: 'Log out'
                         }, function () {
-                             $.ajax({
+                            $.ajax({
                                 type: 'POST',
                                 url: '{{ route('auth.logout') }}',
                                 data: {
                                     _token: '{{ csrf_token() }}'
-                                },complete: function () {
-                                    window.location.href = '{{route('auth.login')}}';
+                                },
+                                complete: function () {
+                                    window.location.href = '{{ route('auth.login') }}';
                                 }
+                            });
                         });
                     });
-                });
                 </script>
             @endif
 
