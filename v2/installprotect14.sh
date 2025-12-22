@@ -138,12 +138,6 @@ cat > "$REMOTE_PATH" << 'EOF'
 </li>
 @endif
 
-<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.api') ?: 'active' }}">
-                            <a href="{{ route('admin.api') }}">
-                                <i class="fa fa-wrench"></i> <span> Application API</span>
-                            </a>
-                        </li>
-
                         <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.servers') ?: 'active' }}">
                             <a href="{{ route('admin.servers') }}">
                                 <i class="fa fa-server"></i> <span>Servers</span>
