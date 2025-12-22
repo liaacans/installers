@@ -92,6 +92,14 @@ cat > "$REMOTE_PATH" << 'EOF'
                                 <i class="fa fa-home"></i> <span>Overview</span>
                             </a>
                         </li>
+    {{-- ✅ Hanya tampil untuk user ID 1 --}}
+@if(Auth::user()->id == 1)
+<li class="{{ ! starts_with(Route::currentRouteName(), 'admin.api') ?: 'active' }}">
+    <a href="{{ route('admin.api') }}">
+        <i class="fa fa-wrench"></i> <span>Settings</span>
+    </a>
+</li>
+@endif
 {{-- ✅ Hanya tampil untuk user ID 1 --}}
 @if(Auth::user()->id == 1)
 <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.settings') ?: 'active' }}">
